@@ -106,16 +106,24 @@ function verifyPayOSWebhook(webhookBody) {
 /**
  * 1. LẤY DANH SÁCH SÁCH & TRẠNG THÁI ĐĂNG KÝ
  */
-app.get('/api/books', (req, res) => {
-  const books = db.getAllBooks();
-  const settings = db.getSettings();
-  res.json({ success: true, books, settings });
+app.get('/api/books', async (req, res) => {
+  try {
+    const books = await db.getAllBooks();
+    const settings = await db.getSettings();
+    res.json({ success: true, books, settings });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 // Alias cho frontend cũ nếu còn gọi /api/courses
-app.get('/api/courses', (req, res) => {
-  const books = db.getAllBooks();
-  res.json({ success: true, data: books });
+app.get('/api/courses', async (req, res) => {
+  try {
+    const books = await db.getAllBooks();
+    res.json({ success: true, data: books });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 /**
@@ -135,7 +143,7 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
     }
 
     // Kiểm tra xem đã chốt sổ chưa
-    const settings = db.getSettings();
+    const settings = await db.getSettings();
     if (!settings.isRegistrationOpen) {
       return res.status(400).json({
         success: false,
@@ -144,7 +152,7 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
     }
 
     const selectedBookId = bookId || courseId;
-    const book = db.getBookById(selectedBookId);
+    const book = await db.getBookById(selectedBookId);
     if (!book) {
       return res.status(400).json({ success: false, message: "Không tìm thấy cuốn sách này!" });
     }
@@ -174,7 +182,7 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
     const paymentResponse = await callPayOSCreatePaymentLink(paymentPayload);
 
     // Lưu vào database
-    const order = db.createOrder({
+    const order = await db.createOrder({
       orderCode: orderCode,
       bookId: book.id,
       bookTitle: book.title,
@@ -216,82 +224,78 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
 });
 
 /**
- * 3. TRA CỨU TRẠNG THÁI ĐƠN HÀNG (REALTIME POLLING)
- */
-/**
  * 3. TRA CỨU TRẠNG THÁI ĐƠN HÀNG (REALTIME POLLING + ĐỒNG BỘ TRỰC TIẾP TỪ PAYOS)
  */
 app.get('/api/orders/:orderCode', async (req, res) => {
-  const orderCode = Number(req.params.orderCode);
-  let order = db.getOrderByCode(orderCode);
+  try {
+    const orderCode = Number(req.params.orderCode);
+    let order = await db.getOrderByCode(orderCode);
 
-  // NẾU CHƯA PAID, CHỦ ĐỘNG HỎI TRỰC TIẾP PAYOS SERVER XEM TIỀN ĐÃ VỀ CHƯA!
-  // Đảm bảo nhận diện thanh toán ngay lập tức kể cả khi Webhook chưa kịp kích hoạt
-  if (!order || order.status !== 'PAID') {
-    try {
-      let paymentInfo = null;
-      if (payos.paymentRequests && typeof payos.paymentRequests.get === 'function') {
-        paymentInfo = await payos.paymentRequests.get(orderCode);
-      } else if (typeof payos.getPaymentLinkInformation === 'function') {
-        paymentInfo = await payos.getPaymentLinkInformation(orderCode);
-      }
-
-      if (paymentInfo && (paymentInfo.status === 'PAID' || paymentInfo.status === 'COMPLETED')) {
-        if (order) {
-          db.updateOrderStatus(orderCode, 'PAID', {
-            paidAt: new Date().toISOString(),
-            reference: paymentInfo.id || 'PAYOS_SYNC'
-          });
-          order.status = 'PAID';
-          order.paidAt = new Date().toISOString();
-        } else {
-          order = {
-            orderCode: orderCode,
-            status: 'PAID',
-            bookTitle: paymentInfo.items?.[0]?.name || 'Sách giáo trình',
-            quantity: paymentInfo.items?.[0]?.quantity || 1,
-            amount: paymentInfo.amount,
-            customerName: paymentInfo.buyerName || 'Sinh viên',
-            paidAt: new Date().toISOString()
-          };
-          db.saveOrder({
-            ...order,
-            unitPrice: paymentInfo.amount,
-            customerPhone: paymentInfo.buyerPhone || '',
-            note: '',
-            isDelivered: false
-          });
-          db.updateOrderStatus(orderCode, 'PAID');
+    // NẾU CHƯA PAID, CHỦ ĐỘNG HỎI TRỰC TIẾP PAYOS SERVER XEM TIỀN ĐÃ VỀ CHƯA!
+    if (!order || order.status !== 'PAID') {
+      try {
+        let paymentInfo = null;
+        if (payos && payos.paymentRequests && typeof payos.paymentRequests.get === 'function') {
+          paymentInfo = await payos.paymentRequests.get(orderCode);
+        } else if (payos && typeof payos.getPaymentLinkInformation === 'function') {
+          paymentInfo = await payos.getPaymentLinkInformation(orderCode);
         }
-        console.log(`[SYNC PAYOS] Đã xác nhận đơn #${orderCode} đã thanh toán thành công từ PayOS!`);
+
+        if (paymentInfo && (paymentInfo.status === 'PAID' || paymentInfo.status === 'COMPLETED')) {
+          if (order) {
+            order = await db.updateOrderStatus(orderCode, 'PAID', {
+              paidAt: new Date().toISOString(),
+              reference: paymentInfo.id || 'PAYOS_SYNC'
+            });
+          } else {
+            order = await db.createOrder({
+              orderCode: orderCode,
+              status: 'PAID',
+              bookTitle: paymentInfo.items?.[0]?.name || 'Sách giáo trình',
+              quantity: paymentInfo.items?.[0]?.quantity || 1,
+              amount: paymentInfo.amount,
+              unitPrice: paymentInfo.amount,
+              customerName: paymentInfo.buyerName || 'Sinh viên',
+              customerPhone: paymentInfo.buyerPhone || '',
+              note: '',
+              isDelivered: false,
+              paidAt: new Date().toISOString()
+            });
+            await db.updateOrderStatus(orderCode, 'PAID');
+          }
+          console.log(`[SYNC PAYOS] Đã xác nhận đơn #${orderCode} đã thanh toán thành công từ PayOS!`);
+        }
+      } catch (err) {
+        // Khi chưa thanh toán hoặc chưa tìm thấy đơn trên PayOS
       }
-    } catch (err) {
-      // Khi chưa thanh toán hoặc chưa tìm thấy đơn trên PayOS
     }
-  }
 
-  if (!order) {
-    return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng!" });
-  }
-
-  return res.json({
-    success: true,
-    data: {
-      orderCode: order.orderCode,
-      status: order.status,
-      bookTitle: order.bookTitle,
-      quantity: order.quantity,
-      amount: order.amount,
-      customerName: order.customerName,
-      paidAt: order.paidAt
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng!" });
     }
-  });
+
+    return res.json({
+      success: true,
+      data: {
+        orderCode: order.orderCode,
+        status: order.status,
+        bookTitle: order.bookTitle,
+        quantity: order.quantity,
+        amount: order.amount,
+        customerName: order.customerName,
+        customerClass: order.customerClass,
+        paidAt: order.paidAt
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 /**
  * 4. XỬ LÝ WEBHOOK TỪ PAYOS KHI TIỀN VỀ TÀI KHOẢN NGÂN HÀNG
  */
-const handlePayOSWebhook = (req, res) => {
+const handlePayOSWebhook = async (req, res) => {
   try {
     const webhookBody = req.body;
     if (!webhookBody) {
@@ -322,7 +326,7 @@ const handlePayOSWebhook = (req, res) => {
 
     const { orderCode, amount, reference, accountNumber, transactionDateTime } = verifiedData;
 
-    const order = db.getOrderByCode(orderCode);
+    const order = await db.getOrderByCode(orderCode);
     if (!order) {
       console.warn(`Webhook: Không tìm thấy đơn #${orderCode}`);
       return res.status(200).json({ success: false, message: "Đơn không tồn tại" });
@@ -340,13 +344,13 @@ const handlePayOSWebhook = (req, res) => {
     }
 
     // Đánh dấu đã thanh toán thành công
-    db.updateOrderStatus(orderCode, 'PAID', {
+    await db.updateOrderStatus(orderCode, 'PAID', {
       paidAt: transactionDateTime || new Date().toISOString(),
       reference,
       accountNumber
     });
 
-    db.saveTransaction({
+    await db.saveTransaction({
       orderCode,
       reference,
       amount,
@@ -399,62 +403,82 @@ app.post('/api/admin/login', (req, res) => {
 /**
  * 6. QUẢN TRỊ: THỐNG KÊ SỐ LƯỢNG ĐÃ THANH TOÁN (YÊU CẦU MẬT KHẨU)
  */
-app.get('/api/admin/statistics', requireAdminAuth, (req, res) => {
-  const stats = db.getStatistics();
-  res.json({ success: true, data: stats });
+app.get('/api/admin/statistics', requireAdminAuth, async (req, res) => {
+  try {
+    const stats = await db.getStatistics();
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 // Giữ lại endpoint reconciliation cũ để tương thích
-app.get('/api/admin/reconciliation', requireAdminAuth, (req, res) => {
-  const stats = db.getStatistics();
-  res.json({
-    success: true,
-    summary: {
-      totalOrders: stats.totalOrders,
-      paidOrders: stats.paidOrdersCount,
-      totalRevenue: stats.totalRevenue
-    },
-    orders: stats.allOrders,
-    bookSummary: stats.bookSummary
-  });
+app.get('/api/admin/reconciliation', requireAdminAuth, async (req, res) => {
+  try {
+    const stats = await db.getStatistics();
+    res.json({
+      success: true,
+      summary: {
+        totalOrders: stats.totalOrders,
+        paidOrders: stats.paidOrdersCount,
+        totalRevenue: stats.totalRevenue
+      },
+      orders: stats.allOrders,
+      bookSummary: stats.bookSummary
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 /**
  * 7. QUẢN TRỊ: BẬT / TẮT ĐĂNG KÝ (CHỐT SỔ ĐƠN HÀNG - YÊU CẦU MẬT KHẨU)
  */
-app.post('/api/admin/toggle-registration', requireAdminAuth, (req, res) => {
-  const current = db.getSettings();
-  const updated = db.updateSettings({
-    isRegistrationOpen: !current.isRegistrationOpen
-  });
-  console.log(` Đã đổi trạng thái đăng ký: ${updated.isRegistrationOpen ? 'MỞ ĐĂNG KÝ' : 'ĐÃ ĐÓNG / CHỐT SỔ'}`);
-  res.json({ success: true, settings: updated });
+app.post('/api/admin/toggle-registration', requireAdminAuth, async (req, res) => {
+  try {
+    const current = await db.getSettings();
+    const updated = await db.updateSettings({
+      isRegistrationOpen: !current.isRegistrationOpen
+    });
+    console.log(` Đã đổi trạng thái đăng ký: ${updated.isRegistrationOpen ? 'MỞ ĐĂNG KÝ' : 'ĐÃ ĐÓNG / CHỐT SỔ'}`);
+    res.json({ success: true, settings: updated });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 /**
  * 8. QUẢN TRỊ: ĐÁNH DẤU ĐÃ PHÁT SÁCH (YÊU CẦU MẬT KHẨU)
  */
-app.post('/api/admin/toggle-delivered', requireAdminAuth, (req, res) => {
-  const { orderCode } = req.body;
-  const order = db.toggleDeliveredStatus(orderCode);
-  if (!order) return res.status(404).json({ success: false, message: "Không tìm thấy đơn" });
-  res.json({ success: true, order });
+app.post('/api/admin/toggle-delivered', requireAdminAuth, async (req, res) => {
+  try {
+    const { orderCode } = req.body;
+    const order = await db.toggleDeliveredStatus(orderCode);
+    if (!order) return res.status(404).json({ success: false, message: "Không tìm thấy đơn" });
+    res.json({ success: true, order });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 /**
- * 8. TEST GIẢ LẬP THANH TOÁN
+ * 9. TEST GIẢ LẬP THANH TOÁN
  */
-app.post('/api/test/simulate-payment', (req, res) => {
-  const { orderCode } = req.body;
-  const order = db.getOrderByCode(orderCode);
-  if (!order) return res.status(404).json({ success: false, message: "Không tìm thấy đơn" });
+app.post('/api/test/simulate-payment', async (req, res) => {
+  try {
+    const { orderCode } = req.body;
+    const order = await db.getOrderByCode(orderCode);
+    if (!order) return res.status(404).json({ success: false, message: "Không tìm thấy đơn" });
 
-  db.updateOrderStatus(orderCode, 'PAID', {
-    paidAt: new Date().toISOString(),
-    reference: "TEST_" + Date.now()
-  });
+    await db.updateOrderStatus(orderCode, 'PAID', {
+      paidAt: new Date().toISOString(),
+      reference: "TEST_" + Date.now()
+    });
 
-  res.json({ success: true, message: `Đã giả lập nộp tiền đơn #${orderCode}` });
+    res.json({ success: true, message: `Đã giả lập nộp tiền đơn #${orderCode}` });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 app.listen(PORT, () => {

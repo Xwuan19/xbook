@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.0.0 (Release)
+## Phiên bản hiện tại: v1.0.3 (Neon Cloud PostgreSQL Storage)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Mục tiêu**: Hệ thống đăng ký mua giáo trình và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
@@ -18,7 +18,7 @@
    - Tùy chọn nhập số điện thoại.
    - Chọn số lượng mua (ẩn mũi tên tăng giảm mặc định, có nút [-] và [+] to rõ).
    - Tạo mã VietQR động PayOS chính xác số tiền và cú pháp chuyển khoản (`XB...`).
-   - Tự động nhận diện khi tiền vào tài khoản và cập nhật đơn hàng sang `PAID`.
+   - Tự động nhận diện khi tiền vào tài khoản và cập nhật đơn hàng sang `PAID` (kết hợp cả Webhook và cơ chế chủ động thăm dò từ PayOS Server).
 3. **Bảng Quản Lý & Chốt Đơn (Admin)**:
    - Bảo vệ bằng mật khẩu quản trị (`123456`).
    - Thống kê tổng tiền và tổng số lượng từng cuốn cần chuẩn bị (dàn đều 3 cột).
@@ -26,23 +26,33 @@
    - Ô tìm kiếm nhanh sinh viên theo tên khi mang sách lên lớp phát.
    - **Tối ưu Mobile**: Tự động chuyển bảng sang dạng thẻ danh sách dọc (Card List) với số thứ tự tròn, tên sinh viên in đậm, và nút bấm tích nhanh `[✓ Đã phát]` / `[Chưa phát]`.
    - Banner trạng thái trên mobile: Cố định kích thước chấm xanh phát sáng, huy hiệu "ĐANG NHẬN ĐƠN MUA SÁCH" không bị rớt dòng hay bóp nghẹt.
+4. **Cơ Sở Dữ Liệu Bền Vững (Neon PostgreSQL)**:
+   - Dữ liệu được lưu trữ trên đám mây PostgreSQL tại Neon Serverless (`neon.tech`).
+   - Đảm bảo dữ liệu đơn hàng và trạng thái phát sách không bao giờ bị mất khi triển khai trên Vercel Serverless.
 
 ---
 
 ## 2. Cấu Trúc Dự Án
-- `server.js`: Node.js Express server, tích hợp PayOS SDK, routes quản trị có xác thực mật khẩu.
-- `database.js`: Quản lý đọc/ghi cơ sở dữ liệu (`data.json`), thống kê và đánh dấu phát sách.
-- `data.json`: Lưu trữ cấu hình trạng thái đăng ký, danh mục sách, đơn hàng và giao dịch.
+- `server.js`: Node.js Express server, tích hợp PayOS SDK, routes quản trị có xác thực mật khẩu, xử lý bất đồng bộ kết nối DB.
+- `database.js`: Quản lý truy xuất dữ liệu Hybrid: tương tác với Neon PostgreSQL qua `@neondatabase/serverless` nếu có `DATABASE_URL`, tự động fallback sang `data.json` nếu chạy offline/local không có DB.
+- `data.json`: Lưu trữ cục bộ dự phòng.
 - `public/`:
   - `index.html`: Giao diện người dùng responsive (Tailwind CSS, Lucide Icons).
   - `app.js`: Xử lý giao diện, tạo link VietQR, polling đơn hàng, đăng nhập admin và quản lý danh sách.
   - `logo.png`: Logo nhận diện thương hiệu xbook.
-- `.env`: Cấu hình cổng, PayOS Client ID / API Key / Checksum Key và mật khẩu Admin.
+- `.env`: Cấu hình cổng, PayOS Client ID / API Key / Checksum Key, DATABASE_URL và mật khẩu Admin.
 - `.gitignore`: Bỏ qua `node_modules/` và `.env`.
 
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.0.3**:
+  - **Mục tiêu**: Tích hợp cơ sở dữ liệu đám mây Neon PostgreSQL (`neon.tech`) để lưu trữ vĩnh viễn đơn hàng và trạng thái phát sách, tránh mất dữ liệu trên Vercel Serverless.
+  - **Giải pháp**:
+    - Nâng cấp `database.js` sang mô hình Hybrid hỗ trợ `@neondatabase/serverless` với Connection Pooling.
+    - Tự động sinh bảng (`settings`, `books`, `orders`, `transactions`, `webhook_logs`) và nạp sẵn 3 cuốn sách vào database trên đám mây.
+    - Cập nhật toàn bộ các API endpoints trong `server.js` sang `async/await`.
+  - **Kết quả**: Hệ thống vận hành ổn định, dữ liệu đồng bộ tức thì lên đám mây Neon PostgreSQL.
 - **v1.0.2**:
   - Tích hợp cơ chế chủ động kiểm tra trạng thái thanh toán trực tiếp từ PayOS Server trong realtime polling (`GET /api/orders/:orderCode`).
   - Đảm bảo màn hình thanh toán tự động chuyển sang "ĐÃ NHẬN TIỀN THÀNH CÔNG!" ngay lập tức kể cả khi Webhook bị trễ hoặc chưa kịp gắn URL.
