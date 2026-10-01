@@ -461,25 +461,6 @@ app.post('/api/admin/toggle-delivered', requireAdminAuth, async (req, res) => {
   }
 });
 
-/**
- * 9. TEST GIẢ LẬP THANH TOÁN
- */
-app.post('/api/test/simulate-payment', async (req, res) => {
-  try {
-    const { orderCode } = req.body;
-    const order = await db.getOrderByCode(orderCode);
-    if (!order) return res.status(404).json({ success: false, message: "Không tìm thấy đơn" });
-
-    await db.updateOrderStatus(orderCode, 'PAID', {
-      paidAt: new Date().toISOString(),
-      reference: "TEST_" + Date.now()
-    });
-
-    res.json({ success: true, message: `Đã giả lập nộp tiền đơn #${orderCode}` });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 
 app.listen(PORT, () => {
   console.log(`\n Hệ thống XBook Bán Sách Cho Lớp đang chạy tại: ${BASE_URL}`);

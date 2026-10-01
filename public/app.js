@@ -306,23 +306,6 @@ function handlePaymentSuccess(data) {
   lucide.createIcons();
 }
 
-/**
- * 8. TEST GIẢ LẬP THANH TOÁN
- */
-async function simulateSuccessfulPayment() {
-  if (!activeOrderCode) return;
-  try {
-    const res = await fetch('/api/test/simulate-payment', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderCode: activeOrderCode })
-    });
-    const data = await res.json();
-    console.log("Giả lập:", data);
-  } catch (err) {
-    alert("Lỗi test: " + err.message);
-  }
-}
 
 /**
  * 9. BẢNG QUẢN TRỊ & THỐNG KÊ CHO CHÚ

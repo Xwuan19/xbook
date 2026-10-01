@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.0.4 (Update Book Pricing)
+## Phiên bản hiện tại: v1.0.5 (Production Security & Clean Up)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -21,6 +21,7 @@
    - Chọn số lượng mua (ẩn mũi tên tăng giảm mặc định, có nút [-] và [+] to rõ).
    - Tạo mã VietQR động PayOS chính xác số tiền và cú pháp chuyển khoản (`XB...`).
    - Tự động nhận diện khi tiền vào tài khoản và cập nhật đơn hàng sang `PAID` (kết hợp cả Webhook và cơ chế chủ động thăm dò từ PayOS Server).
+   - **Bảo mật thanh toán**: Đã gỡ bỏ toàn bộ nút và endpoint thử nghiệm / giả lập, 100% đối soát tiền thật qua PayOS.
 3. **Bảng Quản Lý & Chốt Đơn (Admin)**:
    - Bảo vệ bằng mật khẩu quản trị (`123456`).
    - Thống kê tổng tiền và tổng số lượng từng cuốn cần chuẩn bị (dàn đều 3 cột).
@@ -49,6 +50,10 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.0.5**:
+  - **Mục tiêu**: Gỡ bỏ nút và endpoint "Bấm Thử Nghiệm Thanh Toán Thành Công" khỏi giao diện thanh toán để đảm bảo bảo mật và tính toàn vẹn dữ liệu thực tế.
+  - **Giải pháp**: Xóa nút bấm trong `public/index.html`, xóa hàm `simulateSuccessfulPayment` trong `public/app.js`, xóa route `POST /api/test/simulate-payment` trong `server.js`.
+  - **Kết quả**: Giao diện quét mã thanh toán sạch đẹp, chuẩn hóa thanh toán tiền thật qua VietQR PayOS.
 - **v1.0.4**:
   - **Mục tiêu**: Cập nhật giá chính xác cho 3 cuốn giáo trình theo yêu cầu:
     - *Vật lí đại cương*: 47.000 đ (47k)
