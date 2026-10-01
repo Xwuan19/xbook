@@ -2,6 +2,8 @@
 
 ## Phiên bản hiện tại: v1.0.3 (Neon Cloud PostgreSQL Storage)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
+- **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
+- **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
 - **Mục tiêu**: Hệ thống đăng ký mua giáo trình và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
