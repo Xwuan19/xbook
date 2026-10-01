@@ -1,0 +1,58 @@
+{
+  "settings": {
+    "isRegistrationOpen": true,
+    "closeMessage": "Đã chốt danh sách đăng ký mua sách đợt này để báo in. Tạm ngưng nhận đơn mới!"
+  },
+  "books": [
+    {
+      "id": "sach-01",
+      "title": "Vật lí đại cương",
+      "price": 45000,
+      "author": "Giáo trình ĐH",
+      "pages": 220,
+      "description": "Giáo trình và tuyển tập bài tập Vật lí đại cương phục vụ học phần và thi kết thúc môn.",
+      "cover": "https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=600&auto=format&fit=crop&q=80"
+    },
+    {
+      "id": "sach-02",
+      "title": "Đại số tuyến tính",
+      "price": 35000,
+      "author": "Giáo trình ĐH",
+      "pages": 180,
+      "description": "Giáo trình lý thuyết và bài tập giải mẫu Đại số tuyến tính chuẩn chương trình.",
+      "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80"
+    },
+    {
+      "id": "sach-03",
+      "title": "Logic học (tài liệu học tập)",
+      "price": 30000,
+      "author": "Tài liệu học tập",
+      "pages": 140,
+      "description": "Tài liệu học tập & câu hỏi ôn tập môn Logic học đại cương cho lớp.",
+      "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=600&auto=format&fit=crop&q=80"
+    }
+  ],
+  "orders": [
+    {
+      "orderCode": 285553246,
+      "bookId": "sach-01",
+      "bookTitle": "Sách Giáo trình Lý thuyết Môn học (Bản in màu)",
+      "quantity": 1,
+      "unitPrice": 45000,
+      "amount": 45000,
+      "customerName": "Nguyen Van Nam",
+      "customerClass": "CNTT K15",
+      "customerPhone": "",
+      "note": "",
+      "status": "PENDING",
+      "isDelivered": false,
+      "checkoutUrl": "http://localhost:3000/mock-checkout.html?orderCode=285553246&amount=45000",
+      "qrCode": "00020101021238540010A00000072701240006970422011001234567890208QRIBFTTA5303704540450005802VN62180814XB2855532466304ABCD",
+      "createdAt": "2026-10-01T14:01:25.553Z",
+      "updatedAt": "2026-10-01T14:01:25.553Z",
+      "paidAt": null
+    }
+  ],
+  "transactions": [],
+  "webhook_logs": []
+}

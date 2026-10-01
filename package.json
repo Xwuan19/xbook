@@ -1,0 +1,26 @@
+{
+  "name": "xbook-payos",
+  "version": "1.0.0",
+  "description": "Hệ thống bán giáo trình trực tuyến tích hợp cổng thanh toán PayOS Dynamic QR",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@payos/node": "^2.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "keywords": [
+    "payos",
+    "vietqr",
+    "dynamic-qr",
+    "payment-gateway",
+    "giao-trinh",
+    "xbook"
+  ],
+  "author": "XBook Team",
+  "license": "MIT"
+}
