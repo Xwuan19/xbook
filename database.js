@@ -16,7 +16,7 @@ const INITIAL_BOOKS = [
   {
     id: "sach-01",
     title: "Vật lí đại cương",
-    price: 45000,
+    price: 47000,
     author: "Giáo trình ĐH",
     pages: 220,
     description: "Giáo trình và tuyển tập bài tập Vật lí đại cương phục vụ học phần và thi kết thúc môn.",
@@ -25,7 +25,7 @@ const INITIAL_BOOKS = [
   {
     id: "sach-02",
     title: "Đại số tuyến tính",
-    price: 35000,
+    price: 22000,
     author: "Giáo trình ĐH",
     pages: 180,
     description: "Giáo trình lý thuyết và bài tập giải mẫu Đại số tuyến tính chuẩn chương trình.",
@@ -34,7 +34,7 @@ const INITIAL_BOOKS = [
   {
     id: "sach-03",
     title: "Logic học (tài liệu học tập)",
-    price: 30000,
+    price: 20000,
     author: "Tài liệu học tập",
     pages: 140,
     description: "Tài liệu học tập & câu hỏi ôn tập môn Logic học đại cương cho lớp.",
@@ -179,14 +179,19 @@ class Database {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )`);
 
-      const booksCount = await this.sql.query('SELECT COUNT(*) as count FROM books');
-      if (Number(booksCount[0]?.count || 0) === 0) {
-        for (const b of INITIAL_BOOKS) {
-          await this.sql.query(
-            'INSERT INTO books (id, title, price, author, pages, description, cover) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-            [b.id, b.title, b.price, b.author, b.pages, b.description, b.cover]
-          );
-        }
+      for (const b of INITIAL_BOOKS) {
+        await this.sql.query(
+          `INSERT INTO books (id, title, price, author, pages, description, cover)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO UPDATE SET
+             title = EXCLUDED.title,
+             price = EXCLUDED.price,
+             author = EXCLUDED.author,
+             pages = EXCLUDED.pages,
+             description = EXCLUDED.description,
+             cover = EXCLUDED.cover`,
+          [b.id, b.title, b.price, b.author, b.pages, b.description, b.cover]
+        );
       }
 
       const settingsCount = await this.sql.query('SELECT COUNT(*) as count FROM settings WHERE id = $1', ['default']);

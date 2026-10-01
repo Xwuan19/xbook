@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.0.3 (Neon Cloud PostgreSQL Storage)
+## Phiên bản hiện tại: v1.0.4 (Update Book Pricing)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -10,13 +10,13 @@
 
 ## 1. Tính Năng Chính
 1. **Danh mục giáo trình**:
-   - Chỉ gồm 3 cuốn sách chuẩn:
-     - *Vật lí đại cương* (45.000 đ)
-     - *Đại số tuyến tính* (35.000 đ)
-     - *Logic học (tài liệu học tập)* (30.000 đ)
-   - Tối giản hiển thị: Đã gỡ bỏ số trang và thông tin bộ môn/tác giả thừa, chỉ giữ tên sách, mô tả ngắn, giá tiền và nút mua.
+   - Gồm chính xác 3 cuốn sách của lớp với bảng giá mới:
+     - *Vật lí đại cương*: **47.000 đ**
+     - *Đại số tuyến tính*: **22.000 đ**
+     - *Logic học (tài liệu học tập)*: **20.000 đ**
+   - Tối giản hiển thị: Gỡ bỏ số trang và tác giả thừa, chỉ giữ tên sách, mô tả ngắn, giá tiền và nút chọn số lượng / mua ngay.
 2. **Quy trình đăng ký mua & thanh toán**:
-   - Yêu cầu nhập đầy đủ Họ và Tên (có kiểm tra tối thiểu 2 từ để tiện tìm tên phát sách trên lớp).
+   - Yêu cầu nhập đầy đủ Họ và Tên (kiểm tra tối thiểu 2 từ để tiện tìm tên phát sách trên lớp).
    - Tùy chọn nhập số điện thoại.
    - Chọn số lượng mua (ẩn mũi tên tăng giảm mặc định, có nút [-] và [+] to rõ).
    - Tạo mã VietQR động PayOS chính xác số tiền và cú pháp chuyển khoản (`XB...`).
@@ -30,6 +30,7 @@
    - Banner trạng thái trên mobile: Cố định kích thước chấm xanh phát sáng, huy hiệu "ĐANG NHẬN ĐƠN MUA SÁCH" không bị rớt dòng hay bóp nghẹt.
 4. **Cơ Sở Dữ Liệu Bền Vững (Neon PostgreSQL)**:
    - Dữ liệu được lưu trữ trên đám mây PostgreSQL tại Neon Serverless (`neon.tech`).
+   - Tự động đồng bộ và cập nhật giá sách vào cơ sở dữ liệu đám mây khi khởi động.
    - Đảm bảo dữ liệu đơn hàng và trạng thái phát sách không bao giờ bị mất khi triển khai trên Vercel Serverless.
 
 ---
@@ -48,6 +49,13 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.0.4**:
+  - **Mục tiêu**: Cập nhật giá chính xác cho 3 cuốn giáo trình theo yêu cầu:
+    - *Vật lí đại cương*: 47.000 đ (47k)
+    - *Đại số tuyến tính*: 22.000 đ (22k)
+    - *Logic học (tài liệu học tập)*: 20.000 đ (20k)
+  - **Giải pháp**: Cập nhật `INITIAL_BOOKS` trong `database.js`, cơ chế upsert tự động vào bảng `books` trên Neon PostgreSQL, cập nhật `data.json`.
+  - **Kết quả**: Giá mới lập tức hiển thị chính xác trên web và khi tạo mã VietQR thanh toán.
 - **v1.0.3**:
   - **Mục tiêu**: Tích hợp cơ sở dữ liệu đám mây Neon PostgreSQL (`neon.tech`) để lưu trữ vĩnh viễn đơn hàng và trạng thái phát sách, tránh mất dữ liệu trên Vercel Serverless.
   - **Giải pháp**:
