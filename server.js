@@ -218,11 +218,62 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
 /**
  * 3. TRA CỨU TRẠNG THÁI ĐƠN HÀNG (REALTIME POLLING)
  */
-app.get('/api/orders/:orderCode', (req, res) => {
-  const order = db.getOrderByCode(req.params.orderCode);
+/**
+ * 3. TRA CỨU TRẠNG THÁI ĐƠN HÀNG (REALTIME POLLING + ĐỒNG BỘ TRỰC TIẾP TỪ PAYOS)
+ */
+app.get('/api/orders/:orderCode', async (req, res) => {
+  const orderCode = Number(req.params.orderCode);
+  let order = db.getOrderByCode(orderCode);
+
+  // NẾU CHƯA PAID, CHỦ ĐỘNG HỎI TRỰC TIẾP PAYOS SERVER XEM TIỀN ĐÃ VỀ CHƯA!
+  // Đảm bảo nhận diện thanh toán ngay lập tức kể cả khi Webhook chưa kịp kích hoạt
+  if (!order || order.status !== 'PAID') {
+    try {
+      let paymentInfo = null;
+      if (payos.paymentRequests && typeof payos.paymentRequests.get === 'function') {
+        paymentInfo = await payos.paymentRequests.get(orderCode);
+      } else if (typeof payos.getPaymentLinkInformation === 'function') {
+        paymentInfo = await payos.getPaymentLinkInformation(orderCode);
+      }
+
+      if (paymentInfo && (paymentInfo.status === 'PAID' || paymentInfo.status === 'COMPLETED')) {
+        if (order) {
+          db.updateOrderStatus(orderCode, 'PAID', {
+            paidAt: new Date().toISOString(),
+            reference: paymentInfo.id || 'PAYOS_SYNC'
+          });
+          order.status = 'PAID';
+          order.paidAt = new Date().toISOString();
+        } else {
+          order = {
+            orderCode: orderCode,
+            status: 'PAID',
+            bookTitle: paymentInfo.items?.[0]?.name || 'Sách giáo trình',
+            quantity: paymentInfo.items?.[0]?.quantity || 1,
+            amount: paymentInfo.amount,
+            customerName: paymentInfo.buyerName || 'Sinh viên',
+            paidAt: new Date().toISOString()
+          };
+          db.saveOrder({
+            ...order,
+            unitPrice: paymentInfo.amount,
+            customerPhone: paymentInfo.buyerPhone || '',
+            note: '',
+            isDelivered: false
+          });
+          db.updateOrderStatus(orderCode, 'PAID');
+        }
+        console.log(`[SYNC PAYOS] Đã xác nhận đơn #${orderCode} đã thanh toán thành công từ PayOS!`);
+      }
+    } catch (err) {
+      // Khi chưa thanh toán hoặc chưa tìm thấy đơn trên PayOS
+    }
+  }
+
   if (!order) {
     return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng!" });
   }
+
   return res.json({
     success: true,
     data: {
@@ -232,7 +283,6 @@ app.get('/api/orders/:orderCode', (req, res) => {
       quantity: order.quantity,
       amount: order.amount,
       customerName: order.customerName,
-      customerClass: order.customerClass,
       paidAt: order.paidAt
     }
   });
@@ -241,9 +291,17 @@ app.get('/api/orders/:orderCode', (req, res) => {
 /**
  * 4. XỬ LÝ WEBHOOK TỪ PAYOS KHI TIỀN VỀ TÀI KHOẢN NGÂN HÀNG
  */
-app.post('/api/payos-webhook', (req, res) => {
+const handlePayOSWebhook = (req, res) => {
   try {
     const webhookBody = req.body;
+    if (!webhookBody) {
+      return res.status(200).json({ success: true, message: "Empty body" });
+    }
+
+    // Trường hợp kiểm tra test kết nối từ PayOS Dashboard
+    if (webhookBody.webhookUrl || (req.query && req.query.test)) {
+      return res.json({ success: true, message: "Webhook URL hợp lệ" });
+    }
 
     // Xác thực chữ ký số bằng Checksum Key
     let verifiedData;
@@ -251,6 +309,9 @@ app.post('/api/payos-webhook', (req, res) => {
       verifiedData = verifyPayOSWebhook(webhookBody);
     } catch (err) {
       console.error(" [BẢO MẬT] Chữ ký Webhook không hợp lệ:", err.message);
+      if (webhookBody.data?.description?.includes('Mã xác nhận')) {
+        return res.json({ success: true, message: "Webhook URL hợp lệ" });
+      }
       return res.status(400).json({ success: false, message: "Chữ ký số không hợp lệ" });
     }
 
@@ -298,7 +359,7 @@ app.post('/api/payos-webhook', (req, res) => {
     });
 
     console.log(`\n TIỀN ĐÃ VỀ TÀI KHOẢN! Đã xác nhận thanh toán đơn #${orderCode}`);
-    console.log(`- Bạn: ${order.customerName} (${order.customerClass})`);
+    console.log(`- Bạn: ${order.customerName}`);
     console.log(`- Sách: ${order.quantity}x "${order.bookTitle}"`);
     console.log(`- Số tiền nhận được: ${amount.toLocaleString('vi-VN')} đ\n`);
 
@@ -308,7 +369,11 @@ app.post('/api/payos-webhook', (req, res) => {
     console.error("Lỗi Webhook:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
-});
+};
+
+app.post('/api/payos-webhook', handlePayOSWebhook);
+app.post('/api/orders/webhook', handlePayOSWebhook);
+app.post('/api/webhook', handlePayOSWebhook);
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123456';
 
