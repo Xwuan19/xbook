@@ -395,3 +395,5 @@ app.post('/api/test/simulate-payment', (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n Hệ thống XBook Bán Sách Cho Lớp đang chạy tại: ${BASE_URL}`);
 });
+
+module.exports = app;

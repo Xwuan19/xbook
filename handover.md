@@ -43,6 +43,8 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.0.1**:
+  - Xuất `module.exports = app` trong `server.js` chuẩn hóa tương thích cho Vercel Express Serverless deployment.
 - **v1.0.0**: 
   - Khởi tạo hệ thống xbook, tích hợp cổng PayOS VietQR.
   - Tối ưu biểu mẫu (chỉ yêu cầu Họ và Tên đầy đủ).
