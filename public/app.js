@@ -440,6 +440,7 @@ async function refreshAdminData() {
       return getLastName(a.customerName).localeCompare(getLastName(b.customerName), 'vi');
     });
 
+    window.currentAdminStats = stats;
     window.cachedPaidOrders = paidOrders;
     renderAdminOrderTable(paidOrders);
 
@@ -627,4 +628,246 @@ function copyToClipboard(elementId) {
   navigator.clipboard.writeText(text).then(() => {
     alert(`Đã copy: "${text}"`);
   });
+}
+
+/**
+ * 10. XUẤT DỮ LIỆU ĐƠN HÀNG RA FILE EXCEL (.XLSX)
+ * Chỉ đọc dữ liệu và sinh file tải về, tuyệt đối không chỉnh sửa dữ liệu người mua.
+ */
+async function exportToExcel() {
+  try {
+    if (!adminAuthPassword) {
+      openModal('adminLoginModal');
+      return;
+    }
+
+    if (typeof XLSX === 'undefined') {
+      alert("Đang tải thư viện xử lý Excel, vui lòng thử lại sau vài giây...");
+      return;
+    }
+
+    // Luôn lấy dữ liệu mới nhất từ server
+    let stats = window.currentAdminStats;
+    if (!stats) {
+      const res = await fetch('/api/admin/statistics', {
+        headers: { 'x-admin-password': adminAuthPassword }
+      });
+      const result = await res.json();
+      if (!result.success) {
+        alert("Không thể tải dữ liệu để xuất Excel!");
+        return;
+      }
+      stats = result.data;
+      window.currentAdminStats = stats;
+    }
+
+    const paidOrders = (stats.allOrders || []).filter(o => o.status === 'PAID');
+
+    // Sắp xếp theo Tên từ A-Z
+    paidOrders.sort((a, b) => {
+      const getLastName = (fullName) => {
+        const parts = (fullName || '').trim().split(/\s+/);
+        return parts[parts.length - 1].toLowerCase();
+      };
+      return getLastName(a.customerName).localeCompare(getLastName(b.customerName), 'vi');
+    });
+
+    const wb = XLSX.utils.book_new();
+    const exportTime = new Date().toLocaleString('vi-VN');
+
+    // ==========================================
+    // SHEET 1: DANH SÁCH PHÁT SÁCH (ĐÃ THANH TOÁN)
+    // ==========================================
+    const sheet1Rows = [
+      ["DANH SÁCH SINH VIÊN ĐĂNG KÝ VÀ ĐÃ THANH TOÁN MUA GIÁO TRÌNH"],
+      [`Thời gian xuất: ${exportTime} | Tổng số bạn: ${paidOrders.length} | Tổng tiền: ${stats.totalRevenue.toLocaleString('vi-VN')} đ`],
+      [],
+      [
+        "STT",
+        "Mã Đơn",
+        "Họ và Tên",
+        "Lớp / MSSV",
+        "Số Điện Thoại",
+        "Tên Giáo Trình",
+        "Số Lượng",
+        "Đơn Giá (đ)",
+        "Thành Tiền (đ)",
+        "Trạng Thái",
+        "Tình Trạng Phát Sách",
+        "Ngày Nộp Tiền",
+        "Ghi Chú / Mã GD"
+      ]
+    ];
+
+    paidOrders.forEach((o, idx) => {
+      sheet1Rows.push([
+        idx + 1,
+        `XB${o.orderCode}`,
+        o.customerName || '',
+        o.customerClass || '',
+        o.customerPhone || '',
+        o.bookTitle || '',
+        Number(o.quantity) || 1,
+        Number(o.unitPrice) || 0,
+        Number(o.amount) || 0,
+        "Đã thanh toán",
+        o.isDelivered ? "Đã nhận sách" : "Chưa nhận",
+        o.paidAt ? new Date(o.paidAt).toLocaleString('vi-VN') : '',
+        o.bankReference || o.note || ''
+      ]);
+    });
+
+    // Thêm dòng tổng kết cuối bảng
+    sheet1Rows.push([]);
+    sheet1Rows.push([
+      "TỔNG CỘNG",
+      "",
+      `${paidOrders.length} bạn`,
+      "",
+      "",
+      "",
+      stats.totalBooksPaid || paidOrders.reduce((sum, o) => sum + (o.quantity || 1), 0),
+      "",
+      stats.totalRevenue || paidOrders.reduce((sum, o) => sum + o.amount, 0),
+      "",
+      `${paidOrders.filter(o => o.isDelivered).length} đã nhận`,
+      "",
+      ""
+    ]);
+
+    const ws1 = XLSX.utils.aoa_to_sheet(sheet1Rows);
+    ws1['!cols'] = [
+      { wch: 6 },  // STT
+      { wch: 14 }, // Mã đơn
+      { wch: 25 }, // Họ tên
+      { wch: 16 }, // Lớp/MSSV
+      { wch: 14 }, // SĐT
+      { wch: 32 }, // Tên giáo trình
+      { wch: 10 }, // SL
+      { wch: 14 }, // Đơn giá
+      { wch: 15 }, // Thành tiền
+      { wch: 16 }, // Trạng thái
+      { wch: 18 }, // Phát sách
+      { wch: 20 }, // Ngày nộp
+      { wch: 25 }  // Ghi chú
+    ];
+    if (paidOrders.length > 0) {
+      ws1['!autofilter'] = { ref: `A4:M${4 + paidOrders.length}` };
+    }
+    XLSX.utils.book_append_sheet(wb, ws1, "Danh Sách Phát Sách");
+
+    // ==========================================
+    // SHEET 2: BẢNG TỔNG HỢP SỐ LƯỢNG BÁO IN
+    // ==========================================
+    const sheet2Rows = [
+      ["BẢNG TỔNG HỢP SỐ LƯỢNG GIÁO TRÌNH ĐÃ CHỐT SỔ (BÁO IN)"],
+      [`Thời gian xuất: ${exportTime}`],
+      [],
+      ["STT", "Tên Giáo Trình", "Đơn Giá (đ)", "Tổng Số Cuốn Cần In", "Tổng Doanh Thu (đ)"]
+    ];
+
+    (stats.bookSummary || []).forEach((b, idx) => {
+      sheet2Rows.push([
+        idx + 1,
+        b.title,
+        Number(b.price) || 0,
+        Number(b.totalQuantity) || 0,
+        Number(b.totalRevenue) || 0
+      ]);
+    });
+
+    sheet2Rows.push([]);
+    sheet2Rows.push([
+      "TỔNG CỘNG",
+      "",
+      "",
+      stats.totalBooksPaid || 0,
+      stats.totalRevenue || 0
+    ]);
+
+    const ws2 = XLSX.utils.aoa_to_sheet(sheet2Rows);
+    ws2['!cols'] = [
+      { wch: 6 },
+      { wch: 35 },
+      { wch: 15 },
+      { wch: 22 },
+      { wch: 20 }
+    ];
+    if (stats.bookSummary && stats.bookSummary.length > 0) {
+      ws2['!autofilter'] = { ref: `A4:E${4 + stats.bookSummary.length}` };
+    }
+    XLSX.utils.book_append_sheet(wb, ws2, "Tổng Hợp Báo In");
+
+    // ==========================================
+    // SHEET 3: TOÀN BỘ ĐƠN HÀNG (ĐỐI SOÁT)
+    // ==========================================
+    const allOrders = stats.allOrders || [];
+    if (allOrders.length > 0) {
+      const sheet3Rows = [
+        ["DANH SÁCH TOÀN BỘ ĐƠN HÀNG (BAO GỒM CHỜ VÀ ĐÃ THANH TOÁN)"],
+        [`Thời gian xuất: ${exportTime} | Tổng số đơn: ${allOrders.length}`],
+        [],
+        [
+          "STT",
+          "Mã Đơn",
+          "Họ và Tên",
+          "Lớp / MSSV",
+          "Số Điện Thoại",
+          "Tên Sách",
+          "Số Lượng",
+          "Thành Tiền (đ)",
+          "Trạng Thái",
+          "Tình Trạng Phát",
+          "Thời Gian Tạo Đơn",
+          "Thời Gian Thanh Toán"
+        ]
+      ];
+
+      allOrders.forEach((o, idx) => {
+        sheet3Rows.push([
+          idx + 1,
+          `XB${o.orderCode}`,
+          o.customerName || '',
+          o.customerClass || '',
+          o.customerPhone || '',
+          o.bookTitle || '',
+          Number(o.quantity) || 1,
+          Number(o.amount) || 0,
+          o.status === 'PAID' ? 'Đã thanh toán' : 'Chờ thanh toán (PENDING)',
+          o.isDelivered ? 'Đã phát' : 'Chưa phát',
+          o.createdAt ? new Date(o.createdAt).toLocaleString('vi-VN') : '',
+          o.paidAt ? new Date(o.paidAt).toLocaleString('vi-VN') : ''
+        ]);
+      });
+
+      const ws3 = XLSX.utils.aoa_to_sheet(sheet3Rows);
+      ws3['!cols'] = [
+        { wch: 6 },
+        { wch: 14 },
+        { wch: 25 },
+        { wch: 16 },
+        { wch: 14 },
+        { wch: 32 },
+        { wch: 10 },
+        { wch: 15 },
+        { wch: 25 },
+        { wch: 15 },
+        { wch: 20 },
+        { wch: 20 }
+      ];
+      ws3['!autofilter'] = { ref: `A4:L${4 + allOrders.length}` };
+      XLSX.utils.book_append_sheet(wb, ws3, "Toàn Bộ Đơn Hàng");
+    }
+
+    // Tải file về máy
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+    const filename = `Danh_Sach_Mua_Sach_XBook_${dateStr}.xlsx`;
+
+    XLSX.writeFile(wb, filename);
+
+  } catch (error) {
+    console.error("Lỗi xuất Excel:", error);
+    alert("Có lỗi khi xuất file Excel: " + error.message);
+  }
 }

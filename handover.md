@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.0.5 (Production Security & Clean Up)
+## Phiên bản hiện tại: v1.0.6 (Export to Excel Feature)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -29,6 +29,13 @@
    - Ô tìm kiếm nhanh sinh viên theo tên khi mang sách lên lớp phát.
    - **Tối ưu Mobile**: Tự động chuyển bảng sang dạng thẻ danh sách dọc (Card List) với số thứ tự tròn, tên sinh viên in đậm, và nút bấm tích nhanh `[✓ Đã phát]` / `[Chưa phát]`.
    - Banner trạng thái trên mobile: Cố định kích thước chấm xanh phát sáng, huy hiệu "ĐANG NHẬN ĐƠN MUA SÁCH" không bị rớt dòng hay bóp nghẹt.
+   - **Xuất file Excel (.xlsx)**:
+     - Nút "Xuất Excel" tích hợp ở cả Header và Footer của Bảng Quản trị.
+     - Tự động tạo file Excel chuyên nghiệp gồm 3 sheet:
+       1. *Danh Sách Phát Sách*: Chỉ gồm các bạn đã thanh toán, sắp xếp tên A-Z, có cột tích chọn phát sách.
+       2. *Tổng Hợp Báo In*: Thống kê số lượng từng cuốn cần in/lấy và tổng tiền.
+       3. *Toàn Bộ Đơn Hàng*: Phục vụ đối soát chi tiết.
+     - **An toàn dữ liệu tuyệt đối**: Tính năng hoạt động 100% Client-side Read-Only, không chạm hay chỉnh sửa bất kỳ trường dữ liệu nào của người mua trong cơ sở dữ liệu.
 4. **Cơ Sở Dữ Liệu Bền Vững (Neon PostgreSQL)**:
    - Dữ liệu được lưu trữ trên đám mây PostgreSQL tại Neon Serverless (`neon.tech`).
    - Tự động đồng bộ và cập nhật giá sách vào cơ sở dữ liệu đám mây khi khởi động.
@@ -41,8 +48,8 @@
 - `database.js`: Quản lý truy xuất dữ liệu Hybrid: tương tác với Neon PostgreSQL qua `@neondatabase/serverless` nếu có `DATABASE_URL`, tự động fallback sang `data.json` nếu chạy offline/local không có DB.
 - `data.json`: Lưu trữ cục bộ dự phòng.
 - `public/`:
-  - `index.html`: Giao diện người dùng responsive (Tailwind CSS, Lucide Icons).
-  - `app.js`: Xử lý giao diện, tạo link VietQR, polling đơn hàng, đăng nhập admin và quản lý danh sách.
+  - `index.html`: Giao diện người dùng responsive (Tailwind CSS, Lucide Icons, SheetJS XLSX).
+  - `app.js`: Xử lý giao diện, tạo link VietQR, polling đơn hàng, đăng nhập admin, xuất Excel và quản lý danh sách.
   - `logo.png`: Logo nhận diện thương hiệu xbook.
 - `.env`: Cấu hình cổng, PayOS Client ID / API Key / Checksum Key, DATABASE_URL và mật khẩu Admin.
 - `.gitignore`: Bỏ qua `node_modules/` và `.env`.
@@ -50,6 +57,10 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.0.6**:
+  - **Mục tiêu**: Bổ sung tính năng Xuất Excel (.xlsx) từ Bảng Quản Trị, bảo đảm an toàn dữ liệu người mua không bị chỉnh sửa.
+  - **Giải pháp**: Tích hợp thư viện SheetJS qua CDN, xây dựng hàm `exportToExcel()` tạo 3 sheet (Phát sách, Báo in, Toàn bộ đơn hàng) với độ rộng cột chuẩn và autofilter. Đặt nút xuất Excel tại Header và Footer của Modal Admin.
+  - **Kết quả**: Xuất file Excel nhanh chóng, định dạng đẹp mắt, tiện lợi khi mang sách lên lớp phát và gửi danh sách cho xưởng in.
 - **v1.0.5**:
   - **Mục tiêu**: Gỡ bỏ nút và endpoint "Bấm Thử Nghiệm Thanh Toán Thành Công" khỏi giao diện thanh toán để đảm bảo bảo mật và tính toàn vẹn dữ liệu thực tế.
   - **Giải pháp**: Xóa nút bấm trong `public/index.html`, xóa hàm `simulateSuccessfulPayment` trong `public/app.js`, xóa route `POST /api/test/simulate-payment` trong `server.js`.
