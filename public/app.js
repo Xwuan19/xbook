@@ -53,6 +53,24 @@ function formatDelivery(value) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+/** Hiện / ẩn thông báo lỗi ngay dưới ô nhập trong form đặt mua */
+function showFieldError(id, message) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerText = message;
+  el.classList.remove('hidden');
+}
+
+function clearFieldError(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('hidden');
+}
+
+/** Chuẩn hóa số điện thoại Việt Nam: bỏ khoảng trắng/dấu chấm, +84 → 0 */
+function normalizePhoneNumber(value) {
+  return String(value || '').replace(/[\s.\-()]/g, '').replace(/^\+?84/, '0');
+}
+
 function escapeHtml(str) {
   return String(str ?? '')
     .replaceAll('&', '&amp;')
@@ -94,6 +112,244 @@ function classesUsingBook(id) { return catalogClasses().filter(c => c.bookIds.in
 function orderClassLabel(order) {
   return order.customerClass ? [order.customerDepartment, order.customerClass].filter(Boolean).join(' / ') : '';
 }
+
+// ============================ DROPDOWN TỰ VẼ (ĐỒNG BỘ GIAO DIỆN WEB) ============================
+/**
+ * Thay thế hoàn toàn <select> mặc định của trình duyệt cho các ô chọn KHOA / LỚP:
+ *  - Trigger bo tròn theo theme xbook (emerald), panel nổi chia nhóm theo khoa.
+ *  - Có ô tìm nhanh (khi nhiều lựa chọn), điều khiển được bằng bàn phím
+ *    (Enter/Space mở, ↑ ↓ di chuyển, Enter chọn, Esc đóng), bấm ra ngoài tự đóng.
+ *  - Giá trị vẫn là chuỗi XBookDomain.classKey(["Khoa","Lớp"]) nên đồng bộ với toàn bộ web.
+ */
+const xbookSelectState = new Map();
+
+function xbookSelect(id) { return xbookSelectState.get(id) || null; }
+function xbookSelectValue(id) { const st = xbookSelect(id); return st ? st.value : ''; }
+function xbookSelectOptions(id) { const st = xbookSelect(id); return st ? st.options : []; }
+
+function ensureXBookSelectState(id) {
+  let st = xbookSelectState.get(id);
+  if (!st) {
+    st = { id, options: [], value: '', placeholder: 'Chọn...', open: false, search: '', highlight: -1, filtered: [], onChange: null, size: 'md' };
+    xbookSelectState.set(id, st);
+  }
+  return st;
+}
+
+/** Bỏ dấu tiếng Việt để tìm nhanh không phân biệt dấu (vd: "kinh te" khớp "Kinh tế") */
+function normalizeForSearch(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
+}
+
+const XBOOK_SELECT_SIZES = {
+  sm: 'px-2.5 py-1.5 text-xs',
+  md: 'px-3 py-2 text-xs',
+  lg: 'px-3.5 py-2.5 text-sm'
+};
+
+function xbookSelectPanelOpen(id) {
+  const st = ensureXBookSelectState(id);
+  st.open = true;
+  st.highlight = -1;
+  renderXBookSelect(id);
+}
+
+function toggleXBookSelect(id) {
+  const st = ensureXBookSelectState(id);
+  st.open = !st.open;
+  st.search = '';
+  st.highlight = -1;
+  renderXBookSelect(id);
+  if (st.open) {
+    const container = document.getElementById(id);
+    const input = container && container.querySelector('[data-xbook-search]');
+    if (input) input.focus();
+  }
+}
+
+function closeXBookSelects(exceptId) {
+  let changed = false;
+  for (const [id, st] of xbookSelectState) {
+    if (st.open && id !== exceptId) { st.open = false; st.search = ''; renderXBookSelect(id); changed = true; }
+  }
+  return changed;
+}
+
+function selectXBookOption(id, value) {
+  const st = ensureXBookSelectState(id);
+  st.value = value;
+  st.open = false;
+  st.search = '';
+  st.highlight = -1;
+  renderXBookSelect(id);
+  if (st.onChange) st.onChange(st.value);
+}
+
+function setXBookSelectValue(id, value, options = {}) {
+  const st = ensureXBookSelectState(id);
+  st.value = value || '';
+  if (!st.options.some(o => o.value === st.value)) st.value = '';
+  st.open = false;
+  st.search = '';
+  st.highlight = -1;
+  renderXBookSelect(id);
+  if (!options.silent && st.onChange) st.onChange(st.value);
+}
+
+/** Vẽ (hoặc vẽ lại) 1 dropdown. Chỉ truyền phần cấu hình cần đổi — trạng thái mở/tìm kiếm được giữ nguyên. */
+function renderXBookSelect(id, config = {}) {
+  const container = document.getElementById(id);
+  if (!container) return;
+  const st = ensureXBookSelectState(id);
+  if (Array.isArray(config.options)) st.options = config.options;
+  if (config.value !== undefined) st.value = config.value || '';
+  if (config.placeholder) st.placeholder = config.placeholder;
+  if (config.onChange !== undefined) st.onChange = config.onChange;
+  if (config.size) st.size = config.size;
+  if (!st.options.some(o => o.value === st.value)) st.value = '';
+
+  const keyword = normalizeForSearch(st.search);
+  const filtered = keyword
+    ? st.options.filter(o => normalizeForSearch(`${o.label} ${o.group || ''}`).includes(keyword))
+    : st.options;
+  st.filtered = filtered;
+
+  const selected = st.options.find(o => o.value === st.value);
+  const sizeClass = XBOOK_SELECT_SIZES[st.size] || XBOOK_SELECT_SIZES.md;
+  const showSearch = st.options.length > 7;
+
+  let lastGroup = null;
+  const rows = filtered.map((o) => {
+    const header = o.group && o.group !== lastGroup
+      ? `<div class="px-2.5 pt-2 pb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">${escapeHtml(o.group)}</div>`
+      : '';
+    lastGroup = o.group || null;
+    const index = filtered.indexOf(o);
+    const active = o.value === st.value;
+    const highlighted = index === st.highlight;
+    return `${header}
+      <button type="button" data-xbook-option data-value="${escapeHtml(o.value)}" role="option" aria-selected="${active}"
+        class="w-full text-left flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold transition ${
+          active ? 'bg-emerald-50 text-emerald-800' : highlighted ? 'bg-slate-100 text-slate-800' : 'text-slate-700 hover:bg-slate-100'
+        }">
+        <span class="truncate">${escapeHtml(o.label)}</span>
+        ${active ? '<span class="text-emerald-600 font-black flex-shrink-0">✓</span>' : ''}
+      </button>`;
+  }).join('');
+
+  container.classList.add('relative');
+  container.dataset.xbookSelect = id;
+  container.innerHTML = `
+    <button type="button" data-xbook-trigger data-xbook-select="${escapeHtml(id)}" aria-haspopup="listbox" aria-expanded="${st.open}"
+      class="w-full flex items-center justify-between gap-2 ${sizeClass} rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-brand-500/20 ${
+        st.open ? 'bg-white border-brand-500' : 'bg-slate-50 border-slate-300 hover:border-emerald-400'
+      }">
+      <span class="truncate font-semibold text-left ${selected ? 'text-slate-800' : 'text-slate-400'}">${escapeHtml(selected ? selected.label : st.placeholder)}</span>
+      <i data-lucide="chevron-down" class="w-3.5 h-3.5 flex-shrink-0 text-slate-400 transition-transform ${st.open ? 'rotate-180' : ''}"></i>
+    </button>
+    <div data-xbook-panel data-xbook-select="${escapeHtml(id)}" role="listbox" class="absolute z-[70] left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-2xl p-1.5 ${st.open ? '' : 'hidden'}">
+      ${showSearch ? `<input data-xbook-search value="${escapeHtml(st.search)}" placeholder="Tìm nhanh khoa / lớp..." class="w-full mb-1 px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500" />` : ''}
+      <div data-xbook-options class="max-h-56 overflow-y-auto">
+        ${rows || `<p class="px-2.5 py-2 text-xs text-slate-400">${st.options.length ? 'Không tìm thấy lựa chọn phù hợp' : 'Chưa có lựa chọn nào'}</p>`}
+      </div>
+    </div>
+  `;
+
+  bindXBookSelectEvents(id, container);
+  if (st.open) {
+    const active = container.querySelector('[data-xbook-option][aria-selected="true"]');
+    if (active && typeof active.scrollIntoView === 'function') active.scrollIntoView({ block: 'nearest' });
+  }
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function bindXBookSelectEvents(id, container) {
+  if (container.dataset.xbookBound === '1') return;
+  container.dataset.xbookBound = '1';
+
+  container.addEventListener('click', (event) => {
+    const optionEl = event.target.closest('[data-xbook-option]');
+    if (optionEl) { selectXBookOption(id, optionEl.dataset.value); return; }
+    if (event.target.closest('[data-xbook-panel]')) return; // bấm trong panel (ô tìm nhanh) — giữ nguyên
+    toggleXBookSelect(id);
+  });
+
+  container.addEventListener('input', (event) => {
+    if (!event.target.matches('[data-xbook-search]')) return;
+    const st = ensureXBookSelectState(id);
+    st.search = event.target.value;
+    st.highlight = -1;
+    renderXBookSelect(id);
+    const input = container.querySelector('[data-xbook-search]');
+    if (input) {
+      input.focus();
+      if (typeof input.setSelectionRange === 'function') input.setSelectionRange(input.value.length, input.value.length);
+    }
+  });
+
+  container.addEventListener('keydown', (event) => {
+    const st = ensureXBookSelectState(id);
+    const options = st.filtered || [];
+    if (event.key === 'Escape') {
+      if (st.open) { st.open = false; st.search = ''; renderXBookSelect(id); }
+      return;
+    }
+    if (!st.open && (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown')) {
+      event.preventDefault();
+      xbookSelectPanelOpen(id);
+      return;
+    }
+    if (!st.open) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (options.length === 0) return;
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      st.highlight = st.highlight < 0
+        ? (step === 1 ? 0 : options.length - 1)
+        : (st.highlight + step + options.length) % options.length;
+      const highlightValue = st.highlight;
+      renderXBookSelect(id);
+      const el = container.querySelectorAll('[data-xbook-option]')[highlightValue];
+      if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const pick = options[st.highlight] || options[0];
+      if (pick) selectXBookOption(id, pick.value);
+    }
+  });
+}
+
+/**
+ * Tìm dropdown chứa cú bấm. Dùng composedPath() vì đường đi của sự kiện được chụp ngay
+ * lúc phát sinh — cần thiết khi trigger vừa bị vẽ lại (nút cũ đã tách khỏi DOM).
+ */
+function xbookSelectClickOrigin(event) {
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+  for (const node of path) {
+    const id = node && node.getAttribute && node.getAttribute('data-xbook-select');
+    if (id) return id;
+  }
+  const target = event.target;
+  const origin = target && typeof target.closest === 'function' ? target.closest('[data-xbook-select]') : null;
+  return origin ? origin.dataset.xbookSelect : null;
+}
+
+document.addEventListener('click', (event) => {
+  const originId = xbookSelectClickOrigin(event);
+  for (const [id, st] of xbookSelectState) {
+    if (!st.open || id === originId) continue;
+    st.open = false;
+    st.search = '';
+    renderXBookSelect(id);
+  }
+});
 
 // ============================ KHỞI ĐỘNG ============================
 document.addEventListener('DOMContentLoaded', () => {
@@ -155,7 +411,7 @@ async function fetchBooksAndSettings() {
       renderClassFilter();
       renderBooks();
       renderCartUI();
-      populateClassDatalist();
+      renderCheckoutClassPicker();
     }
   } catch (error) {
     console.error("Lỗi khi tải dữ liệu giáo trình:", error);
@@ -263,15 +519,27 @@ function setDepartmentFilter(value) {
  */
 function renderClassFilter() {
   const wrap = document.getElementById('classFilterWrap');
-  const select = document.getElementById('classFilterSelect');
-  if (!wrap || !select) return;
+  if (!wrap) return;
 
   const classes = getClassesForDepartment(activeDepartmentFilter);
   wrap.classList.remove('hidden');
   wrap.classList.add('flex');
   if (!classes.some(c => XBookDomain.classKey(c) === activeClassFilter)) activeClassFilter = '__ALL__';
-  select.innerHTML = `<option value="__ALL__">${classes.length ? 'Chọn lớp để xem sách cần học' : 'Khoa này chưa có lớp'}</option>` +
-    classes.map(c => `<option value="${escapeHtml(XBookDomain.classKey(c))}" ${activeClassFilter === XBookDomain.classKey(c) ? 'selected' : ''}>${escapeHtml(activeDepartmentFilter === '__ALL__' ? classLabel(c) : c.name)}</option>`).join('');
+
+  renderXBookSelect('classFilterSelect', {
+    size: 'sm',
+    placeholder: classes.length ? 'Chọn lớp để xem sách cần học' : 'Khoa này chưa có lớp',
+    value: activeClassFilter,
+    onChange: (value) => setClassFilter(value),
+    options: [
+      { value: '__ALL__', label: 'Tất cả các lớp' },
+      ...classes.map(c => ({
+        value: XBookDomain.classKey(c),
+        label: activeDepartmentFilter === '__ALL__' ? classLabel(c) : c.name,
+        group: activeDepartmentFilter === '__ALL__' ? c.department : ''
+      }))
+    ]
+  });
 }
 
 function setClassFilter(value) {
@@ -279,14 +547,33 @@ function setClassFilter(value) {
   renderBooks();
 }
 
-/** Gợi ý lớp trong form đăng ký (datalist) */
-function populateClassDatalist() {
-  const select = document.getElementById('formCustomerClass');
-  if (!select) return;
-  const previous = select.value;
-  select.innerHTML = '<option value="">Không chọn lớp — mua từ danh mục chung</option>' + catalogClasses().map(c =>
-    `<option value="${escapeHtml(XBookDomain.classKey(c))}">${escapeHtml(classLabel(c))}</option>`).join('');
-  select.value = previous;
+/**
+ * Ô chọn LỚP trong form đặt mua — dropdown tự vẽ đồng bộ giao diện web.
+ * Lớp là bắt buộc: danh sách lấy từ khoa/lớp do quản trị khai báo, không dùng list mặc định của trình duyệt.
+ */
+function renderCheckoutClassPicker() {
+  const classes = catalogClasses();
+  renderXBookSelect('formCustomerClass', {
+    size: 'lg',
+    placeholder: classes.length ? 'Chọn lớp của bạn' : 'Chưa có lớp nào',
+    options: classes.map(c => ({ value: XBookDomain.classKey(c), label: classLabel(c), group: c.department })),
+    onChange: () => clearFieldError('formCustomerClassError')
+  });
+
+  const warning = document.getElementById('checkoutClassWarning');
+  if (warning) warning.classList.toggle('hidden', classes.length > 0);
+
+  // Chưa khai báo lớp nào thì chưa thể đặt mua (lớp là thông tin bắt buộc)
+  const submitBtn = document.getElementById('btnSubmitOrder');
+  if (submitBtn) {
+    if (classes.length === 0) {
+      submitBtn.disabled = true;
+      submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+  }
 }
 
 /**
@@ -428,15 +715,22 @@ function openCheckoutModal() {
     return;
   }
 
+  // Danh sách lớp (dropdown tự vẽ) + trạng thái bắt buộc
+  renderCheckoutClassPicker();
+
   // Nhớ thông tin cũ để lần sau điền nhanh hơn
-  const last = JSON.parse(localStorage.getItem('xbook_last_customer') || '{}');
+  let last = {};
+  try { last = JSON.parse(localStorage.getItem('xbook_last_customer') || '{}'); } catch (e) { last = {}; }
   const nameInput = document.getElementById('formCustomerName');
-  const classInput = document.getElementById('formCustomerClass');
   const phoneInput = document.getElementById('formCustomerPhone');
   if (!nameInput.value && last.name) nameInput.value = last.name;
-  if (activeClassFilter !== '__ALL__') classInput.value = activeClassFilter;
-  else if (!classInput.value && last.classKey) classInput.value = last.classKey;
+  // Ưu tiên lớp đang lọc ở trang chủ, sau đó tới lớp lần trước đã chọn
+  if (activeClassFilter !== '__ALL__') setXBookSelectValue('formCustomerClass', activeClassFilter, { silent: true });
+  else if (!xbookSelectValue('formCustomerClass') && last.classKey) setXBookSelectValue('formCustomerClass', last.classKey, { silent: true });
   if (!phoneInput.value && last.phone) phoneInput.value = last.phone;
+  clearFieldError('formCustomerNameError');
+  clearFieldError('formCustomerPhoneError');
+  clearFieldError('formCustomerClassError');
 
   // Lưu ý ngày nhận sách (ngắn gọn) trong form đăng ký
   const deliveryWrap = document.getElementById('checkoutDeliveryInfo');
@@ -532,17 +826,43 @@ async function handleCreatePayment(event) {
     return;
   }
 
-  const customerName = document.getElementById('formCustomerName').value.trim();
-  const selectedClass = catalogClasses().find(c => XBookDomain.classKey(c) === document.getElementById('formCustomerClass').value);
+  clearFieldError('formCustomerNameError');
+  clearFieldError('formCustomerPhoneError');
+  clearFieldError('formCustomerClassError');
+
+  const nameInput = document.getElementById('formCustomerName');
+  const phoneInput = document.getElementById('formCustomerPhone');
+  const customerName = nameInput.value.trim();
+  const selectedClass = catalogClasses().find(c => XBookDomain.classKey(c) === xbookSelectValue('formCustomerClass'));
   const customerClass = selectedClass?.name || '';
   const customerDepartment = selectedClass?.department || '';
-  const customerPhone = (document.getElementById('formCustomerPhone')?.value || '').trim();
+  const customerPhone = normalizePhoneNumber(phoneInput?.value);
 
-  // Bắt buộc nhập đầy đủ cả Họ và Tên (tối thiểu 2 từ)
+  // BẮT BUỘC 1: Họ và Tên đầy đủ (tối thiểu 2 từ)
   const nameParts = customerName.split(/\s+/).filter(w => w.length > 0);
   if (nameParts.length < 2) {
-    alert("Vui lòng nhập đầy đủ cả Họ và Tên (ví dụ: Nguyễn Văn An)");
-    document.getElementById('formCustomerName').focus();
+    showFieldError('formCustomerNameError', 'Vui lòng nhập đầy đủ cả Họ và Tên (ví dụ: Nguyễn Văn An).');
+    nameInput.focus();
+    return;
+  }
+
+  // BẮT BUỘC 2: Số điện thoại đúng định dạng Việt Nam
+  if (!customerPhone) {
+    showFieldError('formCustomerPhoneError', 'Vui lòng nhập số điện thoại để liên hệ khi phát sách.');
+    phoneInput?.focus();
+    return;
+  }
+  if (!/^0\d{9}$/.test(customerPhone)) {
+    showFieldError('formCustomerPhoneError', 'Số điện thoại chưa đúng (10 số, ví dụ: 0987 654 321).');
+    phoneInput?.focus();
+    return;
+  }
+
+  // BẮT BUỘC 3: Lớp học (chọn từ danh sách khoa/lớp của quản trị)
+  if (!selectedClass) {
+    showFieldError('formCustomerClassError', catalogClasses().length
+      ? 'Vui lòng chọn lớp của bạn trong danh sách.'
+      : 'Hệ thống chưa mở lớp nào — vui lòng liên hệ quản trị viên để được thêm lớp.');
     return;
   }
 
@@ -560,8 +880,14 @@ async function handleCreatePayment(event) {
     return;
   }
 
-  // Lưu lại để lần sau điền nhanh
-  localStorage.setItem('xbook_last_customer', JSON.stringify({ name: customerName, classKey: selectedClass ? XBookDomain.classKey(selectedClass) : '', phone: customerPhone }));
+  // Lưu lại để lần sau điền nhanh (bỏ qua nếu trình duyệt chặn lưu trữ)
+  try {
+    localStorage.setItem('xbook_last_customer', JSON.stringify({
+      name: customerName,
+      classKey: selectedClass ? XBookDomain.classKey(selectedClass) : '',
+      phone: customerPhone
+    }));
+  } catch (e) { /* chế độ riêng tư */ }
 
   const items = cart.map(c => ({ bookId: c.bookId, quantity: c.quantity }));
 
@@ -908,14 +1234,20 @@ function renderAdminBookSummary(stats) {
 
 /** Dropdown lọc danh sách phát sách theo lớp (trong tab Đơn hàng) */
 function populateAdminClassFilter(paidOrders) {
-  const select = document.getElementById('adminClassFilterSelect');
-  if (!select) return;
   const classes = [...new Set(paidOrders.map(o => orderClassLabel(o).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
   if (adminClassFilterValue !== '__ALL__' && !classes.includes(adminClassFilterValue)) {
     adminClassFilterValue = '__ALL__';
   }
-  select.innerHTML = `<option value="__ALL__">Mọi lớp</option>` +
-    classes.map(c => `<option value="${escapeHtml(c)}" ${adminClassFilterValue === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+  renderXBookSelect('adminClassFilterSelect', {
+    size: 'sm',
+    placeholder: 'Mọi lớp',
+    value: adminClassFilterValue,
+    onChange: (value) => setAdminClassFilter(value),
+    options: [
+      { value: '__ALL__', label: 'Mọi lớp' },
+      ...classes.map(c => ({ value: c, label: c }))
+    ]
+  });
 }
 
 function setAdminClassFilter(value) {
@@ -1239,27 +1571,46 @@ function renderAdminManageTab() {
   renderManageBookList();
   renderSettingsChips();
   renderClassBookEditor();
+
+  // Lớp là bắt buộc khi mua → nhắc quản trị viên nếu chưa khai báo lớp nào
+  const noClassWarning = document.getElementById('adminNoClassWarning');
+  if (noClassWarning) noClassWarning.classList.toggle('hidden', catalogClasses().length > 0);
+
   lucide.createIcons();
 }
 
 /** Bộ lọc thư viện sách: theo khoa / lớp / từ khóa tên sách */
 function renderManageFilters() {
-  const deptSelect = document.getElementById('manageDeptFilter');
-  const classSelect = document.getElementById('manageClassFilter');
-  if (!deptSelect || !classSelect) return;
-
   const departments = currentSettings.departments || [];
   if (manageDeptFilter !== '__ALL__' && !departments.includes(manageDeptFilter)) manageDeptFilter = '__ALL__';
 
-  deptSelect.innerHTML = '<option value="__ALL__">Mọi khoa</option>' + departments.map(d =>
-    `<option value="${escapeHtml(d)}" ${manageDeptFilter === d ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('');
+  renderXBookSelect('manageDeptFilter', {
+    size: 'sm',
+    placeholder: 'Mọi khoa',
+    value: manageDeptFilter,
+    onChange: (value) => setManageDeptFilter(value),
+    options: [
+      { value: '__ALL__', label: 'Mọi khoa' },
+      ...departments.map(d => ({ value: d, label: d }))
+    ]
+  });
 
   const classes = getClassesForDepartment(manageDeptFilter);
   if (manageClassFilter !== '__ALL__' && !classes.some(c => XBookDomain.classKey(c) === manageClassFilter)) manageClassFilter = '__ALL__';
-  classSelect.innerHTML = `<option value="__ALL__">${classes.length ? 'Mọi lớp' : 'Chưa có lớp'}</option>` + classes.map(c => {
-    const key = XBookDomain.classKey(c);
-    return `<option value="${escapeHtml(key)}" ${manageClassFilter === key ? 'selected' : ''}>${escapeHtml(manageDeptFilter === '__ALL__' ? classLabel(c) : c.name)}</option>`;
-  }).join('');
+  renderXBookSelect('manageClassFilter', {
+    size: 'sm',
+    placeholder: classes.length ? 'Mọi lớp' : 'Chưa có lớp',
+    value: manageClassFilter,
+    onChange: (value) => setManageClassFilter(value),
+    options: [
+      { value: '__ALL__', label: 'Mọi lớp' },
+      ...classes.map(c => ({
+        value: XBookDomain.classKey(c),
+        label: manageDeptFilter === '__ALL__' ? classLabel(c) : c.name,
+        group: manageDeptFilter === '__ALL__' ? c.department : ''
+      }))
+    ]
+  });
 }
 
 /** Mô tả ngắn gọn 1 cuốn sách đang là sách cần học của những khoa / lớp nào */
@@ -1370,7 +1721,12 @@ function renderSettingsChips() {
     ? departments.map(d => chipHtml(d, 'dept')).join('')
     : `<span class="text-[11px] text-slate-400">Chưa có khoa nào</span>`;
 
-  document.getElementById('addClassDepartment').innerHTML = departments.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  renderXBookSelect('addClassDepartment', {
+    size: 'sm',
+    placeholder: departments.length ? 'Chọn khoa' : 'Chưa có khoa',
+    value: xbookSelectValue('addClassDepartment') || departments[0] || '',
+    options: departments.map(d => ({ value: d, label: d }))
+  });
   const classes = XBookDomain.classes(currentSettings.classes, departments);
   classWrap.innerHTML = classes.length
     ? classes.map(c => chipHtml(`${c.department} / ${c.name}`, 'class')).join('')
@@ -1391,7 +1747,7 @@ async function saveSettingsPatch(patch) {
   currentSettings = { ...currentSettings, ...data.settings };
   renderDepartmentChips();
   renderClassFilter();
-  populateClassDatalist();
+  renderCheckoutClassPicker();
   renderBooks();
   renderClassBookEditor();
   return data.settings;
@@ -1422,7 +1778,7 @@ async function handleRemoveChip(type, name) {
     renderSettingsChips();
     renderDepartmentChips();
     renderClassFilter();
-    populateClassDatalist();
+    renderCheckoutClassPicker();
     renderAdminManageTab();
   } catch (e) { alert("Lỗi: " + e.message); }
 }
@@ -1432,7 +1788,7 @@ async function handleAddClass(event) {
   const input = document.getElementById('addClassInput');
   const name = input.value.trim();
   if (!name) return;
-  const department = document.getElementById('addClassDepartment').value;
+  const department = xbookSelectValue('addClassDepartment');
   const classes = XBookDomain.classes([...(currentSettings.classes || []), { name, department, bookIds: [] }], currentSettings.departments);
   try {
     await saveSettingsPatch({ classes });
@@ -1440,23 +1796,23 @@ async function handleAddClass(event) {
     renderSettingsChips();
     renderClassBookEditor();
     renderClassFilter();
-    populateClassDatalist();
+    renderCheckoutClassPicker();
   } catch (e) { alert("Lỗi: " + e.message); }
 }
 
 // Each class owns a curriculum list; a global book can be used across any faculties.
 function renderClassBookEditor() {
-  const select = document.getElementById('classBookEditorSelect');
-  if (!select) return;
-  const previous = select.value;
-  select.innerHTML = '<option value="">Chọn khoa / lớp để thiết lập sách</option>' + catalogClasses().map(c =>
-    `<option value="${escapeHtml(XBookDomain.classKey(c))}">${escapeHtml(classLabel(c))}</option>`).join('');
-  select.value = previous;
+  const classes = catalogClasses();
+  renderXBookSelect('classBookEditorSelect', {
+    placeholder: classes.length ? 'Chọn khoa / lớp để thiết lập sách' : 'Chưa có lớp nào',
+    options: classes.map(c => ({ value: XBookDomain.classKey(c), label: classLabel(c), group: c.department })),
+    onChange: () => renderClassBookChoices()
+  });
   renderClassBookChoices();
 }
 function renderClassBookChoices() {
-  const select = document.getElementById('classBookEditorSelect');
-  const entry = catalogClasses().find(c => XBookDomain.classKey(c) === select.value);
+  const key = xbookSelectValue('classBookEditorSelect');
+  const entry = catalogClasses().find(c => XBookDomain.classKey(c) === key);
   const choices = document.getElementById('classBookChoices');
   document.getElementById('saveClassBooksButton').disabled = !entry;
   choices.innerHTML = !entry ? '<p class="text-xs text-slate-400">Hãy chọn lớp ở trên.</p>' : !allBooks.length ? '<p class="text-xs text-slate-400">Hãy thêm sách vào danh mục chung trước.</p>' : allBooks.map(b =>
@@ -1464,7 +1820,7 @@ function renderClassBookChoices() {
 }
 async function saveClassBooks(event) {
   event.preventDefault();
-  const key = document.getElementById('classBookEditorSelect').value;
+  const key = xbookSelectValue('classBookEditorSelect');
   if (!catalogClasses().some(c => XBookDomain.classKey(c) === key)) return;
   const bookIds = [...document.querySelectorAll('#classBookChoices input:checked')].map(input => input.value);
   const classes = catalogClasses().map(c => XBookDomain.classKey(c) === key ? { ...c, bookIds } : c);
@@ -1736,7 +2092,7 @@ async function refreshCatalogEverywhere() {
       renderDepartmentChips();
       renderClassFilter();
       renderBooks();
-      populateClassDatalist();
+      renderCheckoutClassPicker();
     }
   } catch (e) {
     console.error("Lỗi tải lại danh mục:", e);

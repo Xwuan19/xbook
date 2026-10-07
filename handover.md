@@ -1,12 +1,22 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.3.0 (Sách gắn Khoa/Lớp + Ghi nhớ đăng nhập + PWA iPhone)
+## Phiên bản hiện tại: v1.3.1 (Chọn lớp đồng bộ giao diện + Bắt buộc Tên / SĐT / Lớp)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
 - **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
+
+## 0b. Điểm mới v1.3.1 (chọn lớp đồng bộ + bắt buộc thông tin)
+
+1. **Dropdown chọn khoa/lớp tự vẽ** (`XBookSelect` trong `public/app.js`) — **không dùng list mặc định của trình duyệt** nữa. Đã bỏ 100% `<select>`/`<datalist>` khỏi giao diện (trang chủ, form mua sách, tab Đơn hàng, bộ lọc thư viện sách, Sách cần học theo lớp, chọn khoa khi thêm lớp). Panel bo tròn theo theme xbook, chia nhóm theo khoa, có ô *tìm nhanh* bỏ dấu, điều hướng bàn phím, bấm ra ngoài tự đóng. Giá trị vẫn là khóa `["Khoa","Lớp"]`.
+   - ⚠️ Lưu ý kỹ thuật: handler "bấm ra ngoài" phải dùng `event.composedPath()` (không chỉ `closest`) vì trigger bị vẽ lại ngay khi mở panel → nút cũ tách khỏi DOM, dùng `closest` sẽ đóng panel ngay lập tức.
+2. **Bắt buộc Họ tên + Số điện thoại + Lớp học khi mua sách**:
+   - Form: lỗi hiện ngay dưới từng ô (`formCustomerNameError`, `formCustomerPhoneError`, `formCustomerClassError`), không dùng popup.
+   - Server (`POST /api/orders/create-payment-link`): tên ≥ 2 từ; SĐT 10 số `0xxxxxxxxx` (chuẩn hóa `+84`, khoảng trắng, dấu chấm/gạch); lớp phải có trong `settings.classes` (kèm `customerDepartment` để phân biệt lớp trùng tên giữa các khoa) → thiếu/sai trả **400**.
+   - Chưa khai báo lớp nào → nút đặt mua bị khóa + banner hướng dẫn liên hệ quản trị viên (vì lớp là bắt buộc).
+   - Số điện thoại lưu ở dạng chuẩn hóa `0xxxxxxxxx` trong đơn hàng.
 
 ## 0. Điểm mới v1.3.0 (quan trọng — đọc trước)
 
@@ -75,6 +85,14 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.3.1**:
+  - **Mục tiêu**: (1) Ô chọn lớp đồng bộ giao diện web, bỏ list mặc định của trình duyệt; (2) Bắt buộc Họ tên + Số điện thoại + Lớp học khi mua sách.
+  - **Giải pháp**:
+    - `public/app.js`: thêm component `XBookSelect` (`renderXBookSelect`, `xbookSelectValue`, `setXBookSelectValue`, `xbookSelectOptions`, `selectXBookOption`, `closeXBookSelects`) và thay toàn bộ ô chọn khoa/lớp; thêm `showFieldError`/`clearFieldError`/`normalizePhoneNumber`; `renderCheckoutClassPicker()` (thay `populateClassDatalist`).
+    - `public/index.html`: bỏ hết `<select>`, thêm `<div>` container cho dropdown, ô lỗi tại chỗ, banner cảnh báo khi chưa có lớp, SĐT + Lớp đánh dấu bắt buộc (`required`).
+    - `server.js`: validate bắt buộc 3 trường, chuẩn hóa SĐT, chặn khi `settings.classes` rỗng, lưu SĐT chuẩn hóa và ghi log kèm khoa/lớp.
+    - `test/`: cập nhật + thêm bài test số 10 (không còn `<select>`, mở/chọn dropdown, thiếu từng trường → lỗi tại chỗ và không gửi đơn, đủ 3 trường → gửi đúng lớp + SĐT chuẩn hóa) — tổng **10 bài pass**.
+  - **Kết quả**: Giao diện chọn lớp thống nhất trên mọi màn hình; mọi đơn mua sách đều có Tên, SĐT, Lớp hợp lệ (chặn cả ở client lẫn API).
 - **v1.3.0**:
   - **Mục tiêu**: (1) Sách là danh mục chung — *add sách vào khoa/lớp* = đánh dấu **sách cần học của lớp đó** (khoa Kinh tế cũng học Triết/Vật lí, không seed ví dụ vào DB); (2) **Ghi nhớ đăng nhập** để admin không phải nhập lại mật khẩu; (3) **PWA trên iPhone**.
   - **Giải pháp**:

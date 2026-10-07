@@ -3,7 +3,17 @@
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này (v1.3.0)
+## Mục tiêu đợt này (v1.3.1)
+1. **Chọn lớp đồng bộ giao diện web**: bỏ toàn bộ list mặc định của trình duyệt (`<select>`), dùng dropdown tự vẽ cho mọi ô chọn khoa/lớp.
+2. **Bắt buộc Họ tên + Số điện thoại + Lớp học** khi mua sách (chặn ở cả form lẫn API).
+
+## Giai đoạn 7 (v1.3.1) — Dropdown tự vẽ + Bắt buộc thông tin người mua
+- [x] T27. `public/app.js`: component `XBookSelect` (panel chia nhóm theo khoa, tìm nhanh bỏ dấu, bàn phím, bấm ra ngoài tự đóng) + thay 7 ô chọn khoa/lớp trong toàn bộ giao diện.
+- [x] T28. `public/index.html`: bỏ hết `<select>`, thêm ô lỗi tại chỗ cho Tên / SĐT / Lớp và cảnh báo khi chưa khai báo lớp.
+- [x] T29. `server.js`: bắt buộc Họ tên (≥2 từ) + SĐT (10 số, chuẩn hóa `+84`) + Lớp thuộc danh sách khoa/lớp → 400 khi thiếu/sai.
+- [x] T30. Kiểm thử (10 bài pass) + cập nhật README / handover / TASKS / version 1.3.1.
+
+## Mục tiêu đợt trước (v1.3.0)
 1. **Sách là danh mục chung, không thuộc khoa nào** — add sách vào **khoa/lớp** = đánh dấu *sách cần học của (các) lớp đó* (tích cả khoa, hoặc chọn từng lớp).
 2. **Ghi nhớ đăng nhập** cho admin (token phiên 30 ngày, không phải nhập lại mật khẩu).
 3. **PWA trên iPhone**: manifest + service worker + icon, cài ra màn hình chính chạy toàn màn hình.

@@ -166,13 +166,8 @@
         <span class="text-xs font-bold text-slate-500 flex items-center space-x-1 flex-shrink-0">
           <i data-lucide="users" class="w-3.5 h-3.5"></i><span>Lớp:</span>
         </span>
-        <select
-          id="classFilterSelect"
-          onchange="setClassFilter(this.value)"
-          class="text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-brand-500"
-        >
-          <option value="__ALL__">Tất cả các lớp</option>
-        </select>
+        <!-- Dropdown tự vẽ (đồng bộ giao diện web) — KHÔNG dùng select mặc định của trình duyệt -->
+        <div id="classFilterSelect" class="relative flex-1 min-w-0"></div>
       </div>
     </div>
 
@@ -266,27 +261,38 @@
             placeholder="Ví dụ: Nguyễn Văn An" 
             class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
           />
+          <p id="formCustomerNameError" class="hidden text-[11px] font-bold text-rose-600 mt-1"></p>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           <div>
             <label class="block text-xs font-bold text-slate-800 mb-1">
-              Lớp <span class="text-emerald-600 font-extrabold">(nên điền)</span>
+              Lớp học <span class="text-rose-500">*</span>
             </label>
-            <select id="formCustomerClass" class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none">
-              <option value="">Không chọn lớp — mua từ danh mục chung</option>
-            </select>
+            <!-- Dropdown tự vẽ đồng bộ giao diện web (khoa → lớp), không dùng select mặc định -->
+            <div id="formCustomerClass" class="relative" aria-label="Chọn lớp học"></div>
+            <p id="formCustomerClassError" class="hidden text-[11px] font-bold text-rose-600 mt-1"></p>
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">Số điện thoại (tùy chọn)</label>
+            <label class="block text-xs font-bold text-slate-800 mb-1">
+              Số điện thoại <span class="text-rose-500">*</span>
+            </label>
             <input 
               type="tel" 
               id="formCustomerPhone" 
+              required 
+              inputmode="tel" 
+              autocomplete="tel" 
               placeholder="0987 654 321" 
               class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none"
             />
+            <p id="formCustomerPhoneError" class="hidden text-[11px] font-bold text-rose-600 mt-1"></p>
           </div>
         </div>
+
+        <p id="checkoutClassWarning" class="hidden text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+          Hệ thống chưa mở lớp nào để chọn. Vui lòng liên hệ quản trị viên để được thêm khoa &amp; lớp trước khi mua sách.
+        </p>
 
         <div>
           <label class="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
@@ -584,9 +590,7 @@
               
               <div class="flex items-center gap-2 w-full sm:w-auto print:hidden">
                 <!-- LỌC THEO LỚP -->
-                <select id="adminClassFilterSelect" onchange="setAdminClassFilter(this.value)" class="text-xs font-semibold bg-slate-100 border border-slate-200 rounded-xl px-2.5 py-2 focus:bg-white focus:border-brand-500 focus:outline-none max-w-[140px] sm:max-w-[160px]">
-                  <option value="__ALL__">Mọi lớp</option>
-                </select>
+                <div id="adminClassFilterSelect" class="relative w-[130px] sm:w-[170px] flex-shrink-0"></div>
                 <!-- TÌM NHANH TÊN -->
                 <div class="relative flex-1 sm:w-56">
                   <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
@@ -674,6 +678,10 @@
 
         <!-- ============ TAB 5: QUẢN LÝ SÁCH + DANH SÁCH KHOA / LỚP ============ -->
         <div id="adminTabManage" class="admin-tab-panel hidden">
+          <!-- Cảnh báo bắt buộc: chưa có lớp thì sinh viên không thể đặt mua -->
+          <p id="adminNoClassWarning" class="hidden text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 mb-3">
+            ⚠️ Chưa có lớp nào. Vì <strong>Lớp học là bắt buộc khi mua sách</strong>, sinh viên chưa thể đặt mua — hãy thêm Khoa (nếu chưa có) và thêm Lớp ở panel bên phải.
+          </p>
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <!-- DANH SÁCH SÁCH -->
             <div class="lg:col-span-2">
@@ -690,14 +698,8 @@
 
               <!-- LỌC THƯ VIỆN SÁCH THEO KHOA / LỚP -->
               <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
-                <select id="manageDeptFilter" onchange="setManageDeptFilter(this.value)" aria-label="Lọc sách theo khoa"
-                  class="flex-1 min-w-[110px] px-2.5 py-2 text-xs font-semibold bg-slate-100 border border-slate-200 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none">
-                  <option value="__ALL__">Mọi khoa</option>
-                </select>
-                <select id="manageClassFilter" onchange="setManageClassFilter(this.value)" aria-label="Lọc sách theo lớp"
-                  class="flex-1 min-w-[110px] px-2.5 py-2 text-xs font-semibold bg-slate-100 border border-slate-200 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none">
-                  <option value="__ALL__">Mọi lớp</option>
-                </select>
+                <div id="manageDeptFilter" class="relative flex-1 min-w-[110px]" aria-label="Lọc sách theo khoa"></div>
+                <div id="manageClassFilter" class="relative flex-1 min-w-[110px]" aria-label="Lọc sách theo lớp"></div>
                 <div class="relative flex-1 min-w-[140px]">
                   <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
                   <input type="text" id="manageBookSearch" oninput="setManageBookSearch(this.value)" placeholder="Tìm tên sách / tác giả..."
@@ -757,7 +759,7 @@
                   <!-- Render động -->
                 </div>
                 <form onsubmit="handleAddClass(event)" class="flex gap-1.5">
-                  <select id="addClassDepartment" aria-label="Khoa của lớp" class="min-w-0 max-w-[45%] border rounded-xl text-xs"></select>
+                  <div id="addClassDepartment" class="relative w-[42%] min-w-0 flex-shrink-0" aria-label="Khoa của lớp"></div>
                   <input type="text" id="addClassInput" placeholder="VD: CNTT K15" class="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
                   <button type="submit" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex-shrink-0">
                     <i data-lucide="plus" class="w-3.5 h-3.5"></i>
@@ -767,7 +769,7 @@
               <form onsubmit="saveClassBooks(event)" class="border border-slate-200 rounded-2xl p-3.5 bg-white space-y-3">
                 <h4 class="text-xs font-bold text-slate-700 uppercase">Sách cần học theo lớp</h4>
                 <p class="text-xs text-slate-500">Chọn lớp, đánh dấu sách từ danh mục chung rồi lưu. Một cuốn có thể được chọn cho nhiều lớp ở các khoa khác nhau.</p>
-                <select id="classBookEditorSelect" onchange="renderClassBookChoices()" aria-label="Lớp cần thiết lập sách" class="w-full border rounded-xl p-2 text-xs"></select>
+                <div id="classBookEditorSelect" class="relative" aria-label="Lớp cần thiết lập sách"></div>
                 <div id="classBookChoices" class="max-h-64 overflow-y-auto"></div>
                 <button id="saveClassBooksButton" type="submit" disabled class="w-full rounded-xl bg-emerald-600 text-white text-xs font-bold p-2.5 disabled:opacity-40">Lưu danh sách sách của lớp</button>
               </form>

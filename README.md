@@ -2,7 +2,17 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## ✨ Điểm mới (v1.3.0) — Sách gắn Khoa/Lớp + Ghi nhớ đăng nhập + PWA iPhone
+## ✨ Điểm mới (v1.3.1) — Chọn lớp đồng bộ giao diện + Bắt buộc Tên / SĐT / Lớp
+
+| Tính năng | Mô tả |
+|---|---|
+| 🎛️ **Dropdown chọn lớp tự vẽ** | Không còn dùng list mặc định của trình duyệt (`<select>`): mọi ô chọn **khoa / lớp** (trang chủ, form mua sách, bộ lọc quản trị, thiết lập sách theo lớp) đều là dropdown bo tròn theo theme xbook — chia nhóm theo khoa, có ô *tìm nhanh* không phân biệt dấu, điều khiển được bằng bàn phím |
+| ✅ **Bắt buộc Họ tên** | Tối thiểu 2 từ (Họ + Tên) để tìm tên khi phát sách trên lớp |
+| ✅ **Bắt buộc Số điện thoại** | Phải đúng 10 số dạng `0xxxxxxxxx` (tự chuẩn hóa `+84`, khoảng trắng, dấu chấm); lưu dạng chuẩn để liên hệ khi phát sách |
+| ✅ **Bắt buộc Lớp học** | Phải chọn lớp trong danh sách khoa/lớp do quản trị khai báo. Chưa mở lớp nào → nút đặt mua bị khóa kèm hướng dẫn liên hệ quản trị viên |
+| 🛡️ **Chặn ở cả 2 phía** | Form hiện lỗi ngay dưới từng ô (không dùng popup), server trả **400** kèm thông báo tiếng Việt nếu thiếu/sai — không thể lách bằng cách gọi API trực tiếp |
+
+## ✨ Điểm cũ (v1.3.0) — Sách gắn Khoa/Lớp + Ghi nhớ đăng nhập + PWA iPhone
 
 | Tính năng | Mô tả |
 |---|---|
@@ -281,3 +291,24 @@ XBook đã có **Web App Manifest** (`/manifest.webmanifest`) + **Service Worker
 - Có thể gán nhanh ở khối *“Sách cần học theo lớp”* (panel bên phải tab Quản lý sách) với cách chọn lớp → tích sách.
 - Trang chủ: sinh viên chọn **Khoa → Lớp** để xem danh sách sách cần học của mình; bộ lọc chỉ để **gợi ý**, không chặn mua.
 - API tương ứng: `POST /api/admin/books`, `PUT /api/admin/books/:id` nhận thêm `departments: []` (tên khoa) và `classKeys: []` (khóa `["Khoa","Lớp"]`); phản hồi kèm `settings` mới.
+
+---
+
+## 🎛️ 11. Ô Chọn Khoa / Lớp (dropdown tự vẽ)
+
+- Toàn bộ ô chọn **khoa / lớp** dùng component `XBookSelect` trong `public/app.js`; **không** còn `<select>` hay `<datalist>` mặc định của trình duyệt (đã có test `document.querySelectorAll('select').length === 0`).
+- Áp dụng ở: bộ lọc lớp trang chủ, **form đăng ký mua sách**, lọc lớp trong tab *Đơn hàng*, bộ lọc thư viện sách (khoa + lớp), *Sách cần học theo lớp*, ô chọn khoa khi thêm lớp.
+- Đặc điểm: panel bo tròn theo theme xbook, **chia nhóm theo khoa**, ô *tìm nhanh* (bỏ dấu tiếng Việt — gõ `kinh te` vẫn ra `Kinh tế`) khi có hơn 7 lựa chọn, điều hướng bàn phím `Enter` / `Space` / `↑` / `↓` / `Esc`, bấm ra ngoài tự đóng.
+- Giá trị truyền đi vẫn là khóa chuẩn `["Khoa","Lớp"]` nên đồng bộ với bộ lọc, thống kê và Excel.
+
+## ✅ 12. Điều Kiện Bắt Buộc Khi Mua Sách
+
+| Trường | Bắt buộc | Quy tắc |
+|---|---|---|
+| **Họ và tên** | ✅ | Tối thiểu 2 từ (Họ + Tên), tối đa theo độ dài ô nhập |
+| **Số điện thoại** | ✅ | 10 số dạng `0xxxxxxxxx`; chấp nhận `+84 987 654 321`, `0987.654.321`, `0987-654-321` và tự chuẩn hóa |
+| **Lớp học** | ✅ | Phải chọn từ danh sách khoa/lớp do quản trị khai báo |
+
+- Form hiển thị lỗi ngay dưới ô nhập (`formCustomerNameError`, `formCustomerPhoneError`, `formCustomerClassError`).
+- Server (`POST /api/orders/create-payment-link`) kiểm tra lại toàn bộ và trả **400** nếu thiếu/sai — API không thể bị lách từ bên ngoài.
+- ⚠️ **Lưu ý vận hành**: vì lớp là bắt buộc, quản trị viên cần khai báo **Khoa → Lớp** (tab *Quản lý sách*) trước khi mở nhận đơn; nếu chưa có lớp nào, sinh viên sẽ thấy thông báo yêu cầu liên hệ quản trị viên và nút đặt mua tạm khóa.

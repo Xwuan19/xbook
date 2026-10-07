@@ -202,11 +202,27 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Ngày nhận sách không hợp lệ!' });
       }
     }
+    // BẮT BUỘC 1: Họ và Tên đầy đủ (tối thiểu 2 từ) để tìm tên khi phát sách trên lớp
     const nameWords = (customerName || '').trim().split(/\s+/).filter(w => w.length > 0);
     if (nameWords.length < 2) {
       return res.status(400).json({
         success: false,
         message: "Vui lòng nhập đầy đủ cả Họ và Tên (ví dụ: Nguyễn Văn An) để tìm tên phát sách trên lớp!"
+      });
+    }
+
+    // BẮT BUỘC 2: Số điện thoại Việt Nam hợp lệ (bỏ khoảng trắng/dấu chấm, +84 → 0)
+    const phone = String(customerPhone || '').replace(/[\s.\-()]/g, '').replace(/^\+?84/, '0');
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập số điện thoại để liên hệ khi phát sách!"
+      });
+    }
+    if (!/^0\d{9}$/.test(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Số điện thoại chưa đúng định dạng (10 số, ví dụ: 0987 654 321)!"
       });
     }
 
@@ -219,12 +235,19 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
       });
     }
 
-    let selectedClass = null;
-    if (customerClass) {
-      const matches = settings.classes.filter(c => c.name === customerClass && (!customerDepartment || c.department === customerDepartment));
-      if (matches.length !== 1) return res.status(400).json({ success: false, message: 'Vui lòng chọn đúng khoa và lớp của bạn.' });
-      selectedClass = matches[0];
+    // BẮT BUỘC 3: Lớp học — phải chọn đúng lớp trong danh sách khoa/lớp do quản trị khai báo
+    if ((settings.classes || []).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Hệ thống chưa mở lớp nào. Vui lòng liên hệ quản trị viên để được thêm khoa & lớp trước khi mua sách!"
+      });
     }
+    if (!customerClass) {
+      return res.status(400).json({ success: false, message: 'Vui lòng chọn lớp học của bạn!' });
+    }
+    const matches = settings.classes.filter(c => c.name === customerClass && (!customerDepartment || c.department === customerDepartment));
+    if (matches.length !== 1) return res.status(400).json({ success: false, message: 'Vui lòng chọn đúng khoa và lớp của bạn.' });
+    const selectedClass = matches[0];
 
     // Hỗ trợ 2 định dạng:
     //  - MỚI: items = [{ bookId, quantity }, ...] → 1 người mua nhiều cuốn khác nhau trong 1 đơn
@@ -283,16 +306,16 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
       quantity: totalQuantity,
       amount: totalAmount,
       customerName: customerName || 'Bạn cùng lớp',
-      customerClass: selectedClass?.name || '',
-      customerDepartment: selectedClass?.department || '',
-      customerPhone: customerPhone || '',
+      customerClass: selectedClass.name,
+      customerDepartment: selectedClass.department,
+      customerPhone: phone,
       note: note || '',
       deliveryDate: (deliveryDate && String(deliveryDate).trim()) || settings.deliveryDate || '',
       checkoutUrl: paymentResponse.checkoutUrl,
       qrCode: paymentResponse.qrCode
     });
 
-    console.log(`\n Đã tạo mã QR PayOS cho: ${customerName} (${customerClass || 'chưa khai báo lớp'}) - ${totalQuantity} cuốn [${bookTitleSummary}] - ${totalAmount.toLocaleString('vi-VN')} đ (Mã: ${transferDescription})`);
+    console.log(`\n Đã tạo mã QR PayOS cho: ${customerName} (${selectedClass.department} / ${selectedClass.name}) - ${totalQuantity} cuốn [${bookTitleSummary}] - ${totalAmount.toLocaleString('vi-VN')} đ (Mã: ${transferDescription})`);
 
     return res.json({
       success: true,

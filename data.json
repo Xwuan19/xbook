@@ -5,7 +5,16 @@
     "departments": [
       "Khoa CNTT"
     ],
-    "classes": [],
+    "classes": [
+      {
+        "name": "CNTT K15",
+        "department": "Khoa CNTT",
+        "bookIds": [
+          "sach-04"
+        ]
+      }
+    ],
+    "catalogVersion": 2,
     "deliveryDate": "2026-10-08",
     "deliveryNote": "Sách thường giao ngay hôm sau nếu có tiết."
   },
@@ -17,9 +26,7 @@
       "author": "Giáo trình Khoa CNTT",
       "pages": 250,
       "description": "Giáo trình mẫu của Khoa CNTT: mảng, danh sách liên kết, cây, đồ thị và các giải thuật sắp xếp.",
-      "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80",
-      "department": "Khoa CNTT",
-      "classes": []
+      "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80"
     }
   ],
   "orders": [

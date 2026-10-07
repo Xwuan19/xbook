@@ -36,7 +36,18 @@ test('API supports global books shared across faculties, class curricula and imm
     const catalog = await request('/api/books');
     assert.deepEqual(catalog.data.settings.classes, classes);
     assert.equal(catalog.data.settings.catalogVersion, 2);
-    const body = { customerName: 'Nguyen An', customerClass: 'A', items: [{ bookId: 'sach-04', quantity: 1 }] };
+    const body = { customerName: 'Nguyen An', customerPhone: '0987 654 321', customerClass: 'A', items: [{ bookId: 'sach-04', quantity: 1 }] };
+    // Bắt buộc: họ tên, số điện thoại, lớp học
+    assert.equal((await request('/api/orders/create-payment-link', 'POST', { ...body, customerName: 'An' })).status, 400);
+    assert.equal((await request('/api/orders/create-payment-link', 'POST', { ...body, customerPhone: '' })).status, 400);
+    assert.equal((await request('/api/orders/create-payment-link', 'POST', { ...body, customerPhone: '12345' })).status, 400);
+    assert.equal((await request('/api/orders/create-payment-link', 'POST', { ...body, customerClass: '' })).status, 400);
+    assert.equal((await request('/api/orders/create-payment-link', 'POST', { ...body, customerClass: 'Lớp khong ton tai' })).status, 400);
+    // Số điện thoại +84 được chuẩn hóa về dạng 0xxxxxxxxx
+    const phoneNormalized = await request('/api/orders/create-payment-link', 'POST', { ...body, customerPhone: '+84 987 654 321', customerDepartment: departments[1] });
+    assert.equal(phoneNormalized.status, 200);
+    const statsAfterPhone = await request('/api/admin/statistics');
+    assert.equal(statsAfterPhone.data.data.allOrders.find(o => o.orderCode === phoneNormalized.data.data.orderCode).customerPhone, '0987654321');
     // Ambiguous names must not pick a random faculty.
     assert.equal((await request('/api/orders/create-payment-link', 'POST', body)).status, 400);
     const before = Date.now();
@@ -54,9 +65,10 @@ test('API supports global books shared across faculties, class curricula and imm
     assert.equal(saved.data.data.customerDepartment, departments[1]);
     // Filters are guidance, not purchasing restrictions: unassigned books are still purchasable.
     assert.equal((await request('/api/orders/create-payment-link', 'POST', { ...body, customerClass: 'B', items: [{ bookId: globalBook.data.book.id, quantity: 1 }] })).status, 200);
-    assert.equal((await request('/api/orders/create-payment-link', 'POST', { ...body, customerClass: '' })).status, 200);
     assert.equal((await request('/api/admin/settings', 'PUT', { classes: [{ ...classes[0], bookIds: ['unknown'] }] })).status, 400);
     assert.equal((await request('/api/admin/settings', 'PUT', { departments: ['Khoa CNTT'] })).status, 400);
+    assert.equal((await request('/api/admin/settings', 'PUT', { classes: [] })).status, 200);
+    assert.equal((await request('/api/orders/create-payment-link', 'POST', body)).status, 400);
     assert.equal((await request('/api/admin/settings', 'PUT', { classes: [{ ...classes[0], bookIds: [] }] })).status, 200);
     assert.deepEqual((await request('/api/books')).data.settings.classes, [{ ...classes[0], bookIds: [] }]);
     // Deleting a book removes references, without deleting the class or changing existing orders.
