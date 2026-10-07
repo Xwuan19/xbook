@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.1.0 (Phân loại Khoa / Lớp / Tên + Giỏ hàng đa cuốn)
+## Phiên bản hiện tại: v1.2.0 (Chỉ còn Khoa CNTT + Quản lý sách + Chốt sổ theo ngày nhận sách)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -9,12 +9,12 @@
 ---
 
 ## 1. Tính Năng Chính
-1. **Danh mục giáo trình**:
-   - Gồm chính xác 3 cuốn sách của lớp với bảng giá mới:
-     - *Vật lí đại cương*: **47.000 đ**
-     - *Đại số tuyến tính*: **22.000 đ**
-     - *Logic học (tài liệu học tập)*: **20.000 đ**
-   - Tối giản hiển thị: Gỡ bỏ số trang và tác giả thừa, chỉ giữ tên sách, mô tả ngắn, giá tiền và nút chọn số lượng / mua ngay.
+1. **Danh mục sách (chỉ còn Khoa CNTT)**:
+   - Bỏ phân loại "Đại cương" và "Kế toán" — mọi sách chỉ thuộc **Khoa CNTT**.
+   - Sách hiện tại: *Cấu trúc dữ liệu và giải thuật* **35.000 đ** (mẫu). Thêm/sửa/xóa các sách khác (tên, ảnh bìa, giá, tác giả/NXB, trang, năm/bản in, mô tả, lớp) tại tab **Quản lý sách** — ảnh bìa dán link hoặc upload từ máy.
+2. **Chốt sổ & ngày nhận sách**:
+   - Bảng Quản Lý: nút **Đóng/Mở lại đăng ký** + ô **Ngày nhận sách** (chọn ngày giao, VD mở lại 07/10 → nhận 08/10, tự đặt ngày mai khi mở lại) + ô **Lưu ý thời gian** (mặc định: *"Sách thường giao ngay hôm sau nếu có tiết."*).
+   - Sinh viên thấy ngày nhận sách + lưu ý trên banner trang chủ, trong form đăng ký và màn hình thanh toán thành công.
 2. **Quy trình đăng ký mua & thanh toán**:
    - Yêu cầu nhập đầy đủ Họ và Tên (kiểm tra tối thiểu 2 từ để tiện tìm tên phát sách trên lớp).
    - Tùy chọn nhập số điện thoại.
@@ -57,6 +57,13 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.2.0**:
+  - **Mục tiêu**: (1) Gọn nhẹ danh mục — bỏ 2 khoa "Đại cương" & "Kế toán", chỉ còn **Khoa CNTT**; (2) Nâng cấp **Quản lý sách** đủ trường (tên, ảnh bìa, giá, tác giả/NXB, trang, năm/bản in, mô tả, khoa, lớp) + **upload ảnh bìa từ máy**; (3) Thêm **chốt sổ theo ngày nhận sách** — admin tự chọn ngày giao và lưu ý thời gian ngắn gọn.
+  - **Giải pháp**:
+    - `database.js`: `DEFAULT_DEPARTMENT='Khoa CNTT'`, `INITIAL_DEPARTMENTS=['Khoa CNTT']`, xóa 4 sách demo thuộc 2 khoa cũ (chỉ giữ *Cấu trúc dữ liệu và giải thuật*); thêm trường `deliveryDate` + `deliveryNote` cho `settings` (migration Neon `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`), trường `year` cho `books`; `data.json` cập nhật theo.
+    - `server.js`: thêm `POST /api/admin/upload` (Multer, ảnh ≤3MB → thư mục `/uploads/`), `PUT /api/admin/settings` nhận `deliveryDate`/`deliveryNote`; `POST /api/admin/toggle-registration` khi **mở lại** đăng ký tự đặt `deliveryDate` = **ngày mai** nếu chưa có hoặc đã quá hạn (VD mở 07/10 → nhận 08/10); endpoint `/api/test/simulate-payment` chỉ tồn tại ở chế độ Demo (chưa gắn key PayOS thật) để kiểm thử nội bộ — production 100% đối soát Webhook.
+    - `public/index.html` + `public/app.js`: banner trạng thái ngắn gọn kèm dòng **"📦 Nhận sách: 08/10 · Sách thường giao ngay hôm sau nếu có tiết."**; form đăng ký + màn hình thành công hiện ngày nhận sách; Bảng Quản Lý có khối *Chốt sổ* (nút đóng/mở + ô **Ngày nhận sách** + ô **Lưu ý** + nút Lưu); tab **Quản lý sách** có cột ảnh bìa, form thêm trường **Năm/Bản in** + ô **Upload ảnh** (preview); toàn bộ nhãn "giáo trình" đổi thành "sách".
+  - **Kết quả**: Danh mục chỉ còn Khoa CNTT, quản trị viên thêm/sửa sách có ảnh & đầy đủ thông tin, chốt sổ với ngày nhận sách cụ thể và lưu ý thời gian hiển thị ngắn gọn ở 3 vị trí sinh viên hay nhìn.
 - **v1.1.0**:
   - **Mục tiêu**: Bổ sung logic phân loại **Khoa** (Khoa CNTT, Khoa Kế toán…) để soạn list giáo trình cần thiết, phân loại **Lớp** (người quản trị tự bổ sung tên lớp), phân loại **Tên** (1 người mua nhiều cuốn khác nhau), cập nhật giao diện và tối ưu tỷ lệ hiển thị Desktop/Mobile.
   - **Giải pháp**:

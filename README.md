@@ -2,7 +2,16 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## ✨ Điểm mới (v1.1.0) — Phân loại Khoa / Lớp / Tên
+## ✨ Điểm mới (v1.2.0) — Chỉ còn Khoa CNTT + Quản lý sách + Chốt sổ theo ngày nhận sách
+
+| Tính năng | Mô tả |
+|---|---|
+| 🎓 **Chỉ còn Khoa CNTT** | Bỏ 2 khoa "Đại cương" và "Kế toán" — toàn bộ danh mục chỉ phân loại theo **Khoa CNTT** |
+| 📚 **Quản lý sách** | Tab *Quản lý sách* trong Bảng Quản Lý: thêm / sửa / xóa đầy đủ **tên sách, ảnh bìa (dán link HOẶC upload từ máy), giá tiền, tác giả/NXB, số trang, năm/bản in, mô tả, khoa, lớp** — bảng sách có thumbnail ảnh bìa |
+| 🔒 **Chốt sổ + Ngày nhận sách** | Admin chọn **ngày nhận sách** (VD: mở lại nhận đơn 07/10 → hệ thống tự đặt nhận sách **08/10**, chỉnh được bất cứ lúc nào) + **lưu ý thời gian** ngắn gọn (mặc định: *"Sách thường giao ngay hôm sau nếu có tiết."*). Sinh viên thấy ngay trên banner trang chủ, trong form đăng ký và màn hình thanh toán thành công |
+| 💡 **Ngắn gọn hơn** | Banner trạng thái & các nhãn UI được làm gọn, thống nhất gọi là "sách" |
+
+## ✨ Điểm cũ (v1.1.0) — Phân loại Khoa / Lớp / Tên
 
 | Phân loại | Mô tả | Dùng để làm gì |
 |---|---|---|

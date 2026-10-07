@@ -28,6 +28,24 @@ let currentAdminTab = 'orders';
 
 const formatMoney = (n) => `${(Number(n) || 0).toLocaleString('vi-VN')} đ`;
 
+// Định dạng ngày "YYYY-MM-DD" → "08/10" (cùng năm) hoặc "08/10/2027"
+function formatDateVN(ymd) {
+  if (!ymd) return '';
+  const d = new Date(`${ymd}T00:00:00`);
+  if (isNaN(d.getTime())) return ymd;
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return d.getFullYear() === new Date().getFullYear() ? `${dd}/${mm}` : `${dd}/${mm}/${d.getFullYear()}`;
+}
+
+// Dòng lưu ý ngày nhận sách ngắn gọn cho sinh viên (dùng chung banner + form + màn hình thành công)
+function deliveryInfoLine() {
+  const date = currentSettings.deliveryDate;
+  const note = (currentSettings.deliveryNote || '').trim();
+  if (!date && !note) return '';
+  return [date ? `Nhận sách: <strong>${formatDateVN(date)}</strong>` : '', note].filter(Boolean).join(' · ');
+}
+
 function escapeHtml(str) {
   return String(str ?? '')
     .replaceAll('&', '&amp;')
@@ -106,7 +124,7 @@ async function fetchBooksAndSettings() {
 /** Danh sách khoa đầy đủ: từ settings + từ các giáo trình đang có */
 function getAllDepartments() {
   const set = new Set(currentSettings.departments || []);
-  allBooks.forEach(b => set.add(b.department || 'Đại cương'));
+  allBooks.forEach(b => set.add(b.department || 'Khoa CNTT'));
   return [...set];
 }
 
@@ -125,20 +143,20 @@ function renderRegistrationBanner() {
   if (!container) return;
 
   if (currentSettings.isRegistrationOpen) {
+    const deliveryLine = deliveryInfoLine();
     container.innerHTML = `
       <div class="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200/90 rounded-2xl p-3.5 sm:p-4 shadow-sm">
-        <div class="flex items-center justify-between gap-2 mb-2">
+        <div class="flex items-center justify-between gap-2">
           <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100/90 text-emerald-800 text-[11px] font-extrabold tracking-wide flex-shrink-0">
             <span class="relative flex h-2 w-2 flex-shrink-0">
               <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
             </span>
-            <span class="whitespace-nowrap">ĐANG NHẬN ĐƠN MUA GIÁO TRÌNH</span>
+            <span class="whitespace-nowrap">ĐANG MỞ NHẬN ĐƠN</span>
           </div>
-          <span class="text-[11px] font-semibold text-emerald-700 whitespace-nowrap hidden sm:inline">VietQR tự động</span>
+          ${deliveryLine ? `<span class="text-[11px] font-bold text-emerald-800 text-right leading-snug">📦 ${deliveryLine}</span>` : ''}
         </div>
-        <h3 class="text-sm sm:text-base font-extrabold text-slate-900 leading-snug">Đang mở đăng ký mua giáo trình đợt này</h3>
-        <p class="text-xs text-slate-600 mt-1 leading-relaxed">Lọc theo <strong>Khoa</strong> hoặc <strong>Lớp</strong>, chọn nhiều cuốn khác nhau, nhập đúng họ tên và quét mã QR chuyển khoản — hệ thống tự động ghi nhận vào danh sách.</p>
+        ${deliveryLine ? `<p class="text-xs text-slate-600 mt-1.5 leading-relaxed">Chọn sách, nhập đúng họ tên và quét QR chuyển khoản — hệ thống tự ghi nhận vào danh sách.</p>` : ''}
       </div>
     `;
   } else {
@@ -151,8 +169,8 @@ function renderRegistrationBanner() {
           </div>
           <span class="text-[11px] font-semibold text-amber-700 whitespace-nowrap">Tạm ngưng nhận đơn</span>
         </div>
-        <h3 class="text-sm sm:text-base font-extrabold text-amber-950 leading-snug">Đã chốt danh sách mua giáo trình đợt này</h3>
-        <p class="text-xs text-amber-800 mt-1 leading-relaxed">${escapeHtml(currentSettings.closeMessage || 'Tạm dừng nhận đơn để chuẩn bị giáo trình mang lên lớp cho các bạn.')}</p>
+        <h3 class="text-sm sm:text-base font-extrabold text-amber-950 leading-snug">Đã chốt danh sách mua sách đợt này</h3>
+        <p class="text-xs text-amber-800 mt-1 leading-relaxed">${escapeHtml(currentSettings.closeMessage || 'Tạm dừng nhận đơn để chuẩn bị sách mang lên lớp cho các bạn.')}</p>
       </div>
     `;
   }
@@ -169,7 +187,7 @@ function renderDepartmentChips() {
 
   const countFor = (dept) => dept === '__ALL__'
     ? allBooks.length
-    : allBooks.filter(b => (b.department || 'Đại cương') === dept).length;
+    : allBooks.filter(b => (b.department || 'Khoa CNTT') === dept).length;
 
   const chip = (value, label) => {
     const active = activeDepartmentFilter === value;
@@ -241,7 +259,7 @@ function populateClassDatalist() {
  */
 function getFilteredBooks() {
   return allBooks.filter(b => {
-    const okDept = activeDepartmentFilter === '__ALL__' || (b.department || 'Đại cương') === activeDepartmentFilter;
+    const okDept = activeDepartmentFilter === '__ALL__' || (b.department || 'Khoa CNTT') === activeDepartmentFilter;
     const okClass = activeClassFilter === '__ALL__' || (b.classes || []).includes(activeClassFilter);
     return okDept && okClass;
   });
@@ -258,7 +276,7 @@ function renderBooks() {
     grid.innerHTML = `
       <div class="col-span-full text-center py-10 text-slate-400">
         <div class="text-3xl mb-2">📚</div>
-        Chưa có giáo trình nào phù hợp bộ lọc này.
+        Chưa có sách nào phù hợp bộ lọc này.
       </div>`;
     return;
   }
@@ -297,7 +315,7 @@ function renderBooks() {
           ${coverHtml}
           <div class="flex flex-wrap gap-1 mb-2">
             <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              ${escapeHtml(book.department || 'Đại cương')}
+              ${escapeHtml(book.department || 'Khoa CNTT')}
             </span>
             ${classesBadges}
           </div>
@@ -332,7 +350,7 @@ function toggleCartBook(bookId) {
 }
 
 function clearCart() {
-  if (cart.length > 0 && !confirm("Xóa toàn bộ giỏ giáo trình?")) return;
+  if (cart.length > 0 && !confirm("Xóa toàn bộ giỏ sách?")) return;
   cart = [];
   renderBooks();
   renderCartUI();
@@ -365,7 +383,7 @@ function renderCartUI() {
 
   bar.classList.remove('hidden');
   document.getElementById('cartCountBadge').innerText = totalBooks;
-  document.getElementById('cartSummaryText').innerText = `${totalBooks} cuốn giáo trình`;
+  document.getElementById('cartSummaryText').innerText = `${totalBooks} cuốn sách`;
   document.getElementById('cartTotalText').innerText = formatMoney(cartTotalAmount());
   lucide.createIcons();
 }
@@ -373,7 +391,7 @@ function renderCartUI() {
 // ============================ MODAL ĐĂNG KÝ MUA ============================
 function openCheckoutModal() {
   if (cart.length === 0) {
-    alert("Giỏ hàng đang trống. Hãy chọn giáo trình cần mua trước nhé!");
+    alert("Giỏ hàng đang trống. Hãy chọn sách cần mua trước nhé!");
     return;
   }
   if (!currentSettings.isRegistrationOpen) {
@@ -390,6 +408,21 @@ function openCheckoutModal() {
   if (!classInput.value && last.className) classInput.value = last.className;
   if (!phoneInput.value && last.phone) phoneInput.value = last.phone;
 
+  // Lưu ý ngày nhận sách (ngắn gọn) trong form đăng ký
+  const deliveryWrap = document.getElementById('checkoutDeliveryInfo');
+  const deliveryText = document.getElementById('checkoutDeliveryText');
+  const line = deliveryInfoLine();
+  if (deliveryWrap && deliveryText) {
+    if (line) {
+      deliveryWrap.classList.remove('hidden');
+      deliveryWrap.classList.add('flex');
+      deliveryText.innerHTML = line;
+    } else {
+      deliveryWrap.classList.add('hidden');
+      deliveryWrap.classList.remove('flex');
+    }
+  }
+
   renderCheckoutItems();
   openModal('checkoutModal');
 }
@@ -403,7 +436,7 @@ function renderCheckoutItems() {
       <div class="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-2xl p-2.5">
         <div class="min-w-0 flex-1">
           <div class="text-xs font-extrabold text-slate-900 truncate">${escapeHtml(book.title)}</div>
-          <div class="text-[10px] text-slate-400 font-semibold">${escapeHtml(book.department || 'Đại cương')} · ${formatMoney(book.price)}/cuốn</div>
+          <div class="text-[10px] text-slate-400 font-semibold">${escapeHtml(book.department || 'Khoa CNTT')} · ${formatMoney(book.price)}/cuốn</div>
         </div>
         <div class="flex items-center space-x-1.5 flex-shrink-0">
           <button type="button" onclick="changeCartQuantity(${idx}, -1)" class="w-7 h-7 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold flex items-center justify-center">-</button>
@@ -571,6 +604,10 @@ function handlePaymentSuccess(data) {
   document.getElementById('successQuantity').innerText = `${data.quantity || 1} cuốn`;
   document.getElementById('successOrderCode').innerText = `#${data.orderCode}`;
 
+  const note = (currentSettings.deliveryNote || '').trim();
+  document.getElementById('successDeliveryDate').innerText =
+    currentSettings.deliveryDate ? `${formatDateVN(currentSettings.deliveryDate)}${note ? ' — ' + note : ''}` : (note || 'Sẽ thông báo sau');
+
   lucide.createIcons();
 }
 
@@ -689,8 +726,14 @@ async function refreshAdminData() {
       btnToggle.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i><span>Bấm để ĐÓNG / CHỐT SỔ ĐĂNG KÝ</span>`;
     } else {
       btnToggle.className = 'w-full py-2.5 px-4 rounded-xl text-xs font-black transition flex items-center justify-center space-x-2 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white';
-      btnToggle.innerHTML = `<i data-lucide="unlock" class="w-4 h-4"></i><span>Bấm để MỞ LẠI ĐĂNG KÝ</span>`;
+      btnToggle.innerHTML = `<i data-lucide="unlock" class="w-4 h-4"></i><span>Bấm để MỞ LẠI ĐĂNG KÝ (ngày nhận sách tự đặt = ngày mai, chỉnh được bên dưới)</span>`;
     }
+
+    // Điền lại ngày nhận sách + lưu ý (không làm mất giá trị admin vừa gõ)
+    const dateInput = document.getElementById('deliveryDateInput');
+    const noteInput = document.getElementById('deliveryNoteInput');
+    if (dateInput && document.activeElement !== dateInput) dateInput.value = stats.settings.deliveryDate || '';
+    if (noteInput && document.activeElement !== noteInput) noteInput.value = stats.settings.deliveryNote || '';
 
     const revEl = document.getElementById('adminTotalRevenue');
     if (revEl) revEl.innerText = `Tổng tiền: ${formatMoney(stats.totalRevenue)}`;
@@ -722,7 +765,7 @@ function renderAdminBookSummary(stats) {
   const container = document.getElementById('adminBookSummaryCards');
   if (!container) return;
 
-  const departments = [...new Set((stats.bookSummary || []).map(b => b.department || 'Đại cương'))];
+  const departments = [...new Set((stats.bookSummary || []).map(b => b.department || 'Khoa CNTT'))];
 
   if (departments.length === 0) {
     container.innerHTML = `<div class="text-xs text-slate-400 text-center py-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">Chưa có dữ liệu</div>`;
@@ -730,7 +773,7 @@ function renderAdminBookSummary(stats) {
   }
 
   container.innerHTML = departments.map(dept => {
-    const booksInDept = (stats.bookSummary || []).filter(b => (b.department || 'Đại cương') === dept);
+    const booksInDept = (stats.bookSummary || []).filter(b => (b.department || 'Khoa CNTT') === dept);
     return `
       <div>
         <div class="flex items-center space-x-1.5 mb-1.5">
@@ -1035,7 +1078,7 @@ function renderAdminDepartmentTab(stats) {
   (stats.bookSummary || []).forEach(b => { summaryById[b.id] = b; });
 
   container.innerHTML = departments.map(dept => {
-    const booksInDept = allBooks.filter(b => (b.department || 'Đại cương') === dept);
+    const booksInDept = allBooks.filter(b => (b.department || 'Khoa CNTT') === dept);
     const deptBooks = booksInDept.length > 0 ? booksInDept : [];
     const deptOrdered = deptBooks.reduce((s, b) => s + ((summaryById[b.id]?.totalQuantity) || 0), 0);
     const deptRevenue = deptBooks.reduce((s, b) => s + ((summaryById[b.id]?.totalRevenue) || 0), 0);
@@ -1046,7 +1089,7 @@ function renderAdminDepartmentTab(stats) {
           <div class="flex items-center space-x-2 min-w-0">
             <i data-lucide="graduation-cap" class="w-4 h-4 text-emerald-700 flex-shrink-0"></i>
             <span class="font-black text-sm text-slate-900 truncate">${escapeHtml(dept)}</span>
-            <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full whitespace-nowrap">${deptBooks.length} giáo trình</span>
+            <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full whitespace-nowrap">${deptBooks.length} sách</span>
           </div>
           <div class="text-[10px] font-bold text-slate-500 whitespace-nowrap">
             Đã đặt: <span class="text-emerald-700">${deptOrdered} cuốn</span> · ${formatMoney(deptRevenue)}
@@ -1054,7 +1097,7 @@ function renderAdminDepartmentTab(stats) {
         </div>
 
         ${deptBooks.length === 0 ? `
-          <div class="p-4 text-center text-xs text-slate-400">Chưa có giáo trình nào thuộc khoa này — thêm trong tab "Quản lý giáo trình".</div>
+          <div class="p-4 text-center text-xs text-slate-400">Chưa có sách nào thuộc khoa này — thêm trong tab "Quản lý sách".</div>
         ` : `
         <div class="divide-y divide-slate-100">
           ${deptBooks.map((b, i) => {
@@ -1083,27 +1126,38 @@ function renderAdminDepartmentTab(stats) {
 }
 
 /** TAB QUẢN LÝ — danh mục giáo trình + danh sách khoa/lớp */
+/** Thumbnail ảnh bìa sách (dùng chung cho bảng desktop & mobile) */
+function bookCoverThumb(b, cls) {
+  return b.cover
+    ? `<img src="${escapeHtml(b.cover)}" alt="" onerror="this.style.display='none'" class="${cls} object-cover bg-slate-100" loading="lazy" />`
+    : `<div class="${cls} bg-slate-100 flex items-center justify-center"><i data-lucide="book" class="w-4 h-4 text-slate-300"></i></div>`;
+}
+
 function renderAdminManageTab() {
-  // 1. Bảng giáo trình
+  // 1. Bảng sách
   const tbody = document.getElementById('adminBooksTableBody');
   const mobileList = document.getElementById('adminBooksMobileList');
 
   const rows = allBooks.map(b => {
     const classesText = (b.classes || []).length ? b.classes.map(escapeHtml).join(', ') : '<span class="text-slate-300">—</span>';
-    return { b, classesText };
+    const meta = [escapeHtml(b.author || ''), escapeHtml(b.year || ''), b.pages ? `${b.pages} trang` : ''].filter(Boolean).join(' · ');
+    return { b, classesText, meta };
   });
 
   if (tbody) {
     tbody.innerHTML = rows.length === 0
-      ? `<tr><td colspan="5" class="p-4 text-center text-slate-400">Chưa có giáo trình nào</td></tr>`
-      : rows.map(({ b, classesText }) => `
+      ? `<tr><td colspan="6" class="p-4 text-center text-slate-400">Chưa có sách nào — bấm "Thêm sách" để bắt đầu</td></tr>`
+      : rows.map(({ b, classesText, meta }) => `
         <tr class="hover:bg-slate-50 transition">
           <td class="p-2.5">
-            <div class="font-extrabold text-slate-900">${escapeHtml(b.title)}</div>
-            <div class="text-[10px] text-slate-400">${escapeHtml(b.author || '')} ${b.pages ? `· ${b.pages} trang` : ''}</div>
+            ${bookCoverThumb(b, 'w-10 h-14 rounded-lg border border-slate-200')}
           </td>
           <td class="p-2.5">
-            <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">${escapeHtml(b.department || 'Đại cương')}</span>
+            <div class="font-extrabold text-slate-900">${escapeHtml(b.title)}</div>
+            ${meta ? `<div class="text-[10px] text-slate-400">${meta}</div>` : ''}
+          </td>
+          <td class="p-2.5">
+            <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">${escapeHtml(b.department || 'Khoa CNTT')}</span>
           </td>
           <td class="p-2.5 text-[11px] text-slate-600 max-w-[160px]">${classesText}</td>
           <td class="p-2.5 text-right font-black text-emerald-600 whitespace-nowrap">${formatMoney(b.price)}</td>
@@ -1123,14 +1177,16 @@ function renderAdminManageTab() {
 
   if (mobileList) {
     mobileList.innerHTML = rows.length === 0
-      ? `<div class="p-4 text-center text-xs text-slate-400">Chưa có giáo trình nào</div>`
-      : rows.map(({ b }) => `
-        <div class="p-3 flex items-center justify-between gap-2">
-          <div class="min-w-0">
+      ? `<div class="p-4 text-center text-xs text-slate-400">Chưa có sách nào — bấm "Thêm sách" để bắt đầu</div>`
+      : rows.map(({ b, meta }) => `
+        <div class="p-3 flex items-center gap-2.5">
+          ${bookCoverThumb(b, 'w-9 h-12 rounded-lg border border-slate-200 flex-shrink-0')}
+          <div class="min-w-0 flex-1">
             <div class="text-xs font-extrabold text-slate-900 truncate">${escapeHtml(b.title)}</div>
             <div class="text-[10px] text-slate-400 mt-0.5">
-              <span class="font-bold text-emerald-600">${escapeHtml(b.department || 'Đại cương')}</span>
+              <span class="font-bold text-emerald-600">${escapeHtml(b.department || 'Khoa CNTT')}</span>
               ${(b.classes || []).length ? ` · ${b.classes.map(escapeHtml).join(', ')}` : ''}
+              ${meta ? ` · ${meta}` : ''}
             </div>
             <div class="text-xs font-black text-emerald-600 mt-0.5">${formatMoney(b.price)}</div>
           </div>
@@ -1145,7 +1201,7 @@ function renderAdminManageTab() {
   // 2. Chips danh sách Khoa & Lớp
   renderSettingsChips();
 
-  // 3. Datalist khoa trong form giáo trình
+  // 3. Datalist khoa trong form sách
   const dl = document.getElementById('deptDatalist');
   if (dl) dl.innerHTML = getAllDepartments().map(d => `<option value="${escapeHtml(d)}"></option>`).join('');
 
@@ -1242,27 +1298,79 @@ function openBookForm(bookId) {
   const form = document.getElementById('bookForm');
   form.reset();
   document.getElementById('formBookEditId').value = '';
+  const statusEl = document.getElementById('coverUploadStatus');
+  if (statusEl) statusEl.innerText = '';
 
   const heading = document.getElementById('bookFormHeading');
   if (bookId) {
     const book = allBooks.find(b => b.id === bookId);
     if (!book) return;
-    heading.innerText = 'Sửa giáo trình';
+    heading.innerText = 'Sửa thông tin sách';
     document.getElementById('formBookEditId').value = book.id;
     document.getElementById('formBookTitle').value = book.title;
     document.getElementById('formBookPrice').value = book.price;
     document.getElementById('formBookPages').value = book.pages || '';
+    document.getElementById('formBookYear').value = book.year || '';
     document.getElementById('formBookDepartment').value = book.department || '';
     document.getElementById('formBookClasses').value = (book.classes || []).join(', ');
     document.getElementById('formBookAuthor').value = book.author || '';
     document.getElementById('formBookCover').value = book.cover || '';
     document.getElementById('formBookDescription').value = book.description || '';
+    updateCoverPreview();
   } else {
-    heading.innerText = 'Thêm giáo trình mới';
+    heading.innerText = 'Thêm sách mới';
+    updateCoverPreview();
   }
 
   renderAdminManageTab(); // cập nhật datalist khoa
   openModal('bookFormModal');
+}
+
+/** Preview ảnh bìa trong form (theo URL đang nhập) */
+function updateCoverPreview() {
+  const url = (document.getElementById('formBookCover')?.value || '').trim();
+  const img = document.getElementById('coverPreviewImg');
+  const placeholder = document.getElementById('coverPreviewPlaceholder');
+  if (!img || !placeholder) return;
+  if (url) {
+    img.src = url;
+    img.classList.remove('hidden');
+    placeholder.classList.add('hidden');
+  } else {
+    img.classList.add('hidden');
+    img.removeAttribute('src');
+    placeholder.classList.remove('hidden');
+  }
+}
+
+/** Upload ảnh bìa từ máy → lưu lên server → điền link vào ô ảnh */
+async function handleCoverUpload(input) {
+  const file = input.files && input.files[0];
+  const statusEl = document.getElementById('coverUploadStatus');
+  if (!file) return;
+  if (!adminAuthPassword) { alert('Cần đăng nhập quản trị để upload ảnh!'); input.value = ''; return; }
+
+  if (statusEl) { statusEl.innerText = 'Đang upload...'; statusEl.className = 'text-[10px] text-amber-600 font-semibold'; }
+
+  const formData = new FormData();
+  formData.append('cover', file);
+
+  try {
+    const res = await fetch('/api/admin/upload', {
+      method: 'POST',
+      headers: { 'x-admin-password': adminAuthPassword },
+      body: formData
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || 'Upload thất bại');
+    document.getElementById('formBookCover').value = data.url;
+    updateCoverPreview();
+    if (statusEl) { statusEl.innerText = `✓ Đã upload: ${file.name}`; statusEl.className = 'text-[10px] text-emerald-600 font-semibold'; }
+  } catch (e) {
+    if (statusEl) { statusEl.innerText = 'Lỗi upload: ' + e.message; statusEl.className = 'text-[10px] text-rose-600 font-semibold'; }
+  } finally {
+    input.value = '';
+  }
 }
 
 async function handleBookFormSubmit(event) {
@@ -1272,6 +1380,7 @@ async function handleBookFormSubmit(event) {
     title: document.getElementById('formBookTitle').value.trim(),
     price: Number(document.getElementById('formBookPrice').value) || 0,
     pages: Number(document.getElementById('formBookPages').value) || 0,
+    year: (document.getElementById('formBookYear')?.value || '').trim(),
     department: document.getElementById('formBookDepartment').value.trim(),
     classes: document.getElementById('formBookClasses').value,
     author: document.getElementById('formBookAuthor').value.trim(),
@@ -1304,7 +1413,7 @@ async function handleBookFormSubmit(event) {
 }
 
 async function handleDeleteBook(bookId, bookTitle) {
-  if (!confirm(`Xóa giáo trình "${bookTitle}" khỏi danh mục?`)) return;
+  if (!confirm(`Xóa sách "${bookTitle}" khỏi danh mục?`)) return;
   try {
     const res = await fetch(`/api/admin/books/${encodeURIComponent(bookId)}`, {
       method: 'DELETE',
@@ -1361,9 +1470,29 @@ async function handleToggleRegistration() {
       renderRegistrationBanner();
       renderBooks();
       await refreshAdminData();
+      if (data.settings.isRegistrationOpen && data.settings.deliveryDate) {
+        alert(`Đã mở lại nhận đơn.\nNgày nhận sách hiện tại: ${formatDateVN(data.settings.deliveryDate)} (mặc định = ngày mai, bạn có thể đổi ở ô "Ngày nhận sách").`);
+      }
     }
   } catch (e) {
     alert("Lỗi khi đổi trạng thái: " + e.message);
+  }
+}
+
+/** Lưu ngày nhận sách + lưu ý giao sách (chốt sổ) */
+async function handleSaveDelivery() {
+  const dateInput = document.getElementById('deliveryDateInput');
+  const noteInput = document.getElementById('deliveryNoteInput');
+  if (!dateInput) return;
+  try {
+    await saveSettingsPatch({
+      deliveryDate: (dateInput.value || '').trim(),
+      deliveryNote: (noteInput ? noteInput.value : '').trim()
+    });
+    renderRegistrationBanner();
+    alert("✅ Đã lưu ngày nhận sách và lưu ý cho sinh viên.");
+  } catch (e) {
+    alert("Lỗi khi lưu: " + e.message);
   }
 }
 
@@ -1445,7 +1574,7 @@ async function exportToExcel() {
       [`Thời gian xuất: ${exportTime} | Tổng số đơn: ${paidOrders.length} | Tổng tiền: ${formatMoney(stats.totalRevenue)}`],
       [],
       [
-        "STT", "Mã Đơn", "Họ và Tên", "Lớp", "Khoa (theo giáo trình)", "Số Điện Thoại",
+        "STT", "Mã Đơn", "Họ và Tên", "Lớp", "Khoa (theo sách)", "Số Điện Thoại",
         "Giáo Trình Đã Mua", "Tổng Số Cuốn", "Thành Tiền (đ)",
         "Tình Trạng Phát Sách", "Ngày Nộp Tiền", "Ghi Chú / Mã GD"
       ]
@@ -1499,7 +1628,7 @@ async function exportToExcel() {
     });
     summarySorted.forEach(b => {
       sheet2Rows.push([
-        b.department || 'Đại cương',
+        b.department || 'Khoa CNTT',
         b.title,
         Number(b.price) || 0,
         Number(b.totalQuantity) || 0,

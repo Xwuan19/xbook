@@ -84,7 +84,7 @@
           <img src="logo.png" alt="xbook logo" class="w-10 h-10 rounded-xl object-contain shadow-sm border border-slate-200 bg-white p-0.5" />
           <div class="leading-tight">
             <span class="text-xl font-black tracking-tight text-slate-900">xbook</span>
-            <div class="text-[10px] text-slate-400 font-semibold hidden sm:block">Giáo trình theo Khoa & Lớp</div>
+            <div class="text-[10px] text-slate-400 font-semibold hidden sm:block">Đặt sách cho lớp CNTT</div>
           </div>
         </div>
 
@@ -94,7 +94,7 @@
             id="headerCartButton"
             onclick="openCheckoutModal()"
             class="relative flex items-center space-x-1.5 px-3 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition"
-            title="Giỏ giáo trình của bạn"
+            title="Giỏ sách của bạn"
           >
             <i data-lucide="shopping-cart" class="w-4 h-4"></i>
             <span class="hidden sm:inline">Giỏ hàng</span>
@@ -121,7 +121,7 @@
   <main class="flex-1 max-w-6xl mx-auto px-4 sm:px-6 py-5 w-full pb-28">
     <div class="flex items-center justify-between mb-3">
       <div>
-        <h2 class="text-lg sm:text-xl font-extrabold text-slate-900">Danh mục giáo trình đợt này</h2>
+        <h2 class="text-lg sm:text-xl font-extrabold text-slate-900">Danh mục sách đợt này</h2>
         <p class="text-xs text-slate-500">Lọc theo <strong>Khoa</strong> / <strong>Lớp</strong>, chọn nhiều cuốn và thanh toán 1 lần qua VietQR</p>
       </div>
       <span class="text-xs font-bold text-slate-400 whitespace-nowrap ml-2" id="bookCount">Đang tải...</span>
@@ -166,7 +166,7 @@
             <span id="cartCountBadge" class="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-emerald-500 text-slate-900 text-[10px] font-black rounded-full flex items-center justify-center">0</span>
           </div>
           <div class="min-w-0">
-            <div id="cartSummaryText" class="text-xs sm:text-sm font-extrabold truncate">0 cuốn giáo trình</div>
+            <div id="cartSummaryText" class="text-xs sm:text-sm font-extrabold truncate">0 cuốn sách</div>
             <div id="cartTotalText" class="text-[11px] sm:text-xs font-black text-emerald-300">0 đ</div>
           </div>
         </div>
@@ -185,7 +185,7 @@
 
   <!-- FOOTER -->
   <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400">
-    <p>© XBook — Hệ thống đăng ký giáo trình theo Khoa & Lớp</p>
+    <p>© XBook — Hệ thống đặt & phát sách cho lớp</p>
   </footer>
 
   <!-- ========================================================================= -->
@@ -202,9 +202,15 @@
           <i data-lucide="shopping-cart" class="w-5 h-5"></i>
         </div>
         <div>
-          <h3 class="text-base font-bold text-slate-900">Đăng ký mua giáo trình</h3>
+          <h3 class="text-base font-bold text-slate-900">Đăng ký mua sách</h3>
           <p class="text-xs text-slate-500">Một người mua được nhiều cuốn khác nhau — thanh toán 1 mã QR duy nhất</p>
         </div>
+      </div>
+
+      <!-- LƯU Ý NGÀY NHẬN SÁCH -->
+      <div id="checkoutDeliveryInfo" class="hidden items-center gap-2 bg-sky-50 border border-sky-200 rounded-xl px-3 py-2 mb-3 text-[11px] text-sky-800">
+        <i data-lucide="calendar-days" class="w-3.5 h-3.5 flex-shrink-0"></i>
+        <span id="checkoutDeliveryText"></span>
       </div>
 
       <!-- DANH SÁCH CÁC CUỐN TRONG GIỎ (TĂNG / GIẢM SỐ LƯỢNG TỪNG CUỐN) -->
@@ -286,7 +292,7 @@
           <span>Đang đợi chuyển khoản...</span>
         </div>
 
-        <h3 class="text-base font-bold text-slate-900">Quét mã để đóng tiền giáo trình</h3>
+        <h3 class="text-base font-bold text-slate-900">Quét mã để đóng tiền mua sách</h3>
         <p class="text-xs text-slate-500">Mở App Ngân hàng quét QR - Số tiền & nội dung tự điền</p>
 
         <!-- KHUNG MÃ VIETQR ĐỘNG -->
@@ -332,7 +338,7 @@
           <i data-lucide="check" class="w-8 h-8 stroke-[3]"></i>
         </div>
         <h3 class="text-lg font-black text-slate-900">ĐÃ NHẬN TIỀN THÀNH CÔNG!</h3>
-        <p class="text-xs text-slate-500 mt-1">Hệ thống đã tự động chốt tên bạn vào danh sách nhận giáo trình.</p>
+        <p class="text-xs text-slate-500 mt-1">Hệ thống đã tự động chốt tên bạn vào danh sách nhận sách.</p>
 
         <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 my-4 text-left text-xs space-y-1">
           <div class="flex justify-between">
@@ -340,7 +346,7 @@
             <span class="font-bold text-slate-800" id="successCustomerName">...</span>
           </div>
           <div class="flex justify-between gap-3">
-            <span class="text-slate-500 flex-shrink-0">Giáo trình:</span>
+            <span class="text-slate-500 flex-shrink-0">Sách:</span>
             <span class="font-bold text-slate-800 text-right" id="successBookTitle">...</span>
           </div>
           <div class="flex justify-between">
@@ -350,6 +356,10 @@
           <div class="flex justify-between">
             <span class="text-slate-500">Mã đơn:</span>
             <span class="font-mono font-bold text-slate-800" id="successOrderCode">...</span>
+          </div>
+          <div class="flex justify-between gap-3">
+            <span class="text-slate-500 flex-shrink-0">Ngày nhận sách:</span>
+            <span class="font-bold text-emerald-700 text-right" id="successDeliveryDate">...</span>
           </div>
         </div>
 
@@ -416,7 +426,7 @@
         <div class="flex items-center justify-between gap-2 mb-1.5">
           <div class="flex items-center space-x-2 min-w-0">
             <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
-            <h3 class="text-base sm:text-lg font-black text-slate-900 truncate">Bảng Quản Lý Giáo Trình</h3>
+            <h3 class="text-base sm:text-lg font-black text-slate-900 truncate">Bảng Quản Lý Sách</h3>
           </div>
           
           <div class="flex items-center space-x-1.5 flex-shrink-0 print:hidden">
@@ -434,10 +444,10 @@
           </div>
         </div>
 
-        <p class="text-xs text-slate-500 mb-3">Phân loại theo <strong>Khoa</strong> · <strong>Lớp</strong> · <strong>Tên người mua</strong> — chốt sổ & phát sách</p>
+        <p class="text-xs text-slate-500 mb-3">Phân loại theo <strong>Khoa</strong> · <strong>Lớp</strong> · <strong>Tên người mua</strong> — chốt sổ, ngày nhận sách & phát sách</p>
 
-        <!-- HÀNG 2: NÚT CHỐT SỔ / MỞ ĐĂNG KÝ -->
-        <div class="print:hidden mb-3">
+        <!-- HÀNG 2: NÚT CHỐT SỔ / MỞ ĐĂNG KÝ + NGÀY NHẬN SÁCH + LƯU Ý GIAO -->
+        <div class="print:hidden mb-3 bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2.5">
           <button 
             id="btnToggleRegistration" 
             onclick="handleToggleRegistration()" 
@@ -445,6 +455,31 @@
           >
             <!-- Render động từ JS -->
           </button>
+
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+            <label class="text-[11px] font-bold text-slate-600 whitespace-nowrap flex items-center gap-1 sm:w-28 flex-shrink-0">
+              <i data-lucide="calendar-days" class="w-3.5 h-3.5 text-emerald-600"></i> Ngày nhận sách
+            </label>
+            <input 
+              type="date" 
+              id="deliveryDateInput" 
+              class="flex-1 min-w-0 px-2.5 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none"
+            />
+            <button onclick="handleSaveDelivery()" title="Lưu ngày nhận sách" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm shadow-emerald-600/20 flex-shrink-0">
+              <i data-lucide="save" class="w-3.5 h-3.5"></i>
+              <span>Lưu ngày</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <i data-lucide="info" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0"></i>
+            <input 
+              type="text" 
+              id="deliveryNoteInput" 
+              placeholder="Lưu ý hiển thị cho sinh viên (VD: Sách thường giao ngay hôm sau nếu có tiết.)" 
+              class="flex-1 min-w-0 px-2.5 py-2 text-[11px] bg-white border border-slate-200 rounded-xl focus:border-brand-500 focus:outline-none"
+            />
+          </div>
         </div>
 
         <!-- HÀNG 3: THANH TAB PHÂN LOẠI -->
@@ -462,7 +497,7 @@
             <i data-lucide="graduation-cap" class="w-3.5 h-3.5"></i><span>Theo khoa</span>
           </button>
           <button onclick="switchAdminTab('manage')" data-tab="manage" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
-            <i data-lucide="book-open" class="w-3.5 h-3.5"></i><span>Quản lý giáo trình</span>
+            <i data-lucide="book-open" class="w-3.5 h-3.5"></i><span>Quản lý sách</span>
           </button>
         </div>
       </div>
@@ -477,7 +512,7 @@
             <div class="flex items-center justify-between mb-2">
               <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
                 <i data-lucide="boxes" class="w-4 h-4 text-emerald-600"></i>
-                <span>Số Lượng Từng Cuốn (theo Khoa):</span>
+                <span>Số Lượng Từng Cuốn Cần In:</span>
               </h4>
               <span class="text-xs font-bold text-emerald-700" id="adminTotalRevenue">Tổng tiền: 0 đ</span>
             </div>
@@ -524,7 +559,7 @@
                     <th class="p-2.5 font-bold w-10 text-center">STT</th>
                     <th class="p-2.5 font-bold">Họ và tên</th>
                     <th class="p-2.5 font-bold">Lớp</th>
-                    <th class="p-2.5 font-bold">Giáo trình & SL</th>
+                    <th class="p-2.5 font-bold">Sách & SL</th>
                     <th class="p-2.5 font-bold">Số tiền</th>
                     <th class="p-2.5 font-bold text-center w-28 print:hidden">Đã phát</th>
                   </tr>
@@ -566,7 +601,7 @@
             </h4>
             <span id="adminClassCount" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">0 lớp</span>
           </div>
-          <p class="text-[11px] text-slate-400 mb-3">Danh sách lớp được tổng hợp từ thông tin đăng ký. Bạn có thể bổ sung tên lớp trong tab "Quản lý giáo trình".</p>
+          <p class="text-[11px] text-slate-400 mb-3">Danh sách lớp được tổng hợp từ thông tin đăng ký. Bạn có thể bổ sung tên lớp trong tab "Quản lý sách".</p>
           <div id="adminClassList" class="space-y-2.5">
             <!-- Render động từ JS -->
           </div>
@@ -577,29 +612,29 @@
           <div class="flex items-center justify-between mb-3">
             <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
               <i data-lucide="graduation-cap" class="w-4 h-4 text-emerald-600"></i>
-              <span>List giáo trình cần thiết theo Khoa:</span>
+              <span>List sách cần thiết theo Khoa:</span>
             </h4>
             <span id="adminDepartmentCount" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">0 khoa</span>
           </div>
-          <p class="text-[11px] text-slate-400 mb-3">Mỗi khoa hiển thị toàn bộ giáo trình trong danh mục kèm số lượng sinh viên đã đặt (đã thanh toán) — dùng để soạn list báo in.</p>
+          <p class="text-[11px] text-slate-400 mb-3">Mỗi khoa hiển thị toàn bộ sách trong danh mục kèm số lượng sinh viên đã đặt (đã thanh toán) — dùng để soạn list báo in.</p>
           <div id="adminDepartmentList" class="space-y-3">
             <!-- Render động từ JS -->
           </div>
         </div>
 
-        <!-- ============ TAB 5: QUẢN LÝ GIÁO TRÌNH + DANH SÁCH KHOA / LỚP ============ -->
+        <!-- ============ TAB 5: QUẢN LÝ SÁCH + DANH SÁCH KHOA / LỚP ============ -->
         <div id="adminTabManage" class="admin-tab-panel hidden">
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <!-- DANH SÁCH GIÁO TRÌNH -->
+            <!-- DANH SÁCH SÁCH -->
             <div class="lg:col-span-2">
               <div class="flex items-center justify-between mb-2">
                 <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
                   <i data-lucide="book-open" class="w-4 h-4 text-emerald-600"></i>
-                  <span>Danh mục giáo trình:</span>
+                  <span>Danh mục sách:</span>
                 </h4>
                 <button onclick="openBookForm()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-sm shadow-emerald-600/20">
                   <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-                  <span>Thêm giáo trình</span>
+                  <span>Thêm sách</span>
                 </button>
               </div>
 
@@ -608,7 +643,8 @@
                 <table class="w-full text-left text-xs hidden sm:table">
                   <thead class="bg-slate-100 text-slate-700 border-b border-slate-200">
                     <tr>
-                      <th class="p-2.5 font-bold">Tên giáo trình</th>
+                      <th class="p-2.5 font-bold w-14">Ảnh</th>
+                      <th class="p-2.5 font-bold">Tên sách</th>
                       <th class="p-2.5 font-bold">Khoa</th>
                       <th class="p-2.5 font-bold">Lớp</th>
                       <th class="p-2.5 font-bold text-right">Giá</th>
@@ -668,7 +704,7 @@
       <!-- FOOTER ADMIN: NÚT TIỆN ÍCH -->
       <div class="border-t border-slate-100 p-3 sm:p-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <div class="text-[11px] text-slate-400">
-          💡 Tích "Đã phát" khi giao giáo trình cho từng bạn trên lớp.
+          💡 Tích "Đã phát" khi giao sách cho từng bạn trên lớp.
         </div>
         <div class="flex items-center space-x-2">
           <button onclick="exportToExcel()" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm shadow-emerald-600/20">
@@ -702,8 +738,8 @@
           <i data-lucide="book-open" class="w-5 h-5"></i>
         </div>
         <div>
-          <h3 class="text-base font-bold text-slate-900" id="bookFormHeading">Thêm giáo trình mới</h3>
-          <p class="text-xs text-slate-500">Gắn giáo trình vào Khoa và các Lớp cần mua</p>
+          <h3 class="text-base font-bold text-slate-900" id="bookFormHeading">Thêm sách mới</h3>
+          <p class="text-xs text-slate-500">Nhập đủ: tên sách, ảnh bìa, giá tiền, khoa, lớp cần mua...</p>
         </div>
       </div>
 
@@ -711,7 +747,7 @@
         <input type="hidden" id="formBookEditId" value="" />
 
         <div>
-          <label class="block text-xs font-bold text-slate-800 mb-1">Tên giáo trình <span class="text-rose-500">*</span></label>
+          <label class="block text-xs font-bold text-slate-800 mb-1">Tên sách <span class="text-rose-500">*</span></label>
           <input type="text" id="formBookTitle" required placeholder="VD: Cấu trúc dữ liệu và giải thuật"
             class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
         </div>
@@ -746,20 +782,43 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">Tác giả / Nguồn</label>
-            <input type="text" id="formBookAuthor" placeholder="Giáo trình ĐH"
+            <label class="block text-xs font-bold text-slate-700 mb-1">Tác giả / NXB</label>
+            <input type="text" id="formBookAuthor" placeholder="VD: NXB ĐH Quốc Gia"
               class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">Ảnh bìa (URL, tùy chọn)</label>
-            <input type="url" id="formBookCover" placeholder="https://..."
+            <label class="block text-xs font-bold text-slate-700 mb-1">Năm / Bản in</label>
+            <input type="text" id="formBookYear" placeholder="VD: 2024 - Bản in thứ 2"
               class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
+          </div>
+        </div>
+
+        <!-- ẢNH BÌA: PREVIEW + LINK HOẶC UPLOAD TỪ MÁY -->
+        <div class="border border-slate-200 rounded-2xl p-3 bg-slate-50/60">
+          <label class="block text-xs font-bold text-slate-800 mb-2">Ảnh bìa sách</label>
+          <div class="flex items-start gap-3">
+            <div class="w-20 h-28 rounded-xl border-2 border-dashed border-slate-300 bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
+              <img id="coverPreviewImg" src="" alt="Ảnh bìa" class="w-full h-full object-cover hidden" onerror="this.classList.add('hidden'); document.getElementById('coverPreviewPlaceholder').classList.remove('hidden')" />
+              <i data-lucide="image" id="coverPreviewPlaceholder" class="w-6 h-6 text-slate-300"></i>
+            </div>
+            <div class="flex-1 min-w-0 space-y-2">
+              <input type="url" id="formBookCover" placeholder="Dán link ảnh bìa (https://...)" oninput="updateCoverPreview()"
+                class="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
+              <div class="flex items-center gap-2">
+                <label class="cursor-pointer px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 rounded-xl text-xs font-bold text-slate-700 transition flex items-center space-x-1.5 flex-shrink-0">
+                  <i data-lucide="image-plus" class="w-3.5 h-3.5 text-emerald-600"></i>
+                  <span>Upload ảnh từ máy</span>
+                  <input type="file" id="formBookCoverFile" accept="image/*" class="hidden" onchange="handleCoverUpload(this)" />
+                </label>
+                <span id="coverUploadStatus" class="text-[10px] text-slate-400 truncate"></span>
+              </div>
+            </div>
           </div>
         </div>
 
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1">Mô tả ngắn</label>
-          <textarea id="formBookDescription" rows="2" placeholder="Mô tả nội dung giáo trình..."
+          <textarea id="formBookDescription" rows="2" placeholder="Mô tả nội dung sách..."
             class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none resize-none"></textarea>
         </div>
 
@@ -769,7 +828,7 @@
           </button>
           <button type="submit" id="btnBookFormSubmit" class="flex-1 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-sm font-bold transition flex items-center justify-center space-x-1.5">
             <i data-lucide="save" class="w-4 h-4"></i>
-            <span>Lưu giáo trình</span>
+            <span>Lưu sách</span>
           </button>
         </div>
       </form>

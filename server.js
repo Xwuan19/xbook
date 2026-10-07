@@ -15,6 +15,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { db } = require('./database');
 
 const app = express();
@@ -25,6 +27,27 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Thư mục chứa ảnh bìa sách đã upload (Quản lý sách)
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+    cb(null, `book-cover-${Date.now()}-${Math.floor(Math.random() * 1000)}${ext}`);
+  }
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 3 * 1024 * 1024 }, // tối đa 3MB
+  fileFilter: (req, file, cb) => {
+    if (/^image\//.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Tệp phải là ảnh (JPG/PNG/WebP/GIF)"));
+  }
+});
 
 // ============================================================================
 // KHỞI TẠO PAYOS SDK
@@ -163,7 +186,7 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
     for (const raw of requestedItems) {
       const book = await db.getBookById(raw.bookId);
       if (!book) {
-        return res.status(400).json({ success: false, message: `Không tìm thấy giáo trình (mã: ${raw.bookId})!` });
+        return res.status(400).json({ success: false, message: `Không tìm thấy sách (mã: ${raw.bookId})!` });
       }
       const qty = Math.max(1, Math.min(50, parseInt(raw.quantity) || 1));
       items.push({
@@ -175,7 +198,7 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
       });
     }
     if (items.length === 0) {
-      return res.status(400).json({ success: false, message: "Giỏ hàng đang trống. Vui lòng chọn giáo trình!" });
+      return res.status(400).json({ success: false, message: "Giỏ hàng đang trống. Vui lòng chọn sách!" });
     }
 
     const totalQuantity = items.reduce((sum, it) => sum + it.quantity, 0);
@@ -271,7 +294,7 @@ app.get('/api/orders/:orderCode', async (req, res) => {
             order = await db.createOrder({
               orderCode: orderCode,
               status: 'PAID',
-              bookTitle: paymentInfo.items?.[0]?.name || 'Sách giáo trình',
+              bookTitle: paymentInfo.items?.[0]?.name || 'Sách',
               quantity: paymentInfo.items?.[0]?.quantity || 1,
               amount: paymentInfo.amount,
               unitPrice: paymentInfo.amount,
@@ -399,6 +422,27 @@ app.post('/api/payos-webhook', handlePayOSWebhook);
 app.post('/api/orders/webhook', handlePayOSWebhook);
 app.post('/api/webhook', handlePayOSWebhook);
 
+// CHẾ ĐỘ DEMO (chưa gắn key PayOS thật): cho phép xác nhận thanh toán mô phỏng để kiểm thử nội bộ.
+// Khi đã gắn key PayOS thật (production), endpoint này KHÔNG tồn tại — 100% đối soát tiền thật qua Webhook.
+if (!isPayOSConfigured) {
+  app.post('/api/test/simulate-payment', async (req, res) => {
+    try {
+      const code = Number(req.body.orderCode);
+      const order = await db.getOrderByCode(code);
+      if (!order) return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng!' });
+      if (order.status === 'PAID') return res.json({ success: true, message: 'Đã xử lý trước đó' });
+      const updated = await db.updateOrderStatus(code, 'PAID', {
+        paidAt: new Date().toISOString(),
+        reference: 'DEMO_SIMULATED'
+      });
+      console.log(` [DEMO] Mô phỏng thanh toán thành công đơn #${code}`);
+      res.json({ success: true, order: updated });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+}
+
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123456';
 
 function requireAdminAuth(req, res, next) {
@@ -452,15 +496,27 @@ app.get('/api/admin/reconciliation', requireAdminAuth, async (req, res) => {
 });
 
 /**
- * 7. QUẢN TRỊ: BẬT / TẮT ĐĂNG KÝ (CHỐT SỔ ĐƠN HÀNG - YÊU CẦU MẬT KHẨU)
+ * 7. QUẢN TRỊ: BẬT / TẮT ĐĂNG KÝ (CHỐT SỔ - YÊU CẦU MẬT KHẨU)
+ * Khi MỞ LẠI đăng ký: tự đặt "Ngày nhận sách" mặc định = NGÀY HÔM SAU
+ * (VD: mở lại từ 07/10 → nhận sách 08/10). Admin có thể chỉnh lại ngày bất cứ lúc nào.
  */
 app.post('/api/admin/toggle-registration', requireAdminAuth, async (req, res) => {
   try {
     const current = await db.getSettings();
-    const updated = await db.updateSettings({
-      isRegistrationOpen: !current.isRegistrationOpen
-    });
-    console.log(` Đã đổi trạng thái đăng ký: ${updated.isRegistrationOpen ? 'MỞ ĐĂNG KÝ' : 'ĐÃ ĐÓNG / CHỐT SỔ'}`);
+    const patch = { isRegistrationOpen: !current.isRegistrationOpen };
+
+    if (patch.isRegistrationOpen) {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const today = ymd(new Date());
+      if (!current.deliveryDate || current.deliveryDate < today) {
+        patch.deliveryDate = ymd(tomorrow);
+      }
+    }
+
+    const updated = await db.updateSettings(patch);
+    console.log(` Đã đổi trạng thái đăng ký: ${updated.isRegistrationOpen ? `MỞ ĐĂNG KÝ (nhận sách ${updated.deliveryDate || 'chưa chọn'})` : 'ĐÃ ĐÓNG / CHỐT SỔ'}`);
     res.json({ success: true, settings: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -496,9 +552,10 @@ function normalizeBookPayload(body) {
     price: Number(body.price) || 0,
     author: (body.author || '').trim(),
     pages: Number(body.pages) || 0,
+    year: (body.year || '').trim(),
     description: (body.description || '').trim(),
     cover: (body.cover || '').trim(),
-    department: (body.department || '').trim() || 'Đại cương',
+    department: (body.department || '').trim() || 'Khoa CNTT',
     classes
   };
 }
@@ -507,13 +564,13 @@ app.post('/api/admin/books', requireAdminAuth, async (req, res) => {
   try {
     const payload = normalizeBookPayload(req.body || {});
     if (!payload.title) {
-      return res.status(400).json({ success: false, message: "Vui lòng nhập tên giáo trình!" });
+      return res.status(400).json({ success: false, message: "Vui lòng nhập tên sách!" });
     }
     if (payload.price <= 0) {
-      return res.status(400).json({ success: false, message: "Vui lòng nhập giá giáo trình hợp lệ!" });
+      return res.status(400).json({ success: false, message: "Vui lòng nhập giá sách hợp lệ!" });
     }
     const book = await db.createBook(payload);
-    console.log(` [ADMIN] Đã thêm giáo trình: "${book.title}" (${book.department})`);
+    console.log(` [ADMIN] Đã thêm sách: "${book.title}" (${book.department})`);
     res.json({ success: true, book });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -524,8 +581,8 @@ app.put('/api/admin/books/:id', requireAdminAuth, async (req, res) => {
   try {
     const payload = normalizeBookPayload(req.body || {});
     const book = await db.updateBook(req.params.id, payload);
-    if (!book) return res.status(404).json({ success: false, message: "Không tìm thấy giáo trình!" });
-    console.log(` [ADMIN] Đã cập nhật giáo trình: "${book.title}" (${book.department})`);
+    if (!book) return res.status(404).json({ success: false, message: "Không tìm thấy sách!" });
+    console.log(` [ADMIN] Đã cập nhật sách: "${book.title}" (${book.department})`);
     res.json({ success: true, book });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -535,8 +592,8 @@ app.put('/api/admin/books/:id', requireAdminAuth, async (req, res) => {
 app.delete('/api/admin/books/:id', requireAdminAuth, async (req, res) => {
   try {
     const deleted = await db.deleteBook(req.params.id);
-    if (!deleted) return res.status(404).json({ success: false, message: "Không tìm thấy giáo trình!" });
-    console.log(` [ADMIN] Đã xóa giáo trình mã: ${req.params.id}`);
+    if (!deleted) return res.status(404).json({ success: false, message: "Không tìm thấy sách!" });
+    console.log(` [ADMIN] Đã xóa sách mã: ${req.params.id}`);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -544,7 +601,25 @@ app.delete('/api/admin/books/:id', requireAdminAuth, async (req, res) => {
 });
 
 /**
- * 10. QUẢN TRỊ: CẬP NHẬT SETTINGS (DANH SÁCH KHOA, DANH SÁCH LỚP, THÔNG BÁO CHỐT SỔ)
+ * 9b. QUẢN TRỊ: UPLOAD ẢNH BÌA SÁCH (YÊU CẦU MẬT KHẨU)
+ */
+app.post('/api/admin/upload', requireAdminAuth, (req, res) => {
+  upload.single('cover')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ success: false, message: err.message || "Không upload được ảnh!" });
+    }
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "Vui lòng chọn 1 tệp ảnh để upload!" });
+    }
+    const url = `/uploads/${req.file.filename}`;
+    console.log(` [ADMIN] Đã upload ảnh bìa: ${url}`);
+    return res.json({ success: true, url });
+  });
+});
+
+/**
+ * 10. QUẢN TRỊ: CẬP NHẬT SETTINGS (DANH SÁCH KHOA, DANH SÁCH LỚP, THÔNG BÁO CHỐT SỔ,
+ * NGÀY NHẬN SÁCH + LƯU Ý THỜI GIAN GIAO)
  */
 app.put('/api/admin/settings', requireAdminAuth, async (req, res) => {
   try {
@@ -557,6 +632,12 @@ app.put('/api/admin/settings', requireAdminAuth, async (req, res) => {
     }
     if (req.body.closeMessage !== undefined) {
       patch.closeMessage = String(req.body.closeMessage);
+    }
+    if (req.body.deliveryDate !== undefined) {
+      patch.deliveryDate = String(req.body.deliveryDate || '').trim();
+    }
+    if (req.body.deliveryNote !== undefined) {
+      patch.deliveryNote = String(req.body.deliveryNote).trim();
     }
     const updated = await db.updateSettings(patch);
     res.json({ success: true, settings: updated });

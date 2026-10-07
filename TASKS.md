@@ -1,10 +1,22 @@
-# 📋 TASKS — Dự án XBook (Hệ thống bán giáo trình theo Khoa / Lớp / Tên)
+# 📋 TASKS — Dự án XBook (Hệ thống đặt sách cho lớp — Khoa CNTT)
 
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này
-1. **Phân loại KHOA** (VD: Khoa CNTT, Khoa Kế toán…) → dễ dàng soạn ra list giáo trình cần thiết theo từng khoa.
+## Mục tiêu đợt này (v1.2.0)
+1. **Chỉ còn Khoa CNTT**: bỏ phân loại "Đại cương" & "Kế toán", xóa 4 sách demo thuộc 2 khoa cũ.
+2. **Quản lý sách nâng cấp**: đủ trường (tên, ảnh bìa, giá, tác giả/NXB, trang, năm/bản in, mô tả, khoa, lớp) + **upload ảnh bìa từ máy** (Multer → `/uploads/`).
+3. **Chốt sổ theo ngày nhận sách**: admin chọn ngày giao + lưu ý ngắn gọn; mở lại đăng ký → tự đặt ngày nhận = ngày mai; hiển thị ở banner / form đăng ký / màn hình thành công.
+4. **Ngôn ngữ UI thống nhất** gọi là "sách", banner gọn hơn.
+
+## Giai đoạn 5 (v1.2.0) — Khoa CNTT + Quản lý sách + Chốt sổ ngày giao
+- [x] T18. `database.js`: DEFAULT/INITIAL_DEPARTMENTS chỉ còn `Khoa CNTT`; xóa sách 2 khoa cũ; thêm `settings.deliveryDate` + `deliveryNote`, `books.year` (kèm migration Neon).
+- [x] T19. `server.js`: `POST /api/admin/upload` (Multer), settings nhận `deliveryDate`/`deliveryNote`, toggle-registration tự đặt ngày mai khi mở lại, demo-only `/api/test/simulate-payment`.
+- [x] T20. Frontend: banner chốt sổ + ngày nhận sách, tab Quản lý sách (thumbnail ảnh, upload, năm/bản in), đổi nhãn "giáo trình" → "sách".
+- [x] T21. Kiểm thử API + cập nhật README / handover / TASKS.
+
+## Mục tiêu đợt trước (v1.1.0)
+1. **Phân loại KHOA** (đã rút về còn 1 khoa — CNTT) → soạn list sách cần thiết.
 2. **Phân loại LỚP** (danh sách tên lớp do người quản trị tự bổ sung) → gợi ý lớp khi đặt mua & lọc đơn theo lớp.
 3. **Phân loại TÊN** → 1 người mua được **nhiều cuốn khác nhau trong 1 đơn / 1 mã QR**, thống kê gộp theo tên.
 4. **Update giao diện** + tối ưu tỷ lệ hiển thị **Desktop & Mobile**.
@@ -41,14 +53,16 @@
 ## Quy ước dữ liệu (thống nhất toàn dự án)
 ```js
 // BOOK
-{ id, title, price, author, pages, description, cover,
-  department: "Khoa CNTT",          // phân loại khoa
+{ id, title, price, author, pages, year, description, cover,
+  department: "Khoa CNTT",          // phân loại khoa (hiện chỉ còn 1 khoa)
   classes: ["CNTT K15", ...] }       // các lớp cần mua cuốn này
 
 // SETTINGS
 { isRegistrationOpen, closeMessage,
-  departments: ["Đại cương", "Khoa CNTT", "Khoa Kế toán"],
-  classes: [/* người quản trị tự bổ sung tên lớp */] }
+  departments: ["Khoa CNTT"],
+  classes: [/* người quản trị tự bổ sung tên lớp */],
+  deliveryDate: "2026-10-08",        // ngày nhận sách (admin chọn; mở lại đơn → tự = ngày mai)
+  deliveryNote: "Sách thường giao ngay hôm sau nếu có tiết." }
 
 // ORDER
 { orderCode, customerName, customerClass, customerPhone,

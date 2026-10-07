@@ -11,67 +11,27 @@ const path = require('path');
 
 const DB_FILE = path.join(__dirname, 'data.json');
 
-// Khoa mặc định cho giáo trình chưa được phân loại
-const DEFAULT_DEPARTMENT = 'Đại cương';
+// Khoa mặc định cho sách chưa được phân loại
+const DEFAULT_DEPARTMENT = 'Khoa CNTT';
 
-// Danh sách khoa khởi tạo sẵn (có thể thêm/sửa trong Bảng quản trị)
-const INITIAL_DEPARTMENTS = ['Đại cương', 'Khoa CNTT', 'Khoa Kế toán'];
+// Danh sách khoa khởi tạo sẵn (chỉ còn Khoa CNTT)
+const INITIAL_DEPARTMENTS = ['Khoa CNTT'];
+
+// Lưu ý thời gian giao sách mặc định (hiển thị ngắn gọn cho sinh viên)
+const DEFAULT_DELIVERY_NOTE = 'Sách thường giao ngay hôm sau nếu có tiết.';
 
 // Danh mục sách mặc định (mỗi cuốn gắn với 1 KHOA và danh sách LỚP cần mua)
 const INITIAL_BOOKS = [
-  {
-    id: "sach-01",
-    title: "Vật lí đại cương",
-    price: 47000,
-    author: "Giáo trình ĐH",
-    pages: 220,
-    description: "Giáo trình và tuyển tập bài tập Vật lí đại cương phục vụ học phần và thi kết thúc môn.",
-    cover: "https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=600&auto=format&fit=crop&q=80",
-    department: DEFAULT_DEPARTMENT,
-    classes: []
-  },
-  {
-    id: "sach-02",
-    title: "Đại số tuyến tính",
-    price: 22000,
-    author: "Giáo trình ĐH",
-    pages: 180,
-    description: "Giáo trình lý thuyết và bài tập giải mẫu Đại số tuyến tính chuẩn chương trình.",
-    cover: "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80",
-    department: DEFAULT_DEPARTMENT,
-    classes: []
-  },
-  {
-    id: "sach-03",
-    title: "Logic học (tài liệu học tập)",
-    price: 20000,
-    author: "Tài liệu học tập",
-    pages: 140,
-    description: "Tài liệu học tập & câu hỏi ôn tập môn Logic học đại cương cho lớp.",
-    cover: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=600&auto=format&fit=crop&q=80",
-    department: DEFAULT_DEPARTMENT,
-    classes: []
-  },
   {
     id: "sach-04",
     title: "Cấu trúc dữ liệu và giải thuật",
     price: 35000,
     author: "Giáo trình Khoa CNTT",
     pages: 250,
+    year: "",
     description: "Giáo trình mẫu của Khoa CNTT: mảng, danh sách liên kết, cây, đồ thị và các giải thuật sắp xếp.",
     cover: "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80",
     department: "Khoa CNTT",
-    classes: []
-  },
-  {
-    id: "sach-05",
-    title: "Nguyên lý kế toán",
-    price: 42000,
-    author: "Giáo trình Khoa Kế toán",
-    pages: 230,
-    description: "Giáo trình mẫu của Khoa Kế toán: các nguyên lý kế toán cơ bản, định khoản và lập báo cáo.",
-    cover: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=600&auto=format&fit=crop&q=80",
-    department: "Khoa Kế toán",
     classes: []
   }
 ];
@@ -134,6 +94,7 @@ function mapBookFromDb(row) {
     price: Number(row.price),
     author: row.author || '',
     pages: Number(row.pages) || 0,
+    year: row.year || '',
     description: row.description || '',
     cover: row.cover || '',
     department: row.department || DEFAULT_DEPARTMENT,
@@ -142,12 +103,14 @@ function mapBookFromDb(row) {
 }
 
 function mapSettingsFromDb(row) {
-  if (!row) return { isRegistrationOpen: true, closeMessage: "", departments: [...INITIAL_DEPARTMENTS], classes: [] };
+  if (!row) return { isRegistrationOpen: true, closeMessage: "", departments: [...INITIAL_DEPARTMENTS], classes: [], deliveryDate: "", deliveryNote: DEFAULT_DELIVERY_NOTE };
   return {
     isRegistrationOpen: row.is_registration_open !== false,
     closeMessage: row.close_message || "",
     departments: parseJsonArray(row.departments, [...INITIAL_DEPARTMENTS]),
-    classes: parseJsonArray(row.classes, [])
+    classes: parseJsonArray(row.classes, []),
+    deliveryDate: row.delivery_date || "",
+    deliveryNote: row.delivery_note || DEFAULT_DELIVERY_NOTE
   };
 }
 
@@ -217,7 +180,9 @@ class Database {
         is_registration_open BOOLEAN DEFAULT true,
         close_message TEXT,
         departments TEXT DEFAULT '[]',
-        classes TEXT DEFAULT '[]'
+        classes TEXT DEFAULT '[]',
+        delivery_date TEXT DEFAULT '',
+        delivery_note TEXT DEFAULT ''
       )`);
 
       await this.sql.query(`CREATE TABLE IF NOT EXISTS books (
@@ -226,6 +191,7 @@ class Database {
         price NUMERIC NOT NULL,
         author TEXT,
         pages INT,
+        year TEXT,
         description TEXT,
         cover TEXT,
         department TEXT DEFAULT '',
@@ -259,8 +225,11 @@ class Database {
       const migrations = [
         `ALTER TABLE settings ADD COLUMN IF NOT EXISTS departments TEXT DEFAULT '[]'`,
         `ALTER TABLE settings ADD COLUMN IF NOT EXISTS classes TEXT DEFAULT '[]'`,
+        `ALTER TABLE settings ADD COLUMN IF NOT EXISTS delivery_date TEXT DEFAULT ''`,
+        `ALTER TABLE settings ADD COLUMN IF NOT EXISTS delivery_note TEXT DEFAULT ''`,
         `ALTER TABLE books ADD COLUMN IF NOT EXISTS department TEXT DEFAULT ''`,
         `ALTER TABLE books ADD COLUMN IF NOT EXISTS classes TEXT DEFAULT '[]'`,
+        `ALTER TABLE books ADD COLUMN IF NOT EXISTS year TEXT DEFAULT ''`,
         `ALTER TABLE orders ADD COLUMN IF NOT EXISTS items_json TEXT`
       ];
       for (const migration of migrations) {
@@ -296,20 +265,20 @@ class Database {
       )`);
 
       for (const b of INITIAL_BOOKS) {
-        // Chỉ seed sách MỚI (ON CONFLICT DO NOTHING) để không ghi đè giáo trình đã chỉnh sửa qua trang quản trị
+        // Chỉ seed sách MỚI (ON CONFLICT DO NOTHING) để không ghi đè sách đã chỉnh sửa qua trang quản trị
         await this.sql.query(
-          `INSERT INTO books (id, title, price, author, pages, description, cover, department, classes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `INSERT INTO books (id, title, price, author, pages, year, description, cover, department, classes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            ON CONFLICT (id) DO NOTHING`,
-          [b.id, b.title, b.price, b.author, b.pages, b.description, b.cover, b.department || DEFAULT_DEPARTMENT, JSON.stringify(b.classes || [])]
+          [b.id, b.title, b.price, b.author, b.pages, b.year || '', b.description, b.cover, b.department || DEFAULT_DEPARTMENT, JSON.stringify(b.classes || [])]
         );
       }
 
       const settingsCount = await this.sql.query('SELECT COUNT(*) as count FROM settings WHERE id = $1', ['default']);
       if (Number(settingsCount[0]?.count || 0) === 0) {
         await this.sql.query(
-          'INSERT INTO settings (id, is_registration_open, close_message, departments, classes) VALUES ($1, $2, $3, $4, $5)',
-          ['default', true, 'Đã chốt danh sách mua sách đợt này để báo in. Tạm ngưng nhận đơn mới!', JSON.stringify(INITIAL_DEPARTMENTS), '[]']
+          'INSERT INTO settings (id, is_registration_open, close_message, departments, classes, delivery_date, delivery_note) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          ['default', true, 'Đã chốt danh sách mua sách đợt này để báo in. Tạm ngưng nhận đơn mới!', JSON.stringify(INITIAL_DEPARTMENTS), '[]', '', DEFAULT_DELIVERY_NOTE]
         );
       }
     } catch (err) {
@@ -324,7 +293,9 @@ class Database {
           isRegistrationOpen: true,
           closeMessage: "Hiện đã chốt danh sách mua sách đợt này để gửi in. Tạm ngưng nhận đơn mới!",
           departments: [...INITIAL_DEPARTMENTS],
-          classes: []
+          classes: [],
+          deliveryDate: "",
+          deliveryNote: DEFAULT_DELIVERY_NOTE
         },
         books: INITIAL_BOOKS,
         orders: [],
@@ -356,14 +327,16 @@ class Database {
       };
     }
 
-    // Chuẩn hóa settings: luôn có danh sách khoa & lớp
+    // Chuẩn hóa settings: luôn có danh sách khoa & lớp + ngày nhận sách & lưu ý giao sách
     data.settings = {
       isRegistrationOpen: data.settings.isRegistrationOpen !== false,
       closeMessage: data.settings.closeMessage || "",
       departments: Array.isArray(data.settings.departments) && data.settings.departments.length > 0
         ? data.settings.departments
         : [...INITIAL_DEPARTMENTS],
-      classes: Array.isArray(data.settings.classes) ? data.settings.classes : []
+      classes: Array.isArray(data.settings.classes) ? data.settings.classes : [],
+      deliveryDate: String(data.settings.deliveryDate || ''),
+      deliveryNote: String(data.settings.deliveryNote || DEFAULT_DELIVERY_NOTE)
     };
 
     // Chuẩn hóa sách: luôn có khoa & lớp
@@ -388,7 +361,7 @@ class Database {
     }
   }
 
-  // --- SETTINGS (CHỐT SỔ ĐĂNG KÝ + DANH SÁCH KHOA / LỚP) ---
+  // --- SETTINGS (CHỐT SỔ ĐĂNG KÝ + DANH SÁCH KHOA / LỚP + NGÀY NHẬN SÁCH) ---
   async getSettings() {
     if (this.isNeon) {
       try {
@@ -396,13 +369,13 @@ class Database {
         if (rows && rows.length > 0) {
           return mapSettingsFromDb(rows[0]);
         }
-        return { isRegistrationOpen: true, closeMessage: "", departments: [...INITIAL_DEPARTMENTS], classes: [] };
+        return { isRegistrationOpen: true, closeMessage: "", departments: [...INITIAL_DEPARTMENTS], classes: [], deliveryDate: "", deliveryNote: DEFAULT_DELIVERY_NOTE };
       } catch (err) {
         console.error("Lỗi Neon getSettings:", err.message);
       }
     }
     const db = this.readFile();
-    return db.settings || { isRegistrationOpen: true, closeMessage: "", departments: [...INITIAL_DEPARTMENTS], classes: [] };
+    return db.settings || { isRegistrationOpen: true, closeMessage: "", departments: [...INITIAL_DEPARTMENTS], classes: [], deliveryDate: "", deliveryNote: DEFAULT_DELIVERY_NOTE };
   }
 
   async updateSettings(newSettings) {
@@ -413,11 +386,13 @@ class Database {
           isRegistrationOpen: newSettings.isRegistrationOpen !== undefined ? Boolean(newSettings.isRegistrationOpen) : current.isRegistrationOpen,
           closeMessage: newSettings.closeMessage !== undefined ? String(newSettings.closeMessage) : current.closeMessage,
           departments: Array.isArray(newSettings.departments) ? newSettings.departments : current.departments,
-          classes: Array.isArray(newSettings.classes) ? newSettings.classes : current.classes
+          classes: Array.isArray(newSettings.classes) ? newSettings.classes : current.classes,
+          deliveryDate: newSettings.deliveryDate !== undefined ? String(newSettings.deliveryDate) : current.deliveryDate,
+          deliveryNote: newSettings.deliveryNote !== undefined ? String(newSettings.deliveryNote) : current.deliveryNote
         };
         await this.sql.query(
-          `UPDATE settings SET is_registration_open = $1, close_message = $2, departments = $3, classes = $4 WHERE id = 'default'`,
-          [merged.isRegistrationOpen, merged.closeMessage, JSON.stringify(merged.departments), JSON.stringify(merged.classes)]
+          `UPDATE settings SET is_registration_open = $1, close_message = $2, departments = $3, classes = $4, delivery_date = $5, delivery_note = $6 WHERE id = 'default'`,
+          [merged.isRegistrationOpen, merged.closeMessage, JSON.stringify(merged.departments), JSON.stringify(merged.classes), merged.deliveryDate, merged.deliveryNote]
         );
         return merged;
       } catch (err) {
@@ -772,15 +747,16 @@ class Database {
     };
   }
 
-  // --- QUẢN TRỊ GIÁO TRÌNH (THÊM / SỬA / XÓA - PHÂN LOẠI KHOA & LỚP) ---
+  // --- QUẢN TRỊ SÁCH (THÊM / SỬA / XÓA - PHÂN LOẠI KHOA & LỚP) ---
   async createBook(bookData) {
     const id = bookData.id || ('sach-' + Date.now().toString(36));
     const book = {
       id,
-      title: bookData.title || 'Giáo trình mới',
+      title: bookData.title || 'Sách mới',
       price: Number(bookData.price) || 0,
-      author: bookData.author || 'Giáo trình ĐH',
+      author: bookData.author || '',
       pages: Number(bookData.pages) || 0,
+      year: bookData.year || '',
       description: bookData.description || '',
       cover: bookData.cover || '',
       department: bookData.department || DEFAULT_DEPARTMENT,
@@ -790,20 +766,20 @@ class Database {
     if (this.isNeon) {
       try {
         await this.sql.query(
-          `INSERT INTO books (id, title, price, author, pages, description, cover, department, classes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [book.id, book.title, book.price, book.author, book.pages, book.description, book.cover, book.department, JSON.stringify(book.classes)]
+          `INSERT INTO books (id, title, price, author, pages, year, description, cover, department, classes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [book.id, book.title, book.price, book.author, book.pages, book.year, book.description, book.cover, book.department, JSON.stringify(book.classes)]
         );
         return book;
       } catch (err) {
         console.error("Lỗi Neon createBook:", err.message);
-        throw new Error("Không thể thêm giáo trình: " + err.message);
+        throw new Error("Không thể thêm sách: " + err.message);
       }
     }
 
     const db = this.readFile();
     if (db.books.some(b => b.id === id)) {
-      throw new Error("Mã giáo trình đã tồn tại!");
+      throw new Error("Mã sách đã tồn tại!");
     }
     db.books.push(book);
     this.writeFile(db);
@@ -819,10 +795,11 @@ class Database {
             price = COALESCE($3, price),
             author = COALESCE($4, author),
             pages = COALESCE($5, pages),
-            description = COALESCE($6, description),
-            cover = COALESCE($7, cover),
-            department = COALESCE($8, department),
-            classes = COALESCE($9, classes)
+            year = COALESCE($6, year),
+            description = COALESCE($7, description),
+            cover = COALESCE($8, cover),
+            department = COALESCE($9, department),
+            classes = COALESCE($10, classes)
           WHERE id = $1
           RETURNING *`,
           [
@@ -831,6 +808,7 @@ class Database {
             patch.price !== undefined ? Number(patch.price) : null,
             patch.author !== undefined ? String(patch.author) : null,
             patch.pages !== undefined ? Number(patch.pages) : null,
+            patch.year !== undefined ? String(patch.year) : null,
             patch.description !== undefined ? String(patch.description) : null,
             patch.cover !== undefined ? String(patch.cover) : null,
             patch.department !== undefined ? String(patch.department) : null,
@@ -841,7 +819,7 @@ class Database {
         return null;
       } catch (err) {
         console.error("Lỗi Neon updateBook:", err.message);
-        throw new Error("Không thể cập nhật giáo trình: " + err.message);
+        throw new Error("Không thể cập nhật sách: " + err.message);
       }
     }
 
