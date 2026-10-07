@@ -6,12 +6,13 @@
  */
 
 require('dotenv').config();
+const domain = require('./public/domain');
 const fs = require('fs');
 const path = require('path');
 
 const DB_FILE = path.join(__dirname, 'data.json');
 
-// Khoa mặc định cho sách chưa được phân loại
+// Chỉ dùng để chuyển dữ liệu gán lớp từ phiên bản cũ
 const DEFAULT_DEPARTMENT = 'Khoa CNTT';
 
 // Danh sách khoa khởi tạo sẵn (chỉ còn Khoa CNTT)
@@ -20,7 +21,7 @@ const INITIAL_DEPARTMENTS = ['Khoa CNTT'];
 // Lưu ý thời gian giao sách mặc định (hiển thị ngắn gọn cho sinh viên)
 const DEFAULT_DELIVERY_NOTE = 'Sách thường giao ngay hôm sau nếu có tiết.';
 
-// Danh mục sách mặc định (mỗi cuốn gắn với 1 KHOA và danh sách LỚP cần mua)
+// Danh mục sách chung; danh sách sách cần học được lưu trên từng lớp
 const INITIAL_BOOKS = [
   {
     id: "sach-04",
@@ -31,8 +32,6 @@ const INITIAL_BOOKS = [
     year: "",
     description: "Giáo trình mẫu của Khoa CNTT: mảng, danh sách liên kết, cây, đồ thị và các giải thuật sắp xếp.",
     cover: "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80",
-    department: "Khoa CNTT",
-    classes: []
   }
 ];
 
@@ -72,6 +71,8 @@ function mapOrderFromDb(row) {
     items,
     customerName: row.customer_name || '',
     customerClass: row.customer_class || '',
+    customerDepartment: row.customer_department || '',
+    deliveryAt: row.delivery_at ? new Date(row.delivery_at).toISOString() : null,
     customerPhone: row.customer_phone || '',
     note: row.note || '',
     status: row.status || 'PENDING',
@@ -97,8 +98,6 @@ function mapBookFromDb(row) {
     year: row.year || '',
     description: row.description || '',
     cover: row.cover || '',
-    department: row.department || DEFAULT_DEPARTMENT,
-    classes: parseJsonArray(row.classes, [])
   };
 }
 
@@ -108,7 +107,8 @@ function mapSettingsFromDb(row) {
     isRegistrationOpen: row.is_registration_open !== false,
     closeMessage: row.close_message || "",
     departments: parseJsonArray(row.departments, [...INITIAL_DEPARTMENTS]),
-    classes: parseJsonArray(row.classes, []),
+    classes: domain.classes(parseJsonArray(row.classes, []), parseJsonArray(row.departments, INITIAL_DEPARTMENTS)),
+    catalogVersion: Number(row.catalog_version) || 1,
     deliveryDate: row.delivery_date || "",
     deliveryNote: row.delivery_note || DEFAULT_DELIVERY_NOTE
   };
@@ -141,9 +141,9 @@ function normalizeOrder(order) {
 
 function normalizeBook(book) {
   if (!book) return book;
-  if (!book.department) book.department = DEFAULT_DEPARTMENT;
-  if (!Array.isArray(book.classes)) book.classes = parseJsonArray(book.classes, []);
-  return book;
+  // Ownership fields are legacy input only; public books are independent of faculties/classes.
+  const { department, classes, ...catalogBook } = book;
+  return catalogBook;
 }
 
 class Database {
@@ -157,7 +157,7 @@ class Database {
         this.sql = neon(process.env.DATABASE_URL);
         this.isNeon = true;
         console.log(" [Database] Đã kích hoạt Neon Cloud PostgreSQL Storage!");
-        this.initNeonTables().catch(err => {
+        this.ready = this.initNeonTables().catch(err => {
           console.error(" [Database] Lỗi khi kiểm tra/tạo bảng trên Neon:", err.message);
         });
       } catch (err) {
@@ -230,7 +230,10 @@ class Database {
         `ALTER TABLE books ADD COLUMN IF NOT EXISTS department TEXT DEFAULT ''`,
         `ALTER TABLE books ADD COLUMN IF NOT EXISTS classes TEXT DEFAULT '[]'`,
         `ALTER TABLE books ADD COLUMN IF NOT EXISTS year TEXT DEFAULT ''`,
-        `ALTER TABLE orders ADD COLUMN IF NOT EXISTS items_json TEXT`
+        `ALTER TABLE orders ADD COLUMN IF NOT EXISTS items_json TEXT`,
+        `ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_at TIMESTAMPTZ`,
+        `ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_department TEXT DEFAULT ''`,
+        `ALTER TABLE settings ADD COLUMN IF NOT EXISTS catalog_version INT DEFAULT 1`
       ];
       for (const migration of migrations) {
         try {
@@ -270,7 +273,7 @@ class Database {
           `INSERT INTO books (id, title, price, author, pages, year, description, cover, department, classes)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            ON CONFLICT (id) DO NOTHING`,
-          [b.id, b.title, b.price, b.author, b.pages, b.year || '', b.description, b.cover, b.department || DEFAULT_DEPARTMENT, JSON.stringify(b.classes || [])]
+          [b.id, b.title, b.price, b.author, b.pages, b.year || '', b.description, b.cover, '', '[]']
         );
       }
 
@@ -280,6 +283,15 @@ class Database {
           'INSERT INTO settings (id, is_registration_open, close_message, departments, classes, delivery_date, delivery_note) VALUES ($1, $2, $3, $4, $5, $6, $7)',
           ['default', true, 'Đã chốt danh sách mua sách đợt này để báo in. Tạm ngưng nhận đơn mới!', JSON.stringify(INITIAL_DEPARTMENTS), '[]', '', DEFAULT_DELIVERY_NOTE]
         );
+      }
+      const [settingsRows, legacyBooks] = await Promise.all([
+        this.sql.query("SELECT * FROM settings WHERE id = 'default'"),
+        this.sql.query('SELECT id, department, classes FROM books')
+      ]);
+      const settings = mapSettingsFromDb(settingsRows[0]);
+      if (settings.catalogVersion !== 2) {
+        const migrated = domain.migrateSettings(settings, legacyBooks.map(b => ({ ...b, classes: parseJsonArray(b.classes) })));
+        await this.sql.query("UPDATE settings SET classes = $1, catalog_version = 2 WHERE id = 'default'", [JSON.stringify(migrated.classes)]);
       }
     } catch (err) {
       console.error(" [Database] Lỗi trong initNeonTables:", err);
@@ -331,15 +343,18 @@ class Database {
     data.settings = {
       isRegistrationOpen: data.settings.isRegistrationOpen !== false,
       closeMessage: data.settings.closeMessage || "",
-      departments: Array.isArray(data.settings.departments) && data.settings.departments.length > 0
+      departments: Array.isArray(data.settings.departments)
         ? data.settings.departments
         : [...INITIAL_DEPARTMENTS],
-      classes: Array.isArray(data.settings.classes) ? data.settings.classes : [],
+      classes: data.settings.classes || [],
+      catalogVersion: Number(data.settings.catalogVersion) || 1,
       deliveryDate: String(data.settings.deliveryDate || ''),
       deliveryNote: String(data.settings.deliveryNote || DEFAULT_DELIVERY_NOTE)
     };
 
-    // Chuẩn hóa sách: luôn có khoa & lớp
+    data.settings = domain.migrateSettings(data.settings, data.books || []);
+
+    // Sách là danh mục chung, độc lập khoa/lớp
     data.books = (Array.isArray(data.books) ? data.books : []).map(normalizeBook);
 
     // Chuẩn hóa đơn hàng: luôn có items[] (1 người mua nhiều cuốn)
@@ -363,6 +378,7 @@ class Database {
 
   // --- SETTINGS (CHỐT SỔ ĐĂNG KÝ + DANH SÁCH KHOA / LỚP + NGÀY NHẬN SÁCH) ---
   async getSettings() {
+    await this.ready;
     if (this.isNeon) {
       try {
         const rows = await this.sql`SELECT * FROM settings WHERE id = 'default' LIMIT 1`;
@@ -385,13 +401,14 @@ class Database {
         const merged = {
           isRegistrationOpen: newSettings.isRegistrationOpen !== undefined ? Boolean(newSettings.isRegistrationOpen) : current.isRegistrationOpen,
           closeMessage: newSettings.closeMessage !== undefined ? String(newSettings.closeMessage) : current.closeMessage,
+          catalogVersion: 2,
           departments: Array.isArray(newSettings.departments) ? newSettings.departments : current.departments,
           classes: Array.isArray(newSettings.classes) ? newSettings.classes : current.classes,
           deliveryDate: newSettings.deliveryDate !== undefined ? String(newSettings.deliveryDate) : current.deliveryDate,
           deliveryNote: newSettings.deliveryNote !== undefined ? String(newSettings.deliveryNote) : current.deliveryNote
         };
         await this.sql.query(
-          `UPDATE settings SET is_registration_open = $1, close_message = $2, departments = $3, classes = $4, delivery_date = $5, delivery_note = $6 WHERE id = 'default'`,
+          `UPDATE settings SET is_registration_open = $1, close_message = $2, departments = $3, classes = $4, delivery_date = $5, delivery_note = $6, catalog_version = 2 WHERE id = 'default'`,
           [merged.isRegistrationOpen, merged.closeMessage, JSON.stringify(merged.departments), JSON.stringify(merged.classes), merged.deliveryDate, merged.deliveryNote]
         );
         return merged;
@@ -407,12 +424,11 @@ class Database {
 
   // --- SÁCH ---
   async getAllBooks() {
+    await this.ready;
     if (this.isNeon) {
       try {
         const rows = await this.sql`SELECT * FROM books ORDER BY id ASC`;
-        if (rows && rows.length > 0) {
-          return rows.map(mapBookFromDb);
-        }
+        return rows.map(mapBookFromDb);
       } catch (err) {
         console.error("Lỗi Neon getAllBooks:", err.message);
       }
@@ -422,6 +438,7 @@ class Database {
   }
 
   async getBookById(bookId) {
+    await this.ready;
     if (this.isNeon) {
       try {
         const rows = await this.sql`SELECT * FROM books WHERE id = ${bookId} LIMIT 1`;
@@ -447,7 +464,6 @@ class Database {
       items = [{
         bookId: orderData.bookId || '',
         bookTitle: orderData.bookTitle || '',
-        department: orderData.department || '',
         quantity: Number(orderData.quantity) || 1,
         unitPrice: Number(orderData.unitPrice) || 0
       }];
@@ -455,7 +471,6 @@ class Database {
     items = items.map(it => ({
       bookId: it.bookId || '',
       bookTitle: it.bookTitle || '',
-      department: it.department || '',
       quantity: Number(it.quantity) || 1,
       unitPrice: Number(it.unitPrice) || 0
     }));
@@ -470,6 +485,7 @@ class Database {
     const amount = orderData.amount !== undefined ? Number(orderData.amount) : itemsAmount;
     const customerName = orderData.customerName || 'Bạn cùng lớp';
     const customerClass = orderData.customerClass || '';
+    const customerDepartment = orderData.customerDepartment || '';
     const customerPhone = orderData.customerPhone || '';
     const note = orderData.note || '';
     const status = orderData.status || 'PENDING';
@@ -477,6 +493,7 @@ class Database {
     const checkoutUrl = orderData.checkoutUrl || '';
     const qrCode = orderData.qrCode || '';
     const now = new Date().toISOString();
+    const deliveryAt = domain.deliveryAt(now, orderData.deliveryDate);
 
     if (this.isNeon) {
       try {
@@ -485,8 +502,8 @@ class Database {
             order_code, book_id, book_title, quantity, unit_price, amount, items_json,
             customer_name, customer_class, customer_phone, note, status,
             is_delivered, checkout_url, qr_code, created_at, updated_at, paid_at,
-            bank_reference, account_number
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+            bank_reference, account_number, delivery_at, customer_department
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
           ON CONFLICT (order_code) DO UPDATE SET
             status = EXCLUDED.status,
             updated_at = EXCLUDED.updated_at,
@@ -498,7 +515,7 @@ class Database {
             customerName, customerClass, customerPhone, note, status,
             isDelivered, checkoutUrl, qrCode, now, now, orderData.paidAt || null,
             orderData.bankReference || orderData.reference || null,
-            orderData.accountNumber || null
+            orderData.accountNumber || null, deliveryAt, customerDepartment
           ]
         );
 
@@ -512,12 +529,14 @@ class Database {
           items,
           customerName,
           customerClass,
+          customerDepartment,
           customerPhone,
           note,
           status,
           isDelivered,
           checkoutUrl,
           qrCode,
+          deliveryAt,
           createdAt: now,
           updatedAt: now,
           paidAt: orderData.paidAt || null,
@@ -540,12 +559,14 @@ class Database {
       items,
       customerName,
       customerClass,
+      customerDepartment,
       customerPhone,
       note,
       status,
       isDelivered,
       checkoutUrl,
       qrCode,
+      deliveryAt,
       createdAt: now,
       updatedAt: now,
       paidAt: orderData.paidAt || null,
@@ -699,8 +720,6 @@ class Database {
         id: b.id,
         title: b.title,
         price: b.price,
-        department: b.department || DEFAULT_DEPARTMENT,
-        classes: Array.isArray(b.classes) ? b.classes : [],
         totalQuantity: 0,
         totalRevenue: 0
       };
@@ -718,8 +737,6 @@ class Database {
             id: it.bookId || key,
             title: it.bookTitle || 'Sách khác',
             price: it.unitPrice || 0,
-            department: it.department || DEFAULT_DEPARTMENT,
-            classes: [],
             totalQuantity: 0,
             totalRevenue: 0
           };
@@ -758,17 +775,15 @@ class Database {
       pages: Number(bookData.pages) || 0,
       year: bookData.year || '',
       description: bookData.description || '',
-      cover: bookData.cover || '',
-      department: bookData.department || DEFAULT_DEPARTMENT,
-      classes: Array.isArray(bookData.classes) ? bookData.classes : []
+      cover: bookData.cover || ''
     };
 
     if (this.isNeon) {
       try {
         await this.sql.query(
-          `INSERT INTO books (id, title, price, author, pages, year, description, cover, department, classes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [book.id, book.title, book.price, book.author, book.pages, book.year, book.description, book.cover, book.department, JSON.stringify(book.classes)]
+          `INSERT INTO books (id, title, price, author, pages, year, description, cover)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [book.id, book.title, book.price, book.author, book.pages, book.year, book.description, book.cover]
         );
         return book;
       } catch (err) {
@@ -797,9 +812,7 @@ class Database {
             pages = COALESCE($5, pages),
             year = COALESCE($6, year),
             description = COALESCE($7, description),
-            cover = COALESCE($8, cover),
-            department = COALESCE($9, department),
-            classes = COALESCE($10, classes)
+            cover = COALESCE($8, cover)
           WHERE id = $1
           RETURNING *`,
           [
@@ -810,9 +823,7 @@ class Database {
             patch.pages !== undefined ? Number(patch.pages) : null,
             patch.year !== undefined ? String(patch.year) : null,
             patch.description !== undefined ? String(patch.description) : null,
-            patch.cover !== undefined ? String(patch.cover) : null,
-            patch.department !== undefined ? String(patch.department) : null,
-            Array.isArray(patch.classes) ? JSON.stringify(patch.classes) : null
+            patch.cover !== undefined ? String(patch.cover) : null
           ]
         );
         if (rows && rows.length > 0) return mapBookFromDb(rows[0]);
@@ -831,8 +842,7 @@ class Database {
       ...current,
       ...patch,
       price: patch.price !== undefined ? Number(patch.price) : current.price,
-      pages: patch.pages !== undefined ? Number(patch.pages) : current.pages,
-      classes: Array.isArray(patch.classes) ? patch.classes : current.classes
+      pages: patch.pages !== undefined ? Number(patch.pages) : current.pages
     });
     db.books[index] = updated;
     this.writeFile(db);
@@ -840,6 +850,8 @@ class Database {
   }
 
   async deleteBook(bookId) {
+    const settings = await this.getSettings();
+    await this.updateSettings({ classes: settings.classes.map(c => ({ ...c, bookIds: c.bookIds.filter(id => id !== bookId) })) });
     if (this.isNeon) {
       try {
         await this.sql.query('DELETE FROM books WHERE id = $1', [bookId]);

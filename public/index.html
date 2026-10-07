@@ -2,6 +2,9 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>XBook - Đăng Ký Mua Giáo Trình Theo Khoa & Lớp</title>
   
@@ -84,7 +87,6 @@
           <img src="logo.png" alt="xbook logo" class="w-10 h-10 rounded-xl object-contain shadow-sm border border-slate-200 bg-white p-0.5" />
           <div class="leading-tight">
             <span class="text-xl font-black tracking-tight text-slate-900">xbook</span>
-            <div class="text-[10px] text-slate-400 font-semibold hidden sm:block">Đặt sách cho lớp CNTT</div>
           </div>
         </div>
 
@@ -122,7 +124,7 @@
     <div class="flex items-center justify-between mb-3">
       <div>
         <h2 class="text-lg sm:text-xl font-extrabold text-slate-900">Danh mục sách đợt này</h2>
-        <p class="text-xs text-slate-500">Lọc theo <strong>Khoa</strong> / <strong>Lớp</strong>, chọn nhiều cuốn và thanh toán 1 lần qua VietQR</p>
+        <p class="text-xs text-slate-500">Chọn <strong>Khoa → Lớp</strong> để xem những sách cần học. Sách trong danh mục chung có thể dùng cho nhiều lớp, nhiều khoa.</p>
       </div>
       <span class="text-xs font-bold text-slate-400 whitespace-nowrap ml-2" id="bookCount">Đang tải...</span>
     </div>
@@ -243,14 +245,9 @@
             <label class="block text-xs font-bold text-slate-800 mb-1">
               Lớp <span class="text-emerald-600 font-extrabold">(nên điền)</span>
             </label>
-            <input
-              type="text"
-              id="formCustomerClass"
-              list="classListDatalist"
-              placeholder="Ví dụ: CNTT K15"
-              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-            />
-            <datalist id="classListDatalist"></datalist>
+            <select id="formCustomerClass" class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none">
+              <option value="">Không chọn lớp — mua từ danh mục chung</option>
+            </select>
           </div>
           <div>
             <label class="block text-xs font-bold text-slate-700 mb-1">Số điện thoại (tùy chọn)</label>
@@ -507,7 +504,7 @@
 
         <!-- ============ TAB 1: ĐƠN HÀNG & TỔNG HỢP ============ -->
         <div id="adminTabOrders" class="admin-tab-panel">
-          <!-- 1. TỔNG HỢP SỐ LƯỢNG SÁCH CẦN NHẬP / IN (NHÓM THEO KHOA) -->
+          <!-- 1. TỔNG HỢP SỐ LƯỢNG SÁCH CẦN NHẬP / IN (DANH MỤC CHUNG) -->
           <div class="mb-4">
             <div class="flex items-center justify-between mb-2">
               <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
@@ -517,7 +514,7 @@
               <span class="text-xs font-bold text-emerald-700" id="adminTotalRevenue">Tổng tiền: 0 đ</span>
             </div>
             <div id="adminBookSummaryCards" class="space-y-3">
-              <!-- Render động: nhóm theo khoa -->
+              <!-- Render động: tổng số từng cuốn -->
             </div>
           </div>
 
@@ -616,7 +613,7 @@
             </h4>
             <span id="adminDepartmentCount" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">0 khoa</span>
           </div>
-          <p class="text-[11px] text-slate-400 mb-3">Mỗi khoa hiển thị toàn bộ sách trong danh mục kèm số lượng sinh viên đã đặt (đã thanh toán) — dùng để soạn list báo in.</p>
+          <p class="text-[11px] text-slate-400 mb-3">Xem từng lớp trong khoa và danh sách sách cần học. Số lượng đã đặt tính từ đơn đã thanh toán của khách trong khoa.</p>
           <div id="adminDepartmentList" class="space-y-3">
             <!-- Render động từ JS -->
           </div>
@@ -645,8 +642,7 @@
                     <tr>
                       <th class="p-2.5 font-bold w-14">Ảnh</th>
                       <th class="p-2.5 font-bold">Tên sách</th>
-                      <th class="p-2.5 font-bold">Khoa</th>
-                      <th class="p-2.5 font-bold">Lớp</th>
+                      <th class="p-2.5 font-bold">Các lớp sử dụng</th>
                       <th class="p-2.5 font-bold text-right">Giá</th>
                       <th class="p-2.5 font-bold text-center w-24">Thao tác</th>
                     </tr>
@@ -685,17 +681,25 @@
                   <i data-lucide="users" class="w-4 h-4 text-emerald-600"></i>
                   <span>Danh sách Lớp</span>
                 </h4>
-                <p class="text-[10px] text-slate-400 mb-2">Tên lớp do bạn bổ sung — dùng để gợi ý khi sinh viên đăng ký và lọc đơn hàng.</p>
+                <p class="text-[10px] text-slate-400 mb-2">Chọn khoa rồi thêm lớp. Thiết lập sách cần học cho từng lớp ở phần bên dưới; một sách có thể dùng cho nhiều khoa.</p>
                 <div id="classChipsEditor" class="flex flex-wrap gap-1.5 mb-2.5">
                   <!-- Render động -->
                 </div>
                 <form onsubmit="handleAddClass(event)" class="flex gap-1.5">
+                  <select id="addClassDepartment" aria-label="Khoa của lớp" class="min-w-0 max-w-[45%] border rounded-xl text-xs"></select>
                   <input type="text" id="addClassInput" placeholder="VD: CNTT K15" class="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
                   <button type="submit" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex-shrink-0">
                     <i data-lucide="plus" class="w-3.5 h-3.5"></i>
                   </button>
                 </form>
               </div>
+              <form onsubmit="saveClassBooks(event)" class="border border-slate-200 rounded-2xl p-3.5 bg-white space-y-3">
+                <h4 class="text-xs font-bold text-slate-700 uppercase">Sách cần học theo lớp</h4>
+                <p class="text-xs text-slate-500">Chọn lớp, đánh dấu sách từ danh mục chung rồi lưu. Một cuốn có thể được chọn cho nhiều lớp ở các khoa khác nhau.</p>
+                <select id="classBookEditorSelect" onchange="renderClassBookChoices()" aria-label="Lớp cần thiết lập sách" class="w-full border rounded-xl p-2 text-xs"></select>
+                <div id="classBookChoices" class="max-h-64 overflow-y-auto"></div>
+                <button id="saveClassBooksButton" type="submit" disabled class="w-full rounded-xl bg-emerald-600 text-white text-xs font-bold p-2.5 disabled:opacity-40">Lưu danh sách sách của lớp</button>
+              </form>
             </div>
           </div>
         </div>
@@ -739,7 +743,7 @@
         </div>
         <div>
           <h3 class="text-base font-bold text-slate-900" id="bookFormHeading">Thêm sách mới</h3>
-          <p class="text-xs text-slate-500">Nhập đủ: tên sách, ảnh bìa, giá tiền, khoa, lớp cần mua...</p>
+          <p class="text-xs text-slate-500">Nhập thông tin sách: tên, ảnh bìa, giá tiền, tác giả...</p>
         </div>
       </div>
 
@@ -765,20 +769,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-bold text-slate-800 mb-1">Thuộc Khoa</label>
-            <input type="text" id="formBookDepartment" list="deptDatalist" placeholder="VD: Khoa CNTT"
-              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
-            <datalist id="deptDatalist"></datalist>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-slate-800 mb-1">Các lớp cần mua</label>
-            <input type="text" id="formBookClasses" placeholder="CNTT K15, CNTT K16"
-              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
-            <p class="text-[10px] text-slate-400 mt-1">Phân tách bằng dấu phẩy</p>
-          </div>
-        </div>
+        <p class="text-xs text-slate-500">Sách thuộc danh mục chung. Để chọn sách cần học cho một lớp, dùng phần “Sách cần học theo lớp” trong quản trị.</p>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -835,6 +826,7 @@
     </div>
   </div>
 
+  <script src="domain.js"></script>
   <script src="app.js"></script>
   <script>lucide.createIcons();</script>
 </body>

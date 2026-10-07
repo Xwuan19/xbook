@@ -205,3 +205,13 @@ app.post('/api/payos-webhook', (req, res) => {
 2. **`orders` (Đơn hàng)**: Lưu `order_code` (mã số nguyên duy nhất khớp với PayOS), thông tin khách (tên, email), trạng thái (`PENDING` -> `PAID`), thời gian tạo.
 3. **`payment_transactions` (Lịch sử giao dịch sao kê)**: Lưu các thông tin tài chính do PayOS trả về: `reference` (mã giao dịch ngân hàng FT...), số tài khoản người gửi, tên ngân hàng người gửi, số tiền thực nhận.
 4. **`webhook_logs` (Nhật ký tín hiệu Webhook)**: Lưu vết toàn bộ raw payload và trạng thái chữ ký số (`is_verified`) phục vụ kiểm toán hoặc tra soát khi có khiếu nại.
+
+### Lịch giao và danh mục khoa/lớp
+
+- Sách là danh mục chung, không thuộc khoa. Quản trị thêm/sửa sách độc lập.
+- Quản trị → Danh sách lớp: chọn khoa và nhập tên lớp. Trong “Sách cần học theo lớp”, chọn lớp, đánh dấu các sách cần học rồi lưu. Một cuốn dùng được ở nhiều lớp, nhiều khoa.
+- `settings.classes` có cấu trúc `{ name, department, bookIds }`. Bộ lọc khoa lấy hợp danh sách sách của các lớp trong khoa (không trùng); bộ lọc lớp lấy đúng `bookIds` của lớp. Khoa/lớp chỉ giúp tìm sách, không hạn chế mua sách trong danh mục chung.
+- Tên lớp trùng giữa các khoa được phân biệt bằng cặp khoa/tên lớp. Đơn mới lưu `customerDepartment` khi khách chọn lớp.
+- Quan hệ khoa/lớp trên sách cũ được chuyển một lần sang danh sách sách của lớp (`catalogVersion: 2`). Neon giữ cột cũ để không phá dữ liệu nhưng không dùng chúng cho sách mới/bộ lọc. Không tự gán lớp khi danh sách lớp trống.
+- Mỗi đơn mới lưu `deliveryAt`: muộn hơn giữa thời điểm đặt + 24 giờ và 00:00 ngày giao chung (UTC+7). Lịch đơn đã tạo không đổi khi sửa cài đặt. Đơn cũ không tự suy đoán lịch giao.
+- Kiểm thử: `npm test` (unit, API với dữ liệu tạm/PayOS demo và giao diện qua jsdom; không gọi thanh toán thật).

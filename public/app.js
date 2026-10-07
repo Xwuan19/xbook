@@ -40,10 +40,12 @@ function formatDateVN(ymd) {
 
 // Dòng lưu ý ngày nhận sách ngắn gọn cho sinh viên (dùng chung banner + form + màn hình thành công)
 function deliveryInfoLine() {
-  const date = currentSettings.deliveryDate;
-  const note = (currentSettings.deliveryNote || '').trim();
-  if (!date && !note) return '';
-  return [date ? `Nhận sách: <strong>${formatDateVN(date)}</strong>` : '', note].filter(Boolean).join(' · ');
+  const date = XBookDomain.deliveryAt(new Date(), currentSettings.deliveryDate);
+  return `Giao dự kiến từ <strong>${formatDelivery(date)}</strong> · Tối thiểu 24 giờ sau khi đặt. ${escapeHtml(currentSettings.deliveryNote || '')}`;
+}
+
+function formatDelivery(value) {
+  return value ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + ' (giờ VN)' : 'Chưa có lịch giao';
 }
 
 function escapeHtml(str) {
@@ -79,8 +81,13 @@ function orderItemsLabel(order) {
 }
 
 function orderDepartments(order) {
-  const items = Array.isArray(order.items) ? order.items : [];
-  return [...new Set(items.map(it => it.department).filter(Boolean))];
+  return order.customerDepartment ? [order.customerDepartment] : [];
+}
+function classLabel(entry) { return `${entry.department} / ${entry.name}`; }
+function catalogClasses() { return XBookDomain.classes(currentSettings.classes, currentSettings.departments); }
+function classesUsingBook(id) { return catalogClasses().filter(c => c.bookIds.includes(id)); }
+function orderClassLabel(order) {
+  return order.customerClass ? [order.customerDepartment, order.customerClass].filter(Boolean).join(' / ') : '';
 }
 
 // ============================ KHỞI ĐỘNG ============================
@@ -123,16 +130,11 @@ async function fetchBooksAndSettings() {
 
 /** Danh sách khoa đầy đủ: từ settings + từ các giáo trình đang có */
 function getAllDepartments() {
-  const set = new Set(currentSettings.departments || []);
-  allBooks.forEach(b => set.add(b.department || 'Khoa CNTT'));
-  return [...set];
+  return [...new Set(currentSettings.departments || [])];
 }
 
-/** Danh sách lớp đầy đủ: quản trị khai báo + gắn trên giáo trình */
-function getAllClassNames() {
-  const set = new Set(currentSettings.classes || []);
-  allBooks.forEach(b => (b.classes || []).forEach(c => set.add(c)));
-  return [...set].sort((a, b) => a.localeCompare(b, 'vi'));
+function getClassesForDepartment(department = '__ALL__') {
+  return catalogClasses().filter(c => department === '__ALL__' || c.department === department);
 }
 
 /**
@@ -187,7 +189,7 @@ function renderDepartmentChips() {
 
   const countFor = (dept) => dept === '__ALL__'
     ? allBooks.length
-    : allBooks.filter(b => (b.department || 'Khoa CNTT') === dept).length;
+    : XBookDomain.filterBooks(allBooks, currentSettings, dept).length;
 
   const chip = (value, label) => {
     const active = activeDepartmentFilter === value;
@@ -213,6 +215,8 @@ function renderDepartmentChips() {
 
 function setDepartmentFilter(value) {
   activeDepartmentFilter = value;
+  activeClassFilter = '__ALL__';
+  renderClassFilter();
   renderDepartmentChips();
   renderBooks();
 }
@@ -225,20 +229,12 @@ function renderClassFilter() {
   const select = document.getElementById('classFilterSelect');
   if (!wrap || !select) return;
 
-  const classes = getAllClassNames();
-  if (classes.length === 0) {
-    wrap.classList.add('hidden');
-    wrap.classList.remove('flex');
-    return;
-  }
+  const classes = getClassesForDepartment(activeDepartmentFilter);
   wrap.classList.remove('hidden');
   wrap.classList.add('flex');
-
-  if (!classes.includes(activeClassFilter) && activeClassFilter !== '__ALL__') {
-    activeClassFilter = '__ALL__';
-  }
-  select.innerHTML = `<option value="__ALL__">Tất cả các lớp</option>` +
-    classes.map(c => `<option value="${escapeHtml(c)}" ${activeClassFilter === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+  if (!classes.some(c => XBookDomain.classKey(c) === activeClassFilter)) activeClassFilter = '__ALL__';
+  select.innerHTML = `<option value="__ALL__">${classes.length ? 'Chọn lớp để xem sách cần học' : 'Khoa này chưa có lớp'}</option>` +
+    classes.map(c => `<option value="${escapeHtml(XBookDomain.classKey(c))}" ${activeClassFilter === XBookDomain.classKey(c) ? 'selected' : ''}>${escapeHtml(activeDepartmentFilter === '__ALL__' ? classLabel(c) : c.name)}</option>`).join('');
 }
 
 function setClassFilter(value) {
@@ -248,9 +244,12 @@ function setClassFilter(value) {
 
 /** Gợi ý lớp trong form đăng ký (datalist) */
 function populateClassDatalist() {
-  const dl = document.getElementById('classListDatalist');
-  if (!dl) return;
-  dl.innerHTML = getAllClassNames().map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+  const select = document.getElementById('formCustomerClass');
+  if (!select) return;
+  const previous = select.value;
+  select.innerHTML = '<option value="">Không chọn lớp — mua từ danh mục chung</option>' + catalogClasses().map(c =>
+    `<option value="${escapeHtml(XBookDomain.classKey(c))}">${escapeHtml(classLabel(c))}</option>`).join('');
+  select.value = previous;
 }
 
 /**
@@ -258,11 +257,7 @@ function populateClassDatalist() {
  * Tỷ lệ: 1 cột mobile → 2 cột tablet → 3 cột desktop
  */
 function getFilteredBooks() {
-  return allBooks.filter(b => {
-    const okDept = activeDepartmentFilter === '__ALL__' || (b.department || 'Khoa CNTT') === activeDepartmentFilter;
-    const okClass = activeClassFilter === '__ALL__' || (b.classes || []).includes(activeClassFilter);
-    return okDept && okClass;
-  });
+  return XBookDomain.filterBooks(allBooks, currentSettings, activeDepartmentFilter, activeClassFilter);
 }
 
 function renderBooks() {
@@ -285,8 +280,8 @@ function renderBooks() {
 
   grid.innerHTML = filtered.map(book => {
     const inCart = cart.find(c => c.bookId === book.id);
-    const classesBadges = (book.classes || []).map(c =>
-      `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">${escapeHtml(c)}</span>`
+    const classesBadges = classesUsingBook(book.id).map(c =>
+      `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">${escapeHtml(classLabel(c))}</span>`
     ).join('');
 
     const coverHtml = book.cover
@@ -314,9 +309,6 @@ function renderBooks() {
         <div>
           ${coverHtml}
           <div class="flex flex-wrap gap-1 mb-2">
-            <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              ${escapeHtml(book.department || 'Khoa CNTT')}
-            </span>
             ${classesBadges}
           </div>
           <h3 class="font-extrabold text-slate-900 text-base leading-snug">${escapeHtml(book.title)}</h3>
@@ -405,7 +397,8 @@ function openCheckoutModal() {
   const classInput = document.getElementById('formCustomerClass');
   const phoneInput = document.getElementById('formCustomerPhone');
   if (!nameInput.value && last.name) nameInput.value = last.name;
-  if (!classInput.value && last.className) classInput.value = last.className;
+  if (activeClassFilter !== '__ALL__') classInput.value = activeClassFilter;
+  else if (!classInput.value && last.classKey) classInput.value = last.classKey;
   if (!phoneInput.value && last.phone) phoneInput.value = last.phone;
 
   // Lưu ý ngày nhận sách (ngắn gọn) trong form đăng ký
@@ -436,7 +429,7 @@ function renderCheckoutItems() {
       <div class="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-2xl p-2.5">
         <div class="min-w-0 flex-1">
           <div class="text-xs font-extrabold text-slate-900 truncate">${escapeHtml(book.title)}</div>
-          <div class="text-[10px] text-slate-400 font-semibold">${escapeHtml(book.department || 'Khoa CNTT')} · ${formatMoney(book.price)}/cuốn</div>
+          <div class="text-[10px] text-slate-400 font-semibold">${formatMoney(book.price)}/cuốn</div>
         </div>
         <div class="flex items-center space-x-1.5 flex-shrink-0">
           <button type="button" onclick="changeCartQuantity(${idx}, -1)" class="w-7 h-7 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold flex items-center justify-center">-</button>
@@ -487,7 +480,9 @@ async function handleCreatePayment(event) {
   }
 
   const customerName = document.getElementById('formCustomerName').value.trim();
-  const customerClass = document.getElementById('formCustomerClass').value.trim();
+  const selectedClass = catalogClasses().find(c => XBookDomain.classKey(c) === document.getElementById('formCustomerClass').value);
+  const customerClass = selectedClass?.name || '';
+  const customerDepartment = selectedClass?.department || '';
   const customerPhone = (document.getElementById('formCustomerPhone')?.value || '').trim();
 
   // Bắt buộc nhập đầy đủ cả Họ và Tên (tối thiểu 2 từ)
@@ -499,7 +494,7 @@ async function handleCreatePayment(event) {
   }
 
   // Lưu lại để lần sau điền nhanh
-  localStorage.setItem('xbook_last_customer', JSON.stringify({ name: customerName, className: customerClass, phone: customerPhone }));
+  localStorage.setItem('xbook_last_customer', JSON.stringify({ name: customerName, classKey: selectedClass ? XBookDomain.classKey(selectedClass) : '', phone: customerPhone }));
 
   const items = cart.map(c => ({ bookId: c.bookId, quantity: c.quantity }));
 
@@ -514,7 +509,7 @@ async function handleCreatePayment(event) {
     const res = await fetch('/api/orders/create-payment-link', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items, customerName, customerClass, customerPhone })
+      body: JSON.stringify({ items, customerName, customerClass, customerDepartment, customerPhone })
     });
 
     const result = await res.json();
@@ -604,9 +599,7 @@ function handlePaymentSuccess(data) {
   document.getElementById('successQuantity').innerText = `${data.quantity || 1} cuốn`;
   document.getElementById('successOrderCode').innerText = `#${data.orderCode}`;
 
-  const note = (currentSettings.deliveryNote || '').trim();
-  document.getElementById('successDeliveryDate').innerText =
-    currentSettings.deliveryDate ? `${formatDateVN(currentSettings.deliveryDate)}${note ? ' — ' + note : ''}` : (note || 'Sẽ thông báo sau');
+  document.getElementById('successDeliveryDate').innerText = formatDelivery(data.deliveryAt);
 
   lucide.createIcons();
 }
@@ -764,47 +757,23 @@ async function refreshAdminData(opts = {}) {
   }
 }
 
-/** TAB ĐƠN HÀNG — tổng hợp số cuốn nhóm theo KHOA */
+/** TAB ĐƠN HÀNG — tổng số lượng từng cuốn trong danh mục chung */
 function renderAdminBookSummary(stats) {
   const container = document.getElementById('adminBookSummaryCards');
   if (!container) return;
-
-  const departments = [...new Set((stats.bookSummary || []).map(b => b.department || 'Khoa CNTT'))];
-
-  if (departments.length === 0) {
-    container.innerHTML = `<div class="text-xs text-slate-400 text-center py-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">Chưa có dữ liệu</div>`;
-    return;
-  }
-
-  container.innerHTML = departments.map(dept => {
-    const booksInDept = (stats.bookSummary || []).filter(b => (b.department || 'Khoa CNTT') === dept);
-    return `
-      <div>
-        <div class="flex items-center space-x-1.5 mb-1.5">
-          <i data-lucide="graduation-cap" class="w-3.5 h-3.5 text-emerald-600"></i>
-          <span class="text-[11px] font-black text-slate-700 uppercase tracking-wide">${escapeHtml(dept)}</span>
-          <span class="text-[10px] text-slate-400 font-semibold">(${booksInDept.length} cuốn)</span>
-        </div>
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-2.5">
-          ${booksInDept.map(b => `
-            <div class="bg-slate-50 border border-slate-200 p-2 sm:p-2.5 rounded-2xl text-center shadow-sm">
-              <div class="text-[10px] sm:text-[11px] text-slate-700 font-extrabold truncate" title="${escapeHtml(b.title)}">${escapeHtml(b.title)}</div>
-              <div class="text-base sm:text-2xl font-black text-emerald-600 my-0.5">${b.totalQuantity} <span class="text-[10px] sm:text-xs text-slate-400 font-normal">cuốn</span></div>
-              <div class="text-[9px] sm:text-[10px] text-slate-400 font-semibold">${formatMoney(b.totalRevenue)}</div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  }).join('');
-  lucide.createIcons();
+  container.innerHTML = `<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">${(stats.bookSummary || []).map(b => `
+    <div class="bg-slate-50 border border-slate-200 p-2.5 rounded-2xl text-center">
+      <div class="text-xs font-bold truncate" title="${escapeHtml(b.title)}">${escapeHtml(b.title)}</div>
+      <div class="text-xl font-black text-emerald-600">${b.totalQuantity} cuốn</div>
+      <div class="text-xs text-slate-400">${formatMoney(b.totalRevenue)}</div>
+    </div>`).join('')}</div>`;
 }
 
 /** Dropdown lọc danh sách phát sách theo lớp (trong tab Đơn hàng) */
 function populateAdminClassFilter(paidOrders) {
   const select = document.getElementById('adminClassFilterSelect');
   if (!select) return;
-  const classes = [...new Set(paidOrders.map(o => (o.customerClass || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
+  const classes = [...new Set(paidOrders.map(o => orderClassLabel(o).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
   if (adminClassFilterValue !== '__ALL__' && !classes.includes(adminClassFilterValue)) {
     adminClassFilterValue = '__ALL__';
   }
@@ -820,10 +789,10 @@ function setAdminClassFilter(value) {
 function getFilteredPaidOrders() {
   const keyword = (document.getElementById('adminSearchStudentInput')?.value || '').toLowerCase().trim();
   return (window.cachedPaidOrders || []).filter(o => {
-    const okClass = adminClassFilterValue === '__ALL__' || (o.customerClass || '').trim() === adminClassFilterValue;
+    const okClass = adminClassFilterValue === '__ALL__' || orderClassLabel(o).trim() === adminClassFilterValue;
     const okSearch = !keyword ||
       (o.customerName || '').toLowerCase().includes(keyword) ||
-      (o.customerClass || '').toLowerCase().includes(keyword) ||
+      orderClassLabel(o).toLowerCase().includes(keyword) ||
       (o.customerPhone || '').includes(keyword) ||
       orderItemsLabel(o).toLowerCase().includes(keyword);
     return okClass && okSearch;
@@ -850,10 +819,10 @@ function renderAdminOrderList() {
           <tr class="hover:bg-slate-50 transition border-b border-slate-100">
             <td class="p-2.5 text-center font-bold text-slate-400 text-xs">${index + 1}</td>
             <td class="p-2.5 font-extrabold text-sm ${deliveredClass}">
-              ${escapeHtml(o.customerName)}
+              ${escapeHtml(o.customerName)}<div class="text-[10px] text-emerald-700">Giao dự kiến: ${escapeHtml(formatDelivery(o.deliveryAt))}</div>
               ${o.customerPhone ? `<div class="text-[10px] text-slate-400 font-normal">SĐT: ${escapeHtml(o.customerPhone)}</div>` : ''}
             </td>
-            <td class="p-2.5 text-xs font-bold text-slate-600">${o.customerClass ? escapeHtml(o.customerClass) : '<span class="text-slate-300">—</span>'}</td>
+            <td class="p-2.5 text-xs font-bold text-slate-600">${o.customerClass ? escapeHtml(orderClassLabel(o)) : '<span class="text-slate-300">—</span>'}</td>
             <td class="p-2.5 font-medium text-xs max-w-xs">
               ${escapeHtml(orderItemsLabel(o))}
               ${orderDepartments(o).map(d => `<span class="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 align-middle">${escapeHtml(d)}</span>`).join('')}
@@ -894,8 +863,8 @@ function renderAdminOrderList() {
             <div class="flex items-start space-x-2.5 min-w-0">
               <span class="w-6 h-6 rounded-full bg-slate-200/90 text-slate-700 font-extrabold text-[11px] flex items-center justify-center flex-shrink-0 mt-0.5">${index + 1}</span>
               <div class="min-w-0">
-                <div class="font-extrabold text-sm ${nameClass} truncate">${escapeHtml(o.customerName)}</div>
-                ${o.customerClass ? `<div class="text-[10px] font-bold text-sky-600 mt-0.5">${escapeHtml(o.customerClass)}</div>` : ''}
+                <div class="font-extrabold text-sm ${nameClass} truncate">${escapeHtml(o.customerName)}<div class="text-[10px] text-emerald-700">Giao dự kiến: ${escapeHtml(formatDelivery(o.deliveryAt))}</div></div>
+                ${o.customerClass ? `<div class="text-[10px] font-bold text-sky-600 mt-0.5">${escapeHtml(orderClassLabel(o))}</div>` : ''}
                 <div class="text-[11px] text-slate-500 mt-0.5">${escapeHtml(orderItemsLabel(o))}</div>
                 <div class="text-xs font-black text-emerald-600 mt-0.5">${formatMoney(o.amount)}</div>
               </div>
@@ -920,7 +889,7 @@ function groupOrdersByCustomer(paidOrders) {
     if (!map.has(key)) {
       map.set(key, {
         displayName: (o.customerName || '').trim(),
-        customerClass: o.customerClass || '',
+        customerClass: orderClassLabel(o) || '',
         customerPhone: o.customerPhone || '',
         orders: [],
         totalBooks: 0,
@@ -1001,7 +970,7 @@ function renderAdminCustomerTab(paidOrders) {
 function groupOrdersByClass(paidOrders) {
   const map = new Map();
   paidOrders.forEach(o => {
-    const key = (o.customerClass || '').trim() || 'Chưa khai báo lớp';
+    const key = orderClassLabel(o).trim() || 'Chưa khai báo lớp';
     if (!map.has(key)) {
       map.set(key, { className: key, students: new Set(), orders: [], totalBooks: 0, totalAmount: 0 });
     }
@@ -1050,7 +1019,7 @@ function renderAdminClassTab(paidOrders) {
           ${students.map(o => `
             <div class="flex items-center justify-between gap-2 px-3.5 py-2">
               <div class="min-w-0">
-                <span class="text-xs font-extrabold text-slate-900">${escapeHtml(o.customerName)}</span>
+                <span class="text-xs font-extrabold text-slate-900">${escapeHtml(o.customerName)}<div class="text-[10px] text-emerald-700">Giao dự kiến: ${escapeHtml(formatDelivery(o.deliveryAt))}</div></span>
                 <span class="text-[11px] text-slate-500"> — ${escapeHtml(orderItemsLabel(o))}</span>
               </div>
               <div class="flex items-center space-x-2 flex-shrink-0">
@@ -1072,61 +1041,22 @@ function renderAdminClassTab(paidOrders) {
 /** TAB THEO KHOA — list giáo trình cần thiết của từng khoa kèm số lượng đã đặt */
 function renderAdminDepartmentTab(stats) {
   const container = document.getElementById('adminDepartmentList');
-  const countEl = document.getElementById('adminDepartmentCount');
   if (!container) return;
-
   const departments = getAllDepartments();
-  if (countEl) countEl.innerText = `${departments.length} khoa`;
-
-  const summaryById = {};
-  (stats.bookSummary || []).forEach(b => { summaryById[b.id] = b; });
-
+  document.getElementById('adminDepartmentCount').innerText = `${departments.length} khoa`;
   container.innerHTML = departments.map(dept => {
-    const booksInDept = allBooks.filter(b => (b.department || 'Khoa CNTT') === dept);
-    const deptBooks = booksInDept.length > 0 ? booksInDept : [];
-    const deptOrdered = deptBooks.reduce((s, b) => s + ((summaryById[b.id]?.totalQuantity) || 0), 0);
-    const deptRevenue = deptBooks.reduce((s, b) => s + ((summaryById[b.id]?.totalRevenue) || 0), 0);
-
-    return `
-      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        <div class="flex items-center justify-between gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100 px-3.5 py-2.5">
-          <div class="flex items-center space-x-2 min-w-0">
-            <i data-lucide="graduation-cap" class="w-4 h-4 text-emerald-700 flex-shrink-0"></i>
-            <span class="font-black text-sm text-slate-900 truncate">${escapeHtml(dept)}</span>
-            <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full whitespace-nowrap">${deptBooks.length} sách</span>
-          </div>
-          <div class="text-[10px] font-bold text-slate-500 whitespace-nowrap">
-            Đã đặt: <span class="text-emerald-700">${deptOrdered} cuốn</span> · ${formatMoney(deptRevenue)}
-          </div>
-        </div>
-
-        ${deptBooks.length === 0 ? `
-          <div class="p-4 text-center text-xs text-slate-400">Chưa có sách nào thuộc khoa này — thêm trong tab "Quản lý sách".</div>
-        ` : `
-        <div class="divide-y divide-slate-100">
-          ${deptBooks.map((b, i) => {
-            const s = summaryById[b.id];
-            return `
-              <div class="flex items-center justify-between gap-2 px-3.5 py-2.5">
-                <div class="min-w-0">
-                  <div class="text-xs font-extrabold text-slate-900">${i + 1}. ${escapeHtml(b.title)}</div>
-                  <div class="text-[10px] text-slate-400 font-semibold">
-                    ${formatMoney(b.price)}/cuốn
-                    ${(b.classes || []).length ? ` · Lớp: ${b.classes.map(escapeHtml).join(', ')}` : ''}
-                  </div>
-                </div>
-                <div class="flex-shrink-0 text-right">
-                  <div class="text-sm font-black ${s && s.totalQuantity > 0 ? 'text-emerald-600' : 'text-slate-300'}">${s?.totalQuantity || 0} cuốn</div>
-                  <div class="text-[9px] text-slate-400 font-semibold">${formatMoney(s?.totalRevenue || 0)}</div>
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>`}
-      </div>
-    `;
+    const classes = getClassesForDepartment(dept);
+    const orders = (stats.allOrders || []).filter(o => o.status === 'PAID' && o.customerDepartment === dept);
+    const quantity = orders.reduce((sum, o) => sum + orderBookCount(o), 0);
+    return `<section class="bg-white border rounded-2xl p-4 space-y-3">
+      <h4 class="font-bold">${escapeHtml(dept)} <span class="text-xs text-emerald-700">Đã đặt: ${quantity} cuốn · ${formatMoney(orders.reduce((sum, o) => sum + o.amount, 0))}</span></h4>
+      ${classes.length ? classes.map(c => {
+        const books = allBooks.filter(b => c.bookIds.includes(b.id));
+        return `<div class="border-t pt-2"><h5 class="text-sm font-bold text-sky-700">${escapeHtml(c.name)} · ${books.length} sách cần học</h5>
+          <p class="text-xs text-slate-600">${books.length ? books.map(b => escapeHtml(b.title)).join(' · ') : 'Chưa thiết lập danh sách sách cho lớp.'}</p></div>`;
+      }).join('') : '<p class="text-xs text-slate-400">Chưa có lớp.</p>'}
+    </section>`;
   }).join('');
-  lucide.createIcons();
 }
 
 /** TAB QUẢN LÝ — danh mục giáo trình + danh sách khoa/lớp */
@@ -1143,14 +1073,14 @@ function renderAdminManageTab() {
   const mobileList = document.getElementById('adminBooksMobileList');
 
   const rows = allBooks.map(b => {
-    const classesText = (b.classes || []).length ? b.classes.map(escapeHtml).join(', ') : '<span class="text-slate-300">—</span>';
+    const classesText = classesUsingBook(b.id).map(c => escapeHtml(classLabel(c))).join(', ') || '<span class="text-slate-300">Chưa lớp nào sử dụng</span>';
     const meta = [escapeHtml(b.author || ''), escapeHtml(b.year || ''), b.pages ? `${b.pages} trang` : ''].filter(Boolean).join(' · ');
     return { b, classesText, meta };
   });
 
   if (tbody) {
     tbody.innerHTML = rows.length === 0
-      ? `<tr><td colspan="6" class="p-4 text-center text-slate-400">Chưa có sách nào — bấm "Thêm sách" để bắt đầu</td></tr>`
+      ? `<tr><td colspan="5" class="p-4 text-center text-slate-400">Chưa có sách nào — bấm "Thêm sách" để bắt đầu</td></tr>`
       : rows.map(({ b, classesText, meta }) => `
         <tr class="hover:bg-slate-50 transition">
           <td class="p-2.5">
@@ -1159,9 +1089,6 @@ function renderAdminManageTab() {
           <td class="p-2.5">
             <div class="font-extrabold text-slate-900">${escapeHtml(b.title)}</div>
             ${meta ? `<div class="text-[10px] text-slate-400">${meta}</div>` : ''}
-          </td>
-          <td class="p-2.5">
-            <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">${escapeHtml(b.department || 'Khoa CNTT')}</span>
           </td>
           <td class="p-2.5 text-[11px] text-slate-600 max-w-[160px]">${classesText}</td>
           <td class="p-2.5 text-right font-black text-emerald-600 whitespace-nowrap">${formatMoney(b.price)}</td>
@@ -1182,14 +1109,13 @@ function renderAdminManageTab() {
   if (mobileList) {
     mobileList.innerHTML = rows.length === 0
       ? `<div class="p-4 text-center text-xs text-slate-400">Chưa có sách nào — bấm "Thêm sách" để bắt đầu</div>`
-      : rows.map(({ b, meta }) => `
+      : rows.map(({ b, meta, classesText }) => `
         <div class="p-3 flex items-center gap-2.5">
           ${bookCoverThumb(b, 'w-9 h-12 rounded-lg border border-slate-200 flex-shrink-0')}
           <div class="min-w-0 flex-1">
             <div class="text-xs font-extrabold text-slate-900 truncate">${escapeHtml(b.title)}</div>
             <div class="text-[10px] text-slate-400 mt-0.5">
-              <span class="font-bold text-emerald-600">${escapeHtml(b.department || 'Khoa CNTT')}</span>
-              ${(b.classes || []).length ? ` · ${b.classes.map(escapeHtml).join(', ')}` : ''}
+${classesText}
               ${meta ? ` · ${meta}` : ''}
             </div>
             <div class="text-xs font-black text-emerald-600 mt-0.5">${formatMoney(b.price)}</div>
@@ -1205,9 +1131,7 @@ function renderAdminManageTab() {
   // 2. Chips danh sách Khoa & Lớp
   renderSettingsChips();
 
-  // 3. Datalist khoa trong form sách
-  const dl = document.getElementById('deptDatalist');
-  if (dl) dl.innerHTML = getAllDepartments().map(d => `<option value="${escapeHtml(d)}"></option>`).join('');
+  renderClassBookEditor();
 
   lucide.createIcons();
 }
@@ -1231,9 +1155,10 @@ function renderSettingsChips() {
     ? departments.map(d => chipHtml(d, 'dept')).join('')
     : `<span class="text-[11px] text-slate-400">Chưa có khoa nào</span>`;
 
-  const classes = currentSettings.classes || [];
+  document.getElementById('addClassDepartment').innerHTML = departments.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  const classes = XBookDomain.classes(currentSettings.classes, departments);
   classWrap.innerHTML = classes.length
-    ? classes.map(c => chipHtml(c, 'class')).join('')
+    ? classes.map(c => chipHtml(`${c.department} / ${c.name}`, 'class')).join('')
     : `<span class="text-[11px] text-slate-400">Chưa có lớp nào — hãy bổ sung tên lớp tại đây</span>`;
 
   lucide.createIcons();
@@ -1249,6 +1174,11 @@ async function saveSettingsPatch(patch) {
   const data = await res.json();
   if (!data.success) throw new Error(data.message || 'Không lưu được cài đặt');
   currentSettings = { ...currentSettings, ...data.settings };
+  renderDepartmentChips();
+  renderClassFilter();
+  populateClassDatalist();
+  renderBooks();
+  renderClassBookEditor();
   return data.settings;
 }
 
@@ -1272,7 +1202,7 @@ async function handleRemoveChip(type, name) {
     if (type === 'dept') {
       await saveSettingsPatch({ departments: (currentSettings.departments || []).filter(d => d !== name) });
     } else {
-      await saveSettingsPatch({ classes: (currentSettings.classes || []).filter(c => c !== name) });
+      await saveSettingsPatch({ classes: XBookDomain.classes(currentSettings.classes, currentSettings.departments).filter(c => `${c.department} / ${c.name}` !== name) });
     }
     renderSettingsChips();
     renderDepartmentChips();
@@ -1287,14 +1217,51 @@ async function handleAddClass(event) {
   const input = document.getElementById('addClassInput');
   const name = input.value.trim();
   if (!name) return;
-  const classes = [...new Set([...(currentSettings.classes || []), name])];
+  const department = document.getElementById('addClassDepartment').value;
+  const classes = XBookDomain.classes([...(currentSettings.classes || []), { name, department, bookIds: [] }], currentSettings.departments);
   try {
     await saveSettingsPatch({ classes });
     input.value = '';
     renderSettingsChips();
+    renderClassBookEditor();
     renderClassFilter();
     populateClassDatalist();
   } catch (e) { alert("Lỗi: " + e.message); }
+}
+
+// Each class owns a curriculum list; a global book can be used across any faculties.
+function renderClassBookEditor() {
+  const select = document.getElementById('classBookEditorSelect');
+  if (!select) return;
+  const previous = select.value;
+  select.innerHTML = '<option value="">Chọn khoa / lớp để thiết lập sách</option>' + catalogClasses().map(c =>
+    `<option value="${escapeHtml(XBookDomain.classKey(c))}">${escapeHtml(classLabel(c))}</option>`).join('');
+  select.value = previous;
+  renderClassBookChoices();
+}
+function renderClassBookChoices() {
+  const select = document.getElementById('classBookEditorSelect');
+  const entry = catalogClasses().find(c => XBookDomain.classKey(c) === select.value);
+  const choices = document.getElementById('classBookChoices');
+  document.getElementById('saveClassBooksButton').disabled = !entry;
+  choices.innerHTML = !entry ? '<p class="text-xs text-slate-400">Hãy chọn lớp ở trên.</p>' : !allBooks.length ? '<p class="text-xs text-slate-400">Hãy thêm sách vào danh mục chung trước.</p>' : allBooks.map(b =>
+    `<label class="flex items-center gap-2 text-xs p-2 rounded-lg hover:bg-slate-50"><input type="checkbox" value="${escapeHtml(b.id)}" ${entry.bookIds.includes(b.id) ? 'checked' : ''}><span>${escapeHtml(b.title)} · ${formatMoney(b.price)}</span></label>`).join('');
+}
+async function saveClassBooks(event) {
+  event.preventDefault();
+  const key = document.getElementById('classBookEditorSelect').value;
+  if (!catalogClasses().some(c => XBookDomain.classKey(c) === key)) return;
+  const bookIds = [...document.querySelectorAll('#classBookChoices input:checked')].map(input => input.value);
+  const classes = catalogClasses().map(c => XBookDomain.classKey(c) === key ? { ...c, bookIds } : c);
+  const button = document.getElementById('saveClassBooksButton');
+  button.disabled = true;
+  try {
+    await saveSettingsPatch({ classes });
+    renderAdminManageTab();
+    if (window.currentAdminStats) await refreshAdminData();
+    alert('Đã lưu danh sách sách cần học của lớp.');
+  } catch (error) { alert('Lỗi: ' + error.message); }
+  finally { renderClassBookChoices(); }
 }
 
 // ============================ CRUD GIÁO TRÌNH ============================
@@ -1315,8 +1282,6 @@ function openBookForm(bookId) {
     document.getElementById('formBookPrice').value = book.price;
     document.getElementById('formBookPages').value = book.pages || '';
     document.getElementById('formBookYear').value = book.year || '';
-    document.getElementById('formBookDepartment').value = book.department || '';
-    document.getElementById('formBookClasses').value = (book.classes || []).join(', ');
     document.getElementById('formBookAuthor').value = book.author || '';
     document.getElementById('formBookCover').value = book.cover || '';
     document.getElementById('formBookDescription').value = book.description || '';
@@ -1326,7 +1291,7 @@ function openBookForm(bookId) {
     updateCoverPreview();
   }
 
-  renderAdminManageTab(); // cập nhật datalist khoa
+  renderAdminManageTab();
   openModal('bookFormModal');
 }
 
@@ -1385,8 +1350,6 @@ async function handleBookFormSubmit(event) {
     price: Number(document.getElementById('formBookPrice').value) || 0,
     pages: Number(document.getElementById('formBookPages').value) || 0,
     year: (document.getElementById('formBookYear')?.value || '').trim(),
-    department: document.getElementById('formBookDepartment').value.trim(),
-    classes: document.getElementById('formBookClasses').value,
     author: document.getElementById('formBookAuthor').value.trim(),
     cover: document.getElementById('formBookCover').value.trim(),
     description: document.getElementById('formBookDescription').value.trim()
@@ -1608,7 +1571,7 @@ async function exportToExcel() {
         idx + 1,
         `XB${o.orderCode}`,
         o.customerName || '',
-        o.customerClass || '',
+        orderClassLabel(o) || '',
         depts.join(', '),
         o.customerPhone || '',
         orderItemsLabel(o),
@@ -1636,34 +1599,19 @@ async function exportToExcel() {
     if (paidOrders.length > 0) ws1['!autofilter'] = { ref: `A4:L${4 + paidOrders.length}` };
     XLSX.utils.book_append_sheet(wb, ws1, "Danh Sách Phát Sách");
 
-    // ========== SHEET 2: TỔNG HỢP BÁO IN THEO KHOA ==========
+    // Global print totals: count each book once, regardless of how many classes use it.
     const sheet2Rows = [
-      ["BẢNG TỔNG HỢP SỐ LƯỢNG GIÁO TRÌNH THEO KHOA (BÁO IN)"],
-      [`Thời gian xuất: ${exportTime}`],
-      [],
-      ["Khoa", "Tên Giáo Trình", "Đơn Giá (đ)", "Tổng Số Cuốn Cần In", "Tổng Doanh Thu (đ)"]
+      ["BẢNG TỔNG HỢP SỐ LƯỢNG SÁCH (BÁO IN)"],
+      [`Thời gian xuất: ${exportTime}`], [],
+      ["Tên Giáo Trình", "Đơn Giá (đ)", "Tổng Số Cuốn Cần In", "Tổng Doanh Thu (đ)"]
     ];
-
-    const summarySorted = (stats.bookSummary || []).slice().sort((a, b) => {
-      const d = (a.department || '').localeCompare(b.department || '', 'vi');
-      return d !== 0 ? d : compareByLastName(a.title, b.title);
-    });
-    summarySorted.forEach(b => {
-      sheet2Rows.push([
-        b.department || 'Khoa CNTT',
-        b.title,
-        Number(b.price) || 0,
-        Number(b.totalQuantity) || 0,
-        Number(b.totalRevenue) || 0
-      ]);
-    });
-    sheet2Rows.push([]);
-    sheet2Rows.push(["TỔNG CỘNG", "", "", stats.totalBooksPaid || 0, stats.totalRevenue || 0]);
-
+    const summarySorted = (stats.bookSummary || []).slice().sort((a, b) => a.title.localeCompare(b.title, 'vi'));
+    summarySorted.forEach(b => sheet2Rows.push([b.title, Number(b.price) || 0, Number(b.totalQuantity) || 0, Number(b.totalRevenue) || 0]));
+    sheet2Rows.push([], ["TỔNG CỘNG", "", stats.totalBooksPaid || 0, stats.totalRevenue || 0]);
     const ws2 = XLSX.utils.aoa_to_sheet(sheet2Rows);
-    ws2['!cols'] = [{ wch: 18 }, { wch: 38 }, { wch: 15 }, { wch: 22 }, { wch: 20 }];
-    if (summarySorted.length > 0) ws2['!autofilter'] = { ref: `A4:E${4 + summarySorted.length}` };
-    XLSX.utils.book_append_sheet(wb, ws2, "Tổng Hợp Theo Khoa");
+    ws2['!cols'] = [{ wch: 38 }, { wch: 15 }, { wch: 22 }, { wch: 20 }];
+    if (summarySorted.length > 0) ws2['!autofilter'] = { ref: `A4:D${4 + summarySorted.length}` };
+    XLSX.utils.book_append_sheet(wb, ws2, "Tổng Hợp Sách");
 
     // ========== SHEET 3: THEO TÊN NGƯỜI MUA (GỘP NHIỀU CUỐN) ==========
     const customerGroups = groupOrdersByCustomer(paidOrders);
@@ -1712,7 +1660,7 @@ async function exportToExcel() {
           idx + 1,
           `XB${o.orderCode}`,
           o.customerName || '',
-          o.customerClass || '',
+          orderClassLabel(o) || '',
           o.customerPhone || '',
           orderItemsLabel(o),
           orderBookCount(o),

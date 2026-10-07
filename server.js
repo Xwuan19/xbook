@@ -18,6 +18,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { db } = require('./database');
+const domain = require('./public/domain');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -165,7 +166,7 @@ app.get('/api/courses', async (req, res) => {
  */
 app.post('/api/orders/create-payment-link', async (req, res) => {
   try {
-    const { bookId, courseId, quantity, items: rawItems, customerName, customerClass, customerPhone, note } = req.body;
+    const { bookId, courseId, quantity, items: rawItems, customerName, customerClass, customerDepartment, customerPhone, note } = req.body;
     
     // Ràng buộc bắt buộc họ và tên đầy đủ (tối thiểu 2 từ)
     const nameWords = (customerName || '').trim().split(/\s+/).filter(w => w.length > 0);
@@ -183,6 +184,13 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
         success: false,
         message: settings.closeMessage || "Đã chốt danh sách mua sách đợt này. Tạm dừng nhận đăng ký mới!"
       });
+    }
+
+    let selectedClass = null;
+    if (customerClass) {
+      const matches = settings.classes.filter(c => c.name === customerClass && (!customerDepartment || c.department === customerDepartment));
+      if (matches.length !== 1) return res.status(400).json({ success: false, message: 'Vui lòng chọn đúng khoa và lớp của bạn.' });
+      selectedClass = matches[0];
     }
 
     // Hỗ trợ 2 định dạng:
@@ -203,7 +211,6 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
       items.push({
         bookId: book.id,
         bookTitle: book.title,
-        department: book.department || '',
         quantity: qty,
         unitPrice: book.price
       });
@@ -243,9 +250,11 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
       quantity: totalQuantity,
       amount: totalAmount,
       customerName: customerName || 'Bạn cùng lớp',
-      customerClass: customerClass || '',
+      customerClass: selectedClass?.name || '',
+      customerDepartment: selectedClass?.department || '',
       customerPhone: customerPhone || '',
       note: note || '',
+      deliveryDate: settings.deliveryDate,
       checkoutUrl: paymentResponse.checkoutUrl,
       qrCode: paymentResponse.qrCode
     });
@@ -262,6 +271,8 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
         items: order.items,
         customerName: order.customerName,
         customerClass: order.customerClass,
+        customerDepartment: order.customerDepartment,
+        deliveryAt: order.deliveryAt,
         checkoutUrl: paymentResponse.checkoutUrl,
         qrCode: paymentResponse.qrCode,
         accountName: paymentResponse.accountName || "LE VAN QUYEN - XBOOK",
@@ -338,6 +349,8 @@ app.get('/api/orders/:orderCode', async (req, res) => {
         amount: order.amount,
         customerName: order.customerName,
         customerClass: order.customerClass,
+        customerDepartment: order.customerDepartment,
+        deliveryAt: order.deliveryAt,
         paidAt: order.paidAt
       }
     });
@@ -552,12 +565,6 @@ app.post('/api/admin/toggle-delivered', requireAdminAuth, async (req, res) => {
  * 9. QUẢN TRỊ GIÁO TRÌNH: THÊM / SỬA / XÓA (PHÂN LOẠI KHOA & LỚP)
  */
 function normalizeBookPayload(body) {
-  const classes = Array.isArray(body.classes)
-    ? body.classes
-    : String(body.classes || '')
-        .split(/[,;\n]+/)
-        .map(s => s.trim())
-        .filter(Boolean);
   return {
     title: (body.title || '').trim(),
     price: Number(body.price) || 0,
@@ -565,9 +572,7 @@ function normalizeBookPayload(body) {
     pages: Number(body.pages) || 0,
     year: (body.year || '').trim(),
     description: (body.description || '').trim(),
-    cover: (body.cover || '').trim(),
-    department: (body.department || '').trim() || 'Khoa CNTT',
-    classes
+    cover: (body.cover || '').trim()
   };
 }
 
@@ -581,7 +586,7 @@ app.post('/api/admin/books', requireAdminAuth, async (req, res) => {
       return res.status(400).json({ success: false, message: "Vui lòng nhập giá sách hợp lệ!" });
     }
     const book = await db.createBook(payload);
-    console.log(` [ADMIN] Đã thêm sách: "${book.title}" (${book.department})`);
+    console.log(` [ADMIN] Đã thêm sách: "${book.title}"`);
     res.json({ success: true, book });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -591,9 +596,10 @@ app.post('/api/admin/books', requireAdminAuth, async (req, res) => {
 app.put('/api/admin/books/:id', requireAdminAuth, async (req, res) => {
   try {
     const payload = normalizeBookPayload(req.body || {});
+    if (!payload.title || payload.price <= 0) return res.status(400).json({ success: false, message: 'Vui lòng nhập tên và giá sách hợp lệ.' });
     const book = await db.updateBook(req.params.id, payload);
     if (!book) return res.status(404).json({ success: false, message: "Không tìm thấy sách!" });
-    console.log(` [ADMIN] Đã cập nhật sách: "${book.title}" (${book.department})`);
+    console.log(` [ADMIN] Đã cập nhật sách: "${book.title}"`);
     res.json({ success: true, book });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -639,16 +645,33 @@ app.put('/api/admin/settings', requireAdminAuth, async (req, res) => {
       patch.departments = req.body.departments.map(d => String(d).trim()).filter(Boolean);
     }
     if (Array.isArray(req.body.classes)) {
-      patch.classes = req.body.classes.map(c => String(c).trim()).filter(Boolean);
+      if (req.body.classes.some(c => typeof c !== 'object' || !c || typeof c.name !== 'string' || !c.name.trim() || typeof c.department !== 'string' || !c.department.trim() || !Array.isArray(c.bookIds) || c.bookIds.some(id => typeof id !== 'string'))) {
+        return res.status(400).json({ success: false, message: 'Mỗi lớp cần có tên, khoa và danh sách bookIds.' });
+      }
+      patch.classes = domain.classes(req.body.classes, req.body.departments || (await db.getSettings()).departments);
+      const departments = patch.departments || (await db.getSettings()).departments;
+      if (patch.classes.some(c => !departments.includes(c.department))) return res.status(400).json({ success: false, message: 'Lớp phải thuộc một khoa đã khai báo.' });
     }
     if (req.body.closeMessage !== undefined) {
       patch.closeMessage = String(req.body.closeMessage);
     }
     if (req.body.deliveryDate !== undefined) {
       patch.deliveryDate = String(req.body.deliveryDate || '').trim();
+      if (patch.deliveryDate && (!/^\d{4}-\d{2}-\d{2}$/.test(patch.deliveryDate) || Number.isNaN(Date.parse(patch.deliveryDate)) || new Date(patch.deliveryDate).toISOString().slice(0, 10) !== patch.deliveryDate)) return res.status(400).json({ success: false, message: 'Ngày giao không hợp lệ.' });
     }
     if (req.body.deliveryNote !== undefined) {
       patch.deliveryNote = String(req.body.deliveryNote).trim();
+    }
+    const current = await db.getSettings();
+    const departments = patch.departments || current.departments;
+    const classes = patch.classes || domain.classes(current.classes, current.departments);
+    const books = await db.getAllBooks();
+    if (classes.some(c => !departments.includes(c.department))) {
+      return res.status(400).json({ success: false, message: 'Khoa đang có lớp. Hãy xóa hoặc chuyển lớp trước khi xóa khoa.' });
+    }
+    const bookIds = new Set(books.map(b => b.id));
+    if (patch.classes && classes.some(c => c.bookIds.some(id => !bookIds.has(id)))) {
+      return res.status(400).json({ success: false, message: 'Danh sách sách của lớp chứa mã sách không tồn tại.' });
     }
     const updated = await db.updateSettings(patch);
     res.json({ success: true, settings: updated });

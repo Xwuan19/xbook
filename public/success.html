@@ -2,6 +2,9 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Thanh toán thành công - XBook</title>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -29,19 +32,11 @@
       </div>
       <div class="flex justify-between">
         <span class="text-slate-500">Trạng thái:</span>
-        <span class="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">Đã kích hoạt</span>
+        <span class="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">Đang kiểm tra</span>
       </div>
     </div>
 
-    <a 
-      id="downloadButton" 
-      href="#" 
-      target="_blank" 
-      class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/25 transition flex items-center justify-center space-x-2 text-sm"
-    >
-      <i data-lucide="download" class="w-4 h-4"></i>
-      <span>TẢI TÀI LIỆU NGAY</span>
-    </a>
+    <p class="text-sm text-emerald-700 font-semibold" id="deliveryDisplay">Đang lấy lịch giao sách...</p>
 
     <a href="/" class="block mt-4 text-xs font-semibold text-slate-400 hover:text-slate-600 transition">
       ← Quay lại trang chủ XBook
@@ -50,6 +45,7 @@
 
   <script>
     lucide.createIcons();
+    const statusDisplay = document.querySelector('.text-emerald-600.font-bold');
     const urlParams = new URLSearchParams(window.location.search);
     const orderCode = urlParams.get('orderCode');
     
@@ -59,10 +55,11 @@
         .then(res => res.json())
         .then(res => {
           if (res.success && res.data) {
+            statusDisplay.innerText = res.data.status === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán';
             document.getElementById('courseTitleDisplay').innerText = res.data.bookTitle || res.data.courseTitle || '';
-            if (res.data.downloadUrl) {
-              document.getElementById('downloadButton').href = res.data.downloadUrl;
-            }
+            document.getElementById('deliveryDisplay').innerText = res.data.deliveryAt
+              ? 'Giao dự kiến: ' + new Date(res.data.deliveryAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + ' (giờ VN)'
+              : 'Đơn cũ chưa có lịch giao. Vui lòng liên hệ quản trị.';
           }
         })
         .catch(console.error);
