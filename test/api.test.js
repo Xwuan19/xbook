@@ -40,6 +40,10 @@ test('API supports global books shared across faculties, class curricula and imm
     // Ambiguous names must not pick a random faculty.
     assert.equal((await request('/api/orders/create-payment-link', 'POST', body)).status, 400);
     const before = Date.now();
+    assert.equal((await request('/api/orders/create-payment-link', 'POST', { ...body, customerDepartment: departments[1], deliveryDate: 'invalid-date' })).status, 400);
+    const customOrder = await request('/api/orders/create-payment-link', 'POST', { ...body, customerDepartment: departments[1], deliveryDate: '2032-12-25' });
+    assert.equal(customOrder.status, 200);
+    assert.equal(customOrder.data.data.deliveryAt, '2032-12-24T17:00:00.000Z');
     const created = await request('/api/orders/create-payment-link', 'POST', { ...body, customerDepartment: departments[1] });
     assert.equal(created.status, 200);
     assert.equal(created.data.data.customerDepartment, departments[1]);

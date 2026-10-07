@@ -52,5 +52,9 @@ test('UI filters by curriculum, edits class lists and has no book ownership fiel
   const options = [...window.document.querySelectorAll('#formCustomerClass option')];
   assert.ok(options.some(o => o.textContent === 'Business / A'));
   assert.ok(options.some(o => o.textContent === 'IT / A'));
+  assert.ok(window.document.getElementById('formCustomerDeliveryDate') !== null);
+  window.toggleCartBook('shared');
+  window.openCheckoutModal();
+  assert.ok(window.document.getElementById('formCustomerDeliveryDate').min.length > 0);
   dom.window.close();
 });

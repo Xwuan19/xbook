@@ -166,9 +166,14 @@ app.get('/api/courses', async (req, res) => {
  */
 app.post('/api/orders/create-payment-link', async (req, res) => {
   try {
-    const { bookId, courseId, quantity, items: rawItems, customerName, customerClass, customerDepartment, customerPhone, note } = req.body;
+    const { bookId, courseId, quantity, items: rawItems, customerName, customerClass, customerDepartment, customerPhone, note, deliveryDate } = req.body;
     
-    // Ràng buộc bắt buộc họ và tên đầy đủ (tối thiểu 2 từ)
+    if (deliveryDate) {
+      const cleanDate = String(deliveryDate).trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate) || Number.isNaN(Date.parse(cleanDate)) || new Date(cleanDate).toISOString().slice(0, 10) !== cleanDate) {
+        return res.status(400).json({ success: false, message: 'Ngày nhận sách không hợp lệ!' });
+      }
+    }
     const nameWords = (customerName || '').trim().split(/\s+/).filter(w => w.length > 0);
     if (nameWords.length < 2) {
       return res.status(400).json({
@@ -254,7 +259,7 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
       customerDepartment: selectedClass?.department || '',
       customerPhone: customerPhone || '',
       note: note || '',
-      deliveryDate: settings.deliveryDate,
+      deliveryDate: (deliveryDate && String(deliveryDate).trim()) || settings.deliveryDate || '',
       checkoutUrl: paymentResponse.checkoutUrl,
       qrCode: paymentResponse.qrCode
     });

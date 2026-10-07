@@ -419,6 +419,22 @@ function openCheckoutModal() {
     }
   }
 
+  // Khởi tạo ngày khách muốn nhận sách (tối thiểu từ ngày mai)
+  const dateInput = document.getElementById('formCustomerDeliveryDate');
+  if (dateInput) {
+    const tomorrow = new Date(Date.now() + 86400000);
+    const yyyy = tomorrow.getFullYear();
+    const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const dd = String(tomorrow.getDate()).padStart(2, '0');
+    const minDateStr = `${yyyy}-${mm}-${dd}`;
+    dateInput.min = minDateStr;
+    if (!dateInput.value || dateInput.value < minDateStr) {
+      dateInput.value = (currentSettings.deliveryDate && currentSettings.deliveryDate >= minDateStr)
+        ? currentSettings.deliveryDate
+        : minDateStr;
+    }
+  }
+
   renderCheckoutItems();
   openModal('checkoutModal');
 }
@@ -496,6 +512,20 @@ async function handleCreatePayment(event) {
     return;
   }
 
+  // Khách hàng chọn ngày muốn nhận sách
+  const deliveryDateInput = document.getElementById('formCustomerDeliveryDate');
+  const deliveryDate = (deliveryDateInput?.value || '').trim();
+  if (!deliveryDate) {
+    alert("Vui lòng chọn ngày muốn nhận sách!");
+    deliveryDateInput?.focus();
+    return;
+  }
+  if (deliveryDateInput?.min && deliveryDate < deliveryDateInput.min) {
+    alert("Ngày nhận sách phải từ ngày mai trở đi!");
+    deliveryDateInput?.focus();
+    return;
+  }
+
   // Lưu lại để lần sau điền nhanh
   localStorage.setItem('xbook_last_customer', JSON.stringify({ name: customerName, classKey: selectedClass ? XBookDomain.classKey(selectedClass) : '', phone: customerPhone }));
 
@@ -512,7 +542,7 @@ async function handleCreatePayment(event) {
     const res = await fetch('/api/orders/create-payment-link', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items, customerName, customerClass, customerDepartment, customerPhone })
+      body: JSON.stringify({ items, customerName, customerClass, customerDepartment, customerPhone, deliveryDate })
     });
 
     const result = await res.json();
