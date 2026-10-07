@@ -2,7 +2,16 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## ✨ Điểm mới (v1.3.2) — Lọc theo ngày & Quyết toán từng ngày
+## ✨ Điểm mới (v1.3.3) — Thanh lọc ngày dùng chung + Tab “Quyết toán” riêng
+
+| Tính năng | Mô tả |
+|---|---|
+| 📌 **Thanh “Lọc theo ngày” luôn hiện** | Chuyển từ trong tab *Đơn hàng* lên **đầu Bảng Quản Lý** → thấy và dùng được ở **mọi tab** (Đơn hàng · Theo tên · Theo lớp · Theo khoa · Quyết toán · Quản lý sách). Luôn biết mình đang xem số liệu của khoảng ngày nào |
+| 🧮 **Tab “Quyết toán” riêng** | 4 thẻ tổng hợp: **Ngày có đơn · Đơn đã nộp · Sách đã bán · Tiền thực nhận**; bảng **từng ngày** có **thanh tỷ trọng doanh thu**, cột **TB/đơn**, dòng TỔNG CỘNG; **bấm một dòng để lọc đúng ngày đó** |
+| 🔗 **Liên kết nhanh** | Nút *“Xem quyết toán từng ngày”* ngay trên thanh lọc (nhảy sang tab Quyết toán); nút *“Xuất Excel khoảng này”* trong tab Quyết toán |
+| 🖱️ **Bắt sự kiện bằng delegation** | Các nút lọc/ngày dùng `data-*` + `addEventListener` (không còn `onclick` inline) → ổn định khi vùng đó được vẽ lại nhiều lần và **kiểm thử được thật** (bấm chip/ngày trong test) |
+
+## ✨ Điểm cũ (v1.3.2) — Lọc theo ngày & Quyết toán từng ngày
 
 | Tính năng | Mô tả |
 |---|---|
@@ -329,10 +338,10 @@ XBook đã có **Web App Manifest** (`/manifest.webmanifest`) + **Service Worker
 ## 📅 13. Lọc Theo Ngày & Quyết Toán Từng Ngày
 
 ### Cách dùng
-1. Mở **Bảng Quản Lý** → tab **Đơn hàng** → khối **“Lọc theo ngày”** ở trên cùng.
+1. Mở **Bảng Quản Lý** → khối **“Lọc theo ngày”** ngay trên thanh tab (hiện ở **mọi tab**).
 2. Chọn nhanh: **Hôm nay / Hôm qua / 7 ngày / 30 ngày**, hoặc nhập **Từ ngày → Đến ngày** (nhập ngược sẽ tự đảo).
 3. Chọn mốc thời gian: **Ngày đặt hàng** (khách bấm mua) hay **Ngày thanh toán** (tiền về tài khoản).
-4. Xem bảng **“Quyết toán theo từng ngày”** — bấm một dòng để lọc đúng ngày đó (tiện chốt sổ cuối ngày).
+4. Mở tab **“Quyết toán”** để xem 4 thẻ tổng hợp (Ngày có đơn · Đơn đã nộp · Sách đã bán · Tiền thực nhận) và bảng **“Quyết toán theo từng ngày”** (có thanh tỷ trọng + TB/đơn) — bấm một dòng để lọc đúng ngày đó (tiện chốt sổ cuối ngày).
 5. Bấm **Xuất Excel** để lấy file quyết toán của khoảng đang lọc.
 
 ### Chi tiết kỹ thuật
@@ -340,4 +349,5 @@ XBook đã có **Web App Manifest** (`/manifest.webmanifest`) + **Service Worker
 - Ngày được tính theo **giờ địa phương của máy** (`YYYY-MM-DD`), không lệch múi giờ khi đối soát.
 - Bộ lọc chạy **hoàn toàn ở client** trên dữ liệu `/api/admin/statistics` (không đổi API, không ảnh hưởng dữ liệu gốc).
 - Đơn **PENDING** không được tính vào doanh thu/quyết toán (chỉ tính đơn `PAID`); khi lọc theo *Ngày thanh toán*, đơn chưa trả tiền bị loại khỏi mọi danh sách.
-- Test tự động: `test/frontend.test.js` kiểm tra đủ 4 trường hợp (ngày đặt, ngày thanh toán, khoảng tùy chọn, khoảng rỗng) + bấm dòng để lọc/bỏ lọc.
+- Test tự động: `test/frontend.test.js` kiểm tra đủ 4 trường hợp (ngày đặt, ngày thanh toán, khoảng tùy chọn, khoảng rỗng), vị trí thanh lọc (ngoài mọi tab), tab Quyết toán + 4 thẻ tổng hợp, và **bấm thật** vào chip ngày / dòng ngày để lọc & bỏ lọc.
+- Thanh lọc và bảng quyết toán bắt sự kiện bằng **delegation** (`data-date-preset`, `data-date-basis`, `data-date-day`, `data-goto-settlement`) — không dùng `onclick` inline.

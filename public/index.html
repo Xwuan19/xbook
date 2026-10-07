@@ -538,6 +538,43 @@
           </div>
         </div>
 
+        <!-- LỌC THEO NGÀY ĐẶT HÀNG / NGÀY THANH TOÁN — HIỆN Ở MỌI TAB ĐỂ QUYẾT TOÁN TỪNG NGÀY -->
+        <div class="print:hidden mb-3 bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2.5">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1 flex-shrink-0">
+              <i data-lucide="calendar-range" class="w-3.5 h-3.5 text-emerald-600"></i> Lọc theo ngày
+            </span>
+            <div id="adminDatePresetChips" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <!-- Render động: Tất cả · Hôm nay · Hôm qua · 7 ngày · 30 ngày -->
+            </div>
+          </div>
+
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div class="flex items-center gap-2 flex-1 min-w-0">
+              <label class="flex items-center gap-1.5 flex-1 min-w-0">
+                <span class="text-[11px] font-bold text-slate-500 flex-shrink-0">Từ</span>
+                <input type="date" id="adminDateFromInput" onchange="handleAdminDateRangeInput()"
+                  class="flex-1 min-w-0 px-2 py-1.5 text-[11px] bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
+              </label>
+              <label class="flex items-center gap-1.5 flex-1 min-w-0">
+                <span class="text-[11px] font-bold text-slate-500 flex-shrink-0">Đến</span>
+                <input type="date" id="adminDateToInput" onchange="handleAdminDateRangeInput()"
+                  class="flex-1 min-w-0 px-2 py-1.5 text-[11px] bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
+              </label>
+            </div>
+            <div id="adminDateBasisChips" class="flex items-center gap-1.5 flex-shrink-0">
+              <!-- Render động: theo Ngày đặt hàng / Ngày thanh toán -->
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <p id="adminDateSummary" class="text-[11px] font-bold text-emerald-800"></p>
+            <button type="button" data-goto-settlement class="text-[11px] font-bold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-xl px-2.5 py-1.5 transition flex items-center gap-1 flex-shrink-0">
+              <i data-lucide="calculator" class="w-3.5 h-3.5"></i> Xem quyết toán từng ngày
+            </button>
+          </div>
+        </div>
+
         <!-- HÀNG 3: THANH TAB PHÂN LOẠI -->
         <div class="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pb-3 print:hidden" id="adminTabBar">
           <button onclick="switchAdminTab('orders')" data-tab="orders" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-emerald-600 text-white shadow-sm">
@@ -552,6 +589,9 @@
           <button onclick="switchAdminTab('department')" data-tab="department" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
             <i data-lucide="graduation-cap" class="w-3.5 h-3.5"></i><span>Theo khoa</span>
           </button>
+          <button onclick="switchAdminTab('settlement')" data-tab="settlement" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
+            <i data-lucide="calculator" class="w-3.5 h-3.5"></i><span>Quyết toán</span>
+          </button>
           <button onclick="switchAdminTab('manage')" data-tab="manage" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
             <i data-lucide="book-open" class="w-3.5 h-3.5"></i><span>Quản lý sách</span>
           </button>
@@ -563,64 +603,6 @@
 
         <!-- ============ TAB 1: ĐƠN HÀNG & TỔNG HỢP ============ -->
         <div id="adminTabOrders" class="admin-tab-panel">
-
-          <!-- 0. LỌC THEO NGÀY ĐẶT HÀNG / NGÀY THANH TOÁN (QUYẾT TOÁN TỪNG NGÀY) -->
-          <div class="print:hidden mb-4 bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2.5">
-            <div class="flex flex-wrap items-center gap-1.5">
-              <span class="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1 flex-shrink-0">
-                <i data-lucide="calendar-range" class="w-3.5 h-3.5 text-emerald-600"></i> Lọc theo ngày
-              </span>
-              <div id="adminDatePresetChips" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                <!-- Render động: Tất cả · Hôm nay · Hôm qua · 7 ngày · 30 ngày -->
-              </div>
-            </div>
-
-            <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-              <div class="flex items-center gap-2 flex-1 min-w-0">
-                <label class="flex items-center gap-1.5 flex-1 min-w-0">
-                  <span class="text-[11px] font-bold text-slate-500 flex-shrink-0">Từ</span>
-                  <input type="date" id="adminDateFromInput" onchange="handleAdminDateRangeInput()"
-                    class="flex-1 min-w-0 px-2 py-1.5 text-[11px] bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
-                </label>
-                <label class="flex items-center gap-1.5 flex-1 min-w-0">
-                  <span class="text-[11px] font-bold text-slate-500 flex-shrink-0">Đến</span>
-                  <input type="date" id="adminDateToInput" onchange="handleAdminDateRangeInput()"
-                    class="flex-1 min-w-0 px-2 py-1.5 text-[11px] bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
-                </label>
-              </div>
-              <div id="adminDateBasisChips" class="flex items-center gap-1.5 flex-shrink-0">
-                <!-- Render động: theo Ngày đặt hàng / Ngày thanh toán -->
-              </div>
-            </div>
-
-            <p id="adminDateSummary" class="text-[11px] font-bold text-emerald-800"></p>
-
-            <!-- QUYẾT TOÁN TỪNG NGÀY: bấm vào một ngày để lọc ngay ngày đó -->
-            <details class="group" open>
-              <summary class="cursor-pointer text-[11px] font-bold text-slate-600 select-none flex items-center gap-1">
-                <i data-lucide="table-2" class="w-3.5 h-3.5 text-emerald-600"></i>
-                Quyết toán theo từng ngày (bấm một dòng để lọc đúng ngày đó) ▾
-              </summary>
-              <div class="mt-2 border border-slate-200 rounded-2xl overflow-hidden bg-white">
-                <div class="max-h-56 overflow-y-auto">
-                  <table class="w-full text-left text-xs">
-                    <thead class="bg-slate-100 text-slate-700 sticky top-0 z-10">
-                      <tr>
-                        <th class="p-2 font-bold">Ngày</th>
-                        <th class="p-2 font-bold text-center w-16">Đơn</th>
-                        <th class="p-2 font-bold text-center w-16">Cuốn</th>
-                        <th class="p-2 font-bold text-right w-24">Doanh thu</th>
-                      </tr>
-                    </thead>
-                    <tbody id="adminDailyBreakdownBody" class="divide-y divide-slate-100">
-                      <tr><td colspan="4" class="p-3 text-center text-slate-400">Chưa có đơn nào đã thanh toán</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <p class="text-[10px] text-slate-400 mt-1">Chỉ tính đơn <strong>đã thanh toán</strong> — dùng để đối soát tiền về trong ngày.</p>
-            </details>
-          </div>
 
           <!-- 1. TỔNG HỢP SỐ LƯỢNG SÁCH CẦN NHẬP / IN (DANH MỤC CHUNG) -->
           <div class="mb-4">
@@ -734,6 +716,69 @@
           <div id="adminDepartmentList" class="space-y-3">
             <!-- Render động từ JS -->
           </div>
+        </div>
+
+        <!-- ============ TAB: QUYẾT TOÁN TỪNG NGÀY ============ -->
+        <div id="adminTabSettlement" class="admin-tab-panel hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+            <div class="min-w-0">
+              <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+                <i data-lucide="calculator" class="w-4 h-4 text-emerald-600"></i>
+                <span>Quyết toán theo từng ngày:</span>
+              </h4>
+              <p class="text-[11px] text-slate-400 mt-0.5">Chỉ tính đơn <strong>đã thanh toán</strong>. Bấm một dòng ngày để lọc đúng ngày đó (bấm lại để bỏ lọc).</p>
+            </div>
+            <button onclick="exportToExcel()" class="print:hidden px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm shadow-emerald-600/20 flex-shrink-0">
+              <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i>
+              <span>Xuất Excel khoảng này</span>
+            </button>
+          </div>
+
+          <!-- 4 THẺ TỔNG HỢP NHANH -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 text-center">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ngày có đơn</div>
+              <div id="settlementDayCount" class="text-xl font-black text-slate-800">0</div>
+            </div>
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 text-center">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Đơn đã nộp</div>
+              <div id="settlementOrders" class="text-xl font-black text-slate-800">0</div>
+            </div>
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 text-center">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Sách đã bán</div>
+              <div id="settlementBooks" class="text-xl font-black text-slate-800">0</div>
+            </div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-2.5 text-center">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Tiền thực nhận</div>
+              <div id="settlementAmount" class="text-xl font-black text-emerald-700">0 đ</div>
+            </div>
+          </div>
+
+          <!-- BẢNG QUYẾT TOÁN TỪNG NGÀY -->
+          <div class="border border-slate-200 rounded-2xl overflow-hidden bg-white">
+            <div class="max-h-[26rem] overflow-y-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100 text-slate-700 sticky top-0 z-10">
+                  <tr>
+                    <th class="p-2.5 font-bold">Ngày</th>
+                    <th class="p-2.5 font-bold text-center w-16">Đơn</th>
+                    <th class="p-2.5 font-bold text-center w-16">Cuốn</th>
+                    <th class="p-2.5 font-bold hidden sm:table-cell w-32">Tỷ trọng</th>
+                    <th class="p-2.5 font-bold text-right w-28">Doanh thu</th>
+                    <th class="p-2.5 font-bold text-right w-24 hidden sm:table-cell">TB / đơn</th>
+                  </tr>
+                </thead>
+                <tbody id="adminDailyBreakdownBody" class="divide-y divide-slate-100">
+                  <tr><td colspan="6" class="p-3 text-center text-slate-400">Chưa có đơn nào đã thanh toán</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <p class="text-[10px] text-slate-400 mt-2">
+            💡 Mẹo: chọn khoảng ngày ở thanh <strong>“Lọc theo ngày”</strong> phía trên (áp dụng cho cả tab Đơn hàng, Theo tên, Theo lớp, Theo khoa),
+            rồi bấm <strong>Xuất Excel khoảng này</strong> để lưu bảng quyết toán kèm danh sách phát sách của đúng khoảng đó.
+          </p>
         </div>
 
         <!-- ============ TAB 5: QUẢN LÝ SÁCH + DANH SÁCH KHOA / LỚP ============ -->

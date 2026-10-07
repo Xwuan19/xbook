@@ -1,12 +1,21 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.3.2 (Lọc theo ngày & Quyết toán từng ngày)
+## Phiên bản hiện tại: v1.3.3 (Thanh lọc ngày dùng chung + tab Quyết toán)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
 - **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
+
+## 0d. Điểm mới v1.3.3 (thanh lọc dùng chung + tab Quyết toán)
+
+- **Thanh “Lọc theo ngày”** được chuyển từ trong tab *Đơn hàng* lên **header Bảng Quản Lý** (ngay trên thanh tab) → hiện ở **mọi tab**; kèm dòng tóm tắt `📅 … — x đơn · y cuốn · z tiền` và nút *Xem quyết toán từng ngày*.
+- **Tab “Quyết toán”** mới: 4 thẻ (Ngày có đơn · Đơn đã nộp · Sách đã bán · Tiền thực nhận) + bảng theo ngày (thanh tỷ trọng doanh thu, TB/đơn, TỔNG CỘNG) + nút *Xuất Excel khoảng này*. Mọi số liệu ở tab này **theo đúng khoảng ngày đang lọc**.
+- **Delegation thay `onclick` inline**: `initAdminDelegatedEvents()` bắt sự kiện qua `data-date-preset`, `data-date-basis`, `data-date-day`, `data-goto-settlement`.
+  ⚠️ Bài học: `onclick` inline **không chạy trong jsdom** khi `runScripts: 'outside-only'` → các test bấm chip/dòng trước đây là no-op (pass giả). Nay đã bấm thật và kiểm chứng.
+- `initApp()` được gọi thêm khi `document.readyState !== 'loading'` → an toàn nếu app.js nạp muộn/defer.
+- `public/sw.js`: **bump CACHE_NAME v3 → v4** (quy tắc: đổi file tĩnh thì phải tăng để máy đã cài PWA nhận bản mới).
 
 ## 0c. Điểm mới v1.3.2 (lọc theo ngày — quyết toán từng ngày)
 
@@ -94,6 +103,10 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.3.3**:
+  - **Mục tiêu**: Làm bộ lọc theo ngày **dễ thấy & dễ dùng hơn** để quyết toán từng ngày (người dùng phản hồi chưa thấy vì nó nằm sâu trong tab Đơn hàng).
+  - **Giải pháp**: đưa thanh lọc lên header (mọi tab), thêm tab *Quyết toán* với 4 thẻ tổng hợp + bảng ngày có thanh tỷ trọng/TB-đơn + nút xuất Excel theo khoảng; chuyển chip/ngày sang event delegation; `initApp()` chạy khi DOM đã sẵn sàng; bump SW cache v4; mở rộng test 11 để bấm thật.
+  - **Kết quả**: Mở Bảng Quản Lý là thấy ngay thanh lọc ngày; một tab riêng để chốt sổ từng ngày; 11/11 test pass.
 - **v1.3.2**:
   - **Mục tiêu**: Lọc đơn theo **ngày đặt hàng** để dễ quyết toán trong từng ngày.
   - **Giải pháp**: thêm state + helper lọc ngày ở client (`public/app.js`), khối UI “Lọc theo ngày” + bảng quyết toán từng ngày (`public/index.html`), `renderAdminTabsWithFilter()` vẽ lại toàn bộ tab theo khoảng lọc, Excel bám khoảng lọc + thêm sheet *Quyết Toán Theo Ngày*, cột *Ngày Đặt*.

@@ -313,31 +313,55 @@ test('admin filters orders by order date / payment date and settles per day', as
   window.renderAdminDateFilter();
   window.renderAdminTabsWithFilter();
 
-  // 1. Mặc định: tất cả thời gian
+  // Bắt sự kiện cho thanh lọc ngày (delegation) rồi nạp dữ liệu quản trị
+  window.initAdminDelegatedEvents();
+  assert.ok(window.document.querySelector('#adminDatePresetChips [data-date-preset]'));
+
+  // 1. Mặc định: tất cả thời gian — số liệu và bảng quyết toán tính toàn bộ
   assert.equal(window.isAdminDateFilterActive(), false);
   assert.equal(window.filteredPaidOrders.length, 3);
   assert.match(window.document.getElementById('adminDateSummary').textContent, /Tất cả thời gian/);
+  assert.equal(window.document.getElementById('settlementDayCount').innerText, '2');
+  assert.equal(window.document.getElementById('settlementOrders').innerText, '3');
+  assert.equal(window.document.getElementById('settlementBooks').innerText, '3');
+  assert.equal(window.document.getElementById('settlementAmount').innerText, '300.000 đ');
 
-  // 2. Quyết toán theo NGÀY ĐẶT HÀNG: hôm nay = 1 đơn, hôm qua = 1 đơn (+ 1 đơn đặt hôm qua nhưng trả hôm nay)
-  window.renderAdminDateFilter();
-  window.setAdminDatePreset('today');
-  assert.equal(window.filteredPaidOrders.length, 1);
-  assert.equal(window.filteredPaidOrders[0].orderCode, 1);
-  assert.match(window.document.getElementById('adminDateSummary').textContent, /100\.000 đ/);
-  window.setAdminDatePreset('yesterday');
-  assert.deepEqual(window.filteredPaidOrders.map(o => o.orderCode).sort(), [2, 3]);
+  // 1b. Thanh lọc ngày nằm NGOÀI các tab (hiện ở mọi tab) + có tab "Quyết toán" riêng
+  const filterBar = window.document.getElementById('adminDatePresetChips');
+  assert.equal(window.document.querySelector('#adminTabOrders #adminDatePresetChips'), null);
+  assert.equal(window.document.getElementById('adminTabOrders').contains(filterBar), false);
+  assert.ok(window.document.querySelector('[data-tab="settlement"]'));
+  assert.ok(window.document.getElementById('adminTabSettlement').contains(window.document.getElementById('adminDailyBreakdownBody')));
+  window.switchAdminTab('settlement');
+  assert.equal(window.document.getElementById('adminTabSettlement').classList.contains('hidden'), false);
+  assert.equal(window.document.getElementById('adminTabOrders').classList.contains('hidden'), true);
+  window.switchAdminTab('orders');
 
-  // 3. Bảng quyết toán từng ngày: gộp đúng theo ngày đặt
-  const rows = [...window.document.querySelectorAll('#adminDailyBreakdownBody tr')];
-  assert.equal(rows.length, 3); // hôm nay, hôm qua, dòng TỔNG CỘNG
+  // 2. Bảng quyết toán từng ngày: gộp đúng theo ngày đặt, có thanh tỷ trọng + dòng TỔNG CỘNG
+  let rows = [...window.document.querySelectorAll('#adminDailyBreakdownBody tr')];
+  assert.equal(rows.length, 3); // hôm nay, hôm qua, TỔNG CỘNG
   const todayRow = rows.find(r => r.textContent.includes(window.formatDateKeyVN(dayKey(0))));
   assert.match(todayRow.textContent, /1\s*1\s*100\.000 đ/);
+  assert.ok(todayRow.querySelector('.bg-emerald-500'), 'mỗi ngày có thanh tỷ trọng doanh thu');
   const yesterdayRow = rows.find(r => r.textContent.includes(window.formatDateKeyVN(dayKey(-1))));
   assert.match(yesterdayRow.textContent, /2\s*2\s*200\.000 đ/);
   assert.match(rows[rows.length - 1].textContent, /TỔNG CỘNG/);
 
-  // 4. Bấm 1 dòng ngày → lọc đúng ngày đó, bấm lại → bỏ lọc
-  yesterdayRow.click();
+  // 3. Chip "Hôm nay" trên thanh lọc → số liệu, 4 thẻ quyết toán và bảng đều theo đúng ngày đó
+  [...window.document.querySelectorAll('#adminDatePresetChips button')].find(b => b.textContent === 'Hôm nay').click();
+  assert.equal(window.filteredPaidOrders.length, 1);
+  assert.equal(window.filteredPaidOrders[0].orderCode, 1);
+  assert.match(window.document.getElementById('adminDateSummary').textContent, /100\.000 đ/);
+  assert.equal(window.document.getElementById('settlementDayCount').innerText, '1');
+  assert.equal(window.document.getElementById('settlementOrders').innerText, '1');
+  assert.equal(window.document.getElementById('settlementBooks').innerText, '1');
+  assert.equal(window.document.getElementById('settlementAmount').innerText, '100.000 đ');
+  assert.equal(window.document.querySelectorAll('#adminDailyBreakdownBody tr').length, 1);
+
+  // 4. Bấm một dòng ngày để lọc đúng ngày đó — bấm lại để bỏ lọc
+  window.setAdminDatePreset('all');
+  rows = [...window.document.querySelectorAll('#adminDailyBreakdownBody tr')];
+  rows.find(r => r.textContent.includes(window.formatDateKeyVN(dayKey(-1)))).click();
   const clickedState = window.adminDateFilterState();
   assert.equal(clickedState.preset, 'yesterday');
   assert.equal(clickedState.from, dayKey(-1));
@@ -374,16 +398,17 @@ test('admin filters orders by order date / payment date and settles per day', as
   const summary = window.computeBookSummary(window.filteredPaidOrders);
   assert.equal(summary.find(b => b.id === 'shared').totalQuantity, 2);
 
-  // 8. Khoảng không có đơn nào → mọi số liệu về 0, bảng quyết toán vẫn liệt kê ngày để bấm chọn
+  // 8. Khoảng không có đơn nào → mọi số liệu về 0, bảng quyết toán báo trống
   window.document.getElementById('adminDateFromInput').value = dayKey(30);
   window.document.getElementById('adminDateToInput').value = dayKey(30);
   window.handleAdminDateRangeInput();
   assert.equal(window.filteredPaidOrders.length, 0);
   assert.match(window.document.getElementById('adminDateSummary').textContent, /0 đơn đã nộp/);
   assert.match(window.document.getElementById('adminPaidCount').innerText, /0 đơn đã nộp \(0 cuốn\)/);
-  assert.match(window.document.getElementById('adminDailyBreakdownBody').textContent, /TỔNG CỘNG/);
+  assert.equal(window.document.getElementById('settlementAmount').innerText, '0 đ');
+  assert.match(window.document.getElementById('adminDailyBreakdownBody').textContent, /Chưa có đơn nào đã thanh toán/);
 
-  // 9. Giới hạn khoảng ngày không ảnh hưởng tới dữ liệu gốc
+  // 9. Bỏ lọc → trở lại toàn bộ dữ liệu gốc
   window.setAdminDatePreset('all');
   assert.equal(window.filteredPaidOrders.length, 3);
   assert.equal(window.isAdminDateFilterActive(), false);

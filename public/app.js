@@ -454,10 +454,16 @@ document.addEventListener('click', (event) => {
 });
 
 // ============================ KHỞI ĐỘNG ============================
-document.addEventListener('DOMContentLoaded', () => {
+/** Khởi động các phần cần DOM: nạp dữ liệu, PWA, và bắt sự kiện cho thanh lọc ngày */
+function initApp() {
   fetchBooksAndSettings();
   initPwa();
-});
+  initAdminDelegatedEvents();
+}
+
+document.addEventListener('DOMContentLoaded', initApp);
+// Nếu script được nạp SAU khi DOM đã sẵn sàng (defer/async, cache, hoặc chèn muộn) thì chạy ngay
+if (document.readyState !== 'loading') initApp();
 
 // ============================ PWA (CÀI LÊN MÀN HÌNH CHÍNH) ============================
 const IOS_INSTALL_DISMISS_KEY = 'xbook_ios_install_dismissed';
@@ -1315,6 +1321,33 @@ async function refreshAdminData(opts = {}) {
   }
 }
 
+/**
+ * Bắt sự kiện cho thanh lọc ngày & bảng quyết toán bằng DELEGATION (gắn 1 lần vào modal,
+ * không dùng onclick inline) → hoạt động ổn định kể cả khi vùng đó được vẽ lại nhiều lần.
+ */
+function initAdminDelegatedEvents() {
+  const modal = document.getElementById('adminModal');
+  if (!modal || modal.dataset.dateDelegated === '1') return;
+  modal.dataset.dateDelegated = '1';
+
+  modal.addEventListener('click', (event) => {
+    const target = event.target && typeof event.target.closest === 'function' ? event.target : null;
+    if (!target) return;
+
+    const presetChip = target.closest('[data-date-preset]');
+    if (presetChip) { setAdminDatePreset(presetChip.dataset.datePreset); return; }
+
+    const basisChip = target.closest('[data-date-basis]');
+    if (basisChip) { setAdminDateBasis(basisChip.dataset.dateBasis); return; }
+
+    const dayRow = target.closest('[data-date-day]');
+    if (dayRow) { setAdminDateSingleDay(dayRow.dataset.dateDay); return; }
+
+    const goto = target.closest('[data-goto-settlement]');
+    if (goto) { switchAdminTab('settlement'); return; }
+  });
+}
+
 // ============================ BỘ LỌC NGÀY TRONG BẢNG QUẢN TRỊ ============================
 const ADMIN_DATE_PRESETS = [
   { value: 'all', label: 'Tất cả' },
@@ -1376,7 +1409,7 @@ function renderAdminDateFilter() {
   if (presetWrap) {
     presetWrap.innerHTML = ADMIN_DATE_PRESETS.map(p => {
       const active = adminDatePreset === p.value;
-      return `<button type="button" onclick="setAdminDatePreset('${p.value}')"
+      return `<button type="button" data-date-preset="${p.value}"
         class="flex-shrink-0 px-2.5 py-1.5 rounded-full text-[11px] font-extrabold border transition ${
           active ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-600/30' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:text-emerald-700'
         }">${p.label}</button>`;
@@ -1390,7 +1423,7 @@ function renderAdminDateFilter() {
       { value: 'paid', label: 'Ngày thanh toán' }
     ].map(b => {
       const active = adminDateBasis === b.value;
-      return `<button type="button" onclick="setAdminDateBasis('${b.value}')" title="Đổi cách tính ngày để lọc/quyết toán"
+      return `<button type="button" data-date-basis="${b.value}" title="Đổi cách tính ngày để lọc/quyết toán"
         class="px-2.5 py-1.5 rounded-full text-[11px] font-extrabold border transition ${
           active ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
         }">${b.label}</button>`;
@@ -1402,30 +1435,48 @@ function renderAdminDateFilter() {
   if (fromEl && document.activeElement !== fromEl) fromEl.value = adminDateFrom;
   if (toEl && document.activeElement !== toEl) toEl.value = adminDateTo;
 
-  // Bảng quyết toán từng ngày (chỉ tính đơn đã thanh toán)
+  // Bảng quyết toán từng ngày (chỉ tính đơn đã thanh toán, trong khoảng ngày đang chọn)
   const tbody = document.getElementById('adminDailyBreakdownBody');
   if (tbody) {
-    const days = groupOrdersByDay(window.cachedPaidOrders || []);
+    const paidInRange = filterOrdersByAdminDate(window.cachedPaidOrders || []);
+    const days = groupOrdersByDay(paidInRange);
+    const maxAmount = days.reduce((max, d) => Math.max(max, d.amount), 0);
     tbody.innerHTML = days.length === 0
-      ? `<tr><td colspan="4" class="p-3 text-center text-slate-400">Chưa có đơn nào đã thanh toán</td></tr>`
+      ? `<tr><td colspan="6" class="p-3 text-center text-slate-400">Chưa có đơn nào đã thanh toán</td></tr>`
       : days.map(day => {
           const active = isAdminDateFilterActive() && adminDateFrom === day.date && adminDateTo === day.date;
-          return `<tr class="cursor-pointer transition ${active ? 'bg-emerald-50' : 'hover:bg-slate-50'}" onclick="setAdminDateSingleDay('${day.date}')">
-            <td class="p-2 font-bold text-slate-700">
+          const width = maxAmount ? Math.max(4, Math.round((day.amount / maxAmount) * 100)) : 0;
+          return `<tr class="cursor-pointer transition ${active ? 'bg-emerald-50' : 'hover:bg-slate-50'}" title="Bấm để lọc đúng ngày này" data-date-day="${day.date}">
+            <td class="p-2.5 font-bold text-slate-700 whitespace-nowrap">
               ${formatDateKeyVN(day.date)}
               <span class="text-[10px] font-normal text-slate-400">${escapeHtml(weekdayLabel(day.date))}</span>
               ${active ? '<span class="ml-1 text-[10px] font-black text-emerald-700">• đang lọc</span>' : ''}
             </td>
-            <td class="p-2 text-center font-semibold text-slate-600">${day.orders}</td>
-            <td class="p-2 text-center font-semibold text-slate-600">${day.books}</td>
-            <td class="p-2 text-right font-black text-emerald-600 whitespace-nowrap">${formatMoney(day.amount)}</td>
+            <td class="p-2.5 text-center font-semibold text-slate-600">${day.orders}</td>
+            <td class="p-2.5 text-center font-semibold text-slate-600">${day.books}</td>
+            <td class="p-2.5 hidden sm:table-cell">
+              <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full bg-emerald-500 rounded-full" style="width:${width}%"></div>
+              </div>
+            </td>
+            <td class="p-2.5 text-right font-black text-emerald-600 whitespace-nowrap">${formatMoney(day.amount)}</td>
+            <td class="p-2.5 text-right text-slate-500 font-semibold whitespace-nowrap hidden sm:table-cell">${formatMoney(day.orders ? Math.round(day.amount / day.orders) : 0)}</td>
           </tr>`;
         }).join('') + (days.length > 1 ? `<tr class="bg-slate-50 font-black">
-            <td class="p-2 text-slate-700">TỔNG CỘNG (${days.length} ngày)</td>
-            <td class="p-2 text-center text-slate-700">${days.reduce((s, d) => s + d.orders, 0)}</td>
-            <td class="p-2 text-center text-slate-700">${days.reduce((s, d) => s + d.books, 0)}</td>
-            <td class="p-2 text-right text-emerald-700 whitespace-nowrap">${formatMoney(days.reduce((s, d) => s + d.amount, 0))}</td>
+            <td class="p-2.5 text-slate-700 whitespace-nowrap">TỔNG CỘNG (${days.length} ngày)</td>
+            <td class="p-2.5 text-center text-slate-700">${days.reduce((s, d) => s + d.orders, 0)}</td>
+            <td class="p-2.5 text-center text-slate-700">${days.reduce((s, d) => s + d.books, 0)}</td>
+            <td class="hidden sm:table-cell"></td>
+            <td class="p-2.5 text-right text-emerald-700 whitespace-nowrap">${formatMoney(days.reduce((s, d) => s + d.amount, 0))}</td>
+            <td class="hidden sm:table-cell"></td>
           </tr>` : '');
+
+    // 4 thẻ tổng hợp nhanh của tab Quyết toán
+    const setText = (id, value) => { const el = document.getElementById(id); if (el) el.innerText = value; };
+    setText('settlementDayCount', String(days.length));
+    setText('settlementOrders', String(days.reduce((s, d) => s + d.orders, 0)));
+    setText('settlementBooks', String(days.reduce((s, d) => s + d.books, 0)));
+    setText('settlementAmount', formatMoney(days.reduce((s, d) => s + d.amount, 0)));
   }
 
   lucide.createIcons();

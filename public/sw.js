@@ -9,11 +9,11 @@
  *    để đơn hàng / trạng thái đăng ký luôn chính xác.
  *
  * ⚠️ Mỗi lần deploy có thay đổi file tĩnh (app.js / domain.js / logo / icon...):
- *    tăng CACHE_NAME bên dưới (xbook-static-v3 → v4) để máy người dùng xoá cache cũ.
+ *    tăng CACHE_NAME bên dưới (xbook-static-v4 → v5) để máy người dùng xoá cache cũ.
  * ============================================================================
  */
 
-const CACHE_NAME = 'xbook-static-v3';
+const CACHE_NAME = 'xbook-static-v4';
 const CORE_ASSETS = [
   '/',
   '/index.html',

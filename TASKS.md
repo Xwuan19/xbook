@@ -3,7 +3,19 @@
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này (v1.3.2)
+## Mục tiêu đợt này (v1.3.3)
+1. **Thanh lọc ngày luôn hiển thị** ở mọi tab quản trị (không còn nằm trong tab Đơn hàng).
+2. **Tab “Quyết toán” riêng** với 4 thẻ tổng hợp + bảng từng ngày (tỷ trọng, TB/đơn) + nút xuất Excel theo khoảng.
+3. Chuyển các nút lọc/ngày sang **event delegation** để chạy thật & test được.
+
+## Giai đoạn 9 (v1.3.3) — Thanh lọc dùng chung + tab Quyết toán
+- [x] T36. `public/index.html`: di chuyển khối lọc ngày lên header (trên thanh tab), thêm nút *Xem quyết toán từng ngày*, thêm tab + panel **Quyết toán** (4 thẻ, bảng có cột tỷ trọng & TB/đơn).
+- [x] T37. `public/app.js`: `initAdminDelegatedEvents()` (delegation cho chip ngày/chip mốc/dòng ngày/nút chuyển tab), `initApp()` chạy cả khi script nạp sau DOMContentLoaded; thẻ tổng hợp + thanh tỷ trọng tính theo khoảng đang lọc.
+- [x] T38. `public/sw.js`: bump cache tĩnh v3 → v4 để máy đã cài PWA nhận giao diện mới.
+- [x] T39. Kiểm thử: 11 bài pass, trong đó test 11 nay **bấm thật** chip/ngày (trước đây `onclick` inline không chạy trong jsdom nên là no-op).
+- [x] T40. Cập nhật README (mục 13) / handover / TASKS + version 1.3.3.
+
+## Mục tiêu đợt trước (v1.3.2)
 1. **Lọc đơn theo ngày đặt hàng / ngày thanh toán** để quyết toán trong từng ngày.
 2. **Bảng quyết toán theo ngày** (đơn · cuốn · doanh thu) + bấm một ngày để lọc; xuất Excel theo khoảng ngày.
 

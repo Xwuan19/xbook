@@ -1,6 +1,6 @@
 {
   "name": "xbook-payos",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Hệ thống bán sách theo khoa/lớp tích hợp cổng thanh toán PayOS Dynamic QR, phiên quản trị ghi nhớ và PWA",
   "main": "server.js",
   "scripts": {
