@@ -29,8 +29,19 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Thư mục chứa ảnh bìa sách đã upload (Quản lý sách)
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+// Trên serverless (Vercel), hệ thống file gốc là read-only nên dùng /tmp/uploads
+const UPLOADS_DIR = process.env.VERCEL
+  ? path.join('/tmp', 'uploads')
+  : path.join(__dirname, 'uploads');
+
+try {
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.warn("Lưu ý: Không thể tạo thư mục uploads cục bộ:", err.message);
+}
+
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 const storage = multer.diskStorage({
@@ -647,8 +658,10 @@ app.put('/api/admin/settings', requireAdminAuth, async (req, res) => {
 });
 
 
-app.listen(PORT, () => {
-  console.log(`\n Hệ thống XBook Bán Sách Cho Lớp đang chạy tại: ${BASE_URL}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`\n Hệ thống XBook Bán Sách Cho Lớp đang chạy tại: ${BASE_URL}`);
+  });
+}
 
 module.exports = app;
