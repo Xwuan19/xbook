@@ -9,7 +9,7 @@ test('API supports global books shared across faculties, class curricula and imm
   for (const file of ['server.js', 'database.js']) fs.copyFileSync(path.join(__dirname, '..', file), path.join(dir, file));
   fs.mkdirSync(path.join(dir, 'public'));
   fs.copyFileSync(path.join(__dirname, '../public/domain.js'), path.join(dir, 'public/domain.js'));
-  fs.symlinkSync(path.join(__dirname, '../node_modules'), path.join(dir, 'node_modules'), 'dir');
+  fs.symlinkSync(path.join(__dirname, '../node_modules'), path.join(dir, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   process.env.DATABASE_URL = '';
   process.env.ADMIN_PASSWORD = 'test-password';
   const app = require(path.join(dir, 'server.js'));
