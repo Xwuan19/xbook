@@ -40,12 +40,20 @@ function formatDateVN(ymd) {
 
 // Dòng lưu ý ngày nhận sách ngắn gọn cho sinh viên (dùng chung banner + form + màn hình thành công)
 function deliveryInfoLine() {
-  const date = XBookDomain.deliveryAt(new Date(), currentSettings.deliveryDate);
-  return `Giao dự kiến từ <strong>${formatDelivery(date)}</strong> · Tối thiểu 24 giờ sau khi đặt. ${escapeHtml(currentSettings.deliveryNote || '')}`;
+  const date = currentSettings.deliveryDate;
+  const note = (currentSettings.deliveryNote || '').trim();
+  if (!date && !note) return '';
+  return [date ? `Nhận sách: <strong>${formatDateVN(date)}</strong>` : '', note].filter(Boolean).join(' · ');
 }
 
 function formatDelivery(value) {
-  return value ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + ' (giờ VN)' : 'Chưa có lịch giao';
+  if (!value) return 'Chưa có lịch giao';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return String(value);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
 }
 
 function escapeHtml(str) {

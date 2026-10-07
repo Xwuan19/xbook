@@ -59,8 +59,8 @@
             statusDisplay.innerText = res.data.status === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán';
             document.getElementById('courseTitleDisplay').innerText = res.data.bookTitle || res.data.courseTitle || '';
             document.getElementById('deliveryDisplay').innerText = res.data.deliveryAt
-              ? 'Giao dự kiến: ' + new Date(res.data.deliveryAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + ' (giờ VN)'
-              : 'Đơn cũ chưa có lịch giao. Vui lòng liên hệ quản trị.';
+              ? 'Nhận sách: ' + new Date(res.data.deliveryAt).toLocaleDateString('vi-VN')
+              : 'Theo thông báo của lớp';
           }
         })
         .catch(console.error);
