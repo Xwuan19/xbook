@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>XBook - Đăng Ký Mua Sách Cho Lớp</title>
+  <title>XBook - Đăng Ký Mua Giáo Trình Theo Khoa & Lớp</title>
   
   <!-- Tailwind CSS, Lucide Icons & SheetJS (Excel) CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -62,10 +62,13 @@
       -moz-appearance: textfield;
       appearance: textfield;
     }
+    /* Ẩn thanh cuộn ngang của dải chips lọc trên mobile nhưng vẫn cuộn được */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     @media print {
       body * { visibility: hidden; }
       #printArea, #printArea * { visibility: visible; }
-      #printArea { position: absolute; left: 0; top: 0; width: 100%; }
+      #printArea { position: absolute; left: 0; top: 0; width: 100%; max-height: none !important; }
     }
   </style>
 </head>
@@ -73,25 +76,36 @@
 
   <!-- HEADER CHO CẢ MOBILE & DESKTOP -->
   <header class="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6">
       <div class="flex items-center justify-between h-16">
         
         <!-- LOGO & BRAND -->
         <div class="flex items-center space-x-2.5">
           <img src="logo.png" alt="xbook logo" class="w-10 h-10 rounded-xl object-contain shadow-sm border border-slate-200 bg-white p-0.5" />
-          <div>
+          <div class="leading-tight">
             <span class="text-xl font-black tracking-tight text-slate-900">xbook</span>
+            <div class="text-[10px] text-slate-400 font-semibold hidden sm:block">Giáo trình theo Khoa & Lớp</div>
           </div>
         </div>
 
-        <!-- NÚT MỞ BẢNG QUẢN TRỊ & CHỐT SỔ (CÓ MẬT KHẨU) -->
+        <!-- GIỎ HÀNG + NÚT QUẢN TRỊ -->
         <div class="flex items-center space-x-2">
+          <button
+            id="headerCartButton"
+            onclick="openCheckoutModal()"
+            class="relative flex items-center space-x-1.5 px-3 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition"
+            title="Giỏ giáo trình của bạn"
+          >
+            <i data-lucide="shopping-cart" class="w-4 h-4"></i>
+            <span class="hidden sm:inline">Giỏ hàng</span>
+            <span id="headerCartBadge" class="hidden absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-emerald-600 text-white text-[10px] font-black rounded-full flex items-center justify-center">0</span>
+          </button>
           <button 
             onclick="handleClickAdmin()" 
             class="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl transition shadow-sm"
           >
             <i data-lucide="shield-check" class="w-4 h-4 text-emerald-600"></i>
-            <span>Quản Lý & Chốt Đơn</span>
+            <span class="hidden xs:inline sm:inline">Quản Lý</span>
           </button>
         </div>
       </div>
@@ -99,84 +113,112 @@
   </header>
 
   <!-- BANNER THÔNG BÁO TRẠNG THÁI ĐĂNG KÝ (ĐÓNG HOẶC MỞ) -->
-  <div id="registrationBannerContainer" class="max-w-4xl mx-auto px-4 sm:px-6 pt-5 w-full">
+  <div id="registrationBannerContainer" class="max-w-6xl mx-auto px-4 sm:px-6 pt-5 w-full">
     <!-- Render động từ JS: Mở hoặc Đã chốt sổ -->
   </div>
 
-  <!-- NỘI DUNG CHÍNH: DANH SÁCH SÁCH MUA CHO LỚP -->
-  <main class="flex-1 max-w-4xl mx-auto px-4 sm:px-6 py-5 w-full">
-    <div class="flex items-center justify-between mb-4">
+  <!-- NỘI DUNG CHÍNH: DANH SÁCH GIÁO TRÌNH PHÂN LOẠI THEO KHOA / LỚP -->
+  <main class="flex-1 max-w-6xl mx-auto px-4 sm:px-6 py-5 w-full pb-28">
+    <div class="flex items-center justify-between mb-3">
       <div>
-        <h2 class="text-lg sm:text-xl font-extrabold text-slate-900">Danh mục sách đợt này</h2>
-        <p class="text-xs text-slate-500">Chọn sách bạn cần mua và quét mã QR chuyển khoản chính xác</p>
+        <h2 class="text-lg sm:text-xl font-extrabold text-slate-900">Danh mục giáo trình đợt này</h2>
+        <p class="text-xs text-slate-500">Lọc theo <strong>Khoa</strong> / <strong>Lớp</strong>, chọn nhiều cuốn và thanh toán 1 lần qua VietQR</p>
       </div>
-      <span class="text-xs font-bold text-slate-400" id="bookCount">Đang tải...</span>
+      <span class="text-xs font-bold text-slate-400 whitespace-nowrap ml-2" id="bookCount">Đang tải...</span>
     </div>
 
-    <!-- DANH SÁCH CARD SÁCH (1 CỘT TRÊN MOBILE, 2 CỘT TRÊN DESKTOP) -->
-    <div id="bookGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <!-- BỘ LỌC: KHOA (CHIPS) + LỚP (DROPDOWN) -->
+    <div id="filterBar" class="mb-4 space-y-2">
+      <div id="departmentChips" class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+        <!-- Render động từ JS -->
+      </div>
+      <div id="classFilterWrap" class="hidden items-center gap-2">
+        <span class="text-xs font-bold text-slate-500 flex items-center space-x-1 flex-shrink-0">
+          <i data-lucide="users" class="w-3.5 h-3.5"></i><span>Lớp:</span>
+        </span>
+        <select
+          id="classFilterSelect"
+          onchange="setClassFilter(this.value)"
+          class="text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-brand-500"
+        >
+          <option value="__ALL__">Tất cả các lớp</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- DANH SÁCH CARD SÁCH: 1 CỘT MOBILE → 2 CỘT TABLET → 3 CỘT DESKTOP -->
+    <div id="bookGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <!-- Loading Skeleton -->
       <div class="bg-white rounded-2xl p-5 border border-slate-200 animate-pulse h-48"></div>
       <div class="bg-white rounded-2xl p-5 border border-slate-200 animate-pulse h-48"></div>
     </div>
   </main>
 
+  <!-- THANH GIỎ HÀNG NỔI (STICKY BOTTOM TRÊN MOBILE & DESKTOP) -->
+  <div id="cartBar" class="fixed bottom-0 inset-x-0 z-40 hidden">
+    <div class="max-w-6xl mx-auto px-3 pb-3 sm:pb-4">
+      <div class="bg-slate-900/95 backdrop-blur text-white rounded-2xl shadow-2xl p-3 sm:px-4 flex items-center justify-between gap-2 border border-slate-700">
+        <div class="flex items-center space-x-2.5 min-w-0">
+          <div class="relative flex-shrink-0">
+            <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center">
+              <i data-lucide="shopping-cart" class="w-5 h-5"></i>
+            </div>
+            <span id="cartCountBadge" class="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-emerald-500 text-slate-900 text-[10px] font-black rounded-full flex items-center justify-center">0</span>
+          </div>
+          <div class="min-w-0">
+            <div id="cartSummaryText" class="text-xs sm:text-sm font-extrabold truncate">0 cuốn giáo trình</div>
+            <div id="cartTotalText" class="text-[11px] sm:text-xs font-black text-emerald-300">0 đ</div>
+          </div>
+        </div>
+        <div class="flex items-center space-x-1.5 flex-shrink-0">
+          <button onclick="clearCart()" title="Xóa giỏ hàng" class="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 hover:text-rose-300 text-slate-300 transition">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+          <button onclick="openCheckoutModal()" class="px-3.5 sm:px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-900 text-xs sm:text-sm font-black rounded-xl transition flex items-center space-x-1.5 shadow-lg shadow-emerald-500/30">
+            <i data-lucide="qr-code" class="w-4 h-4"></i>
+            <span>Mua & Quét QR</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- FOOTER -->
   <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400">
-    <p>© XBook</p>
+    <p>© XBook — Hệ thống đăng ký giáo trình theo Khoa & Lớp</p>
   </footer>
 
   <!-- ========================================================================= -->
-  <!-- MODAL 1: ĐIỀN THÔNG TIN ĐẶT MUA SÁCH -->
+  <!-- MODAL 1: GIỎ HÀNG & ĐIỀN THÔNG TIN ĐẶT MUA (NHIỀU CUỐN TRONG 1 ĐƠN) -->
   <!-- ========================================================================= -->
   <div id="checkoutModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
-    <div class="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl relative border border-slate-100 my-auto">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl relative border border-slate-100 my-auto max-h-[95vh] overflow-y-auto">
       <button onclick="closeModal('checkoutModal')" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full p-2 transition">
         <i data-lucide="x" class="w-4 h-4"></i>
       </button>
 
       <div class="flex items-center space-x-3 mb-4">
-        <div class="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center">
+        <div class="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center flex-shrink-0">
           <i data-lucide="shopping-cart" class="w-5 h-5"></i>
         </div>
         <div>
-          <h3 class="text-base font-bold text-slate-900">Đăng ký mua sách</h3>
-          <p class="text-xs text-slate-500">Điền đúng tên để sau này nhận sách trên lớp</p>
+          <h3 class="text-base font-bold text-slate-900">Đăng ký mua giáo trình</h3>
+          <p class="text-xs text-slate-500">Một người mua được nhiều cuốn khác nhau — thanh toán 1 mã QR duy nhất</p>
         </div>
       </div>
 
-      <!-- Sách đang chọn -->
-      <div id="selectedBookSummary" class="bg-slate-50 rounded-2xl p-3.5 mb-4 border border-slate-200">
-        <!-- Render động -->
+      <!-- DANH SÁCH CÁC CUỐN TRONG GIỎ (TĂNG / GIẢM SỐ LƯỢNG TỪNG CUỐN) -->
+      <div id="checkoutItemsList" class="space-y-2 mb-3 max-h-56 overflow-y-auto pr-1">
+        <!-- Render động từ JS -->
+      </div>
+
+      <!-- TỔNG TIỀN -->
+      <div class="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-2xl px-3.5 py-2.5 mb-4">
+        <span class="text-xs font-bold text-emerald-800" id="checkoutTotalBooksLabel">Tổng cộng: 0 cuốn</span>
+        <span class="text-base font-black text-emerald-700" id="checkoutTotalDisplay">0 đ</span>
       </div>
 
       <form id="orderForm" onsubmit="handleCreatePayment(event)" class="space-y-3.5">
-        <input type="hidden" id="formBookId" />
-
-        <!-- Chọn số lượng -->
-        <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">Số lượng mua</label>
-          <div class="flex items-center space-x-3">
-            <button type="button" onclick="adjustQuantity(-1)" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center">-</button>
-            <input 
-              type="number" 
-              id="formQuantity" 
-              value="1" 
-              min="1" 
-              max="20" 
-              onchange="updateTotalAmountDisplay()" 
-              class="w-16 text-center py-1.5 font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
-            />
-            <button type="button" onclick="adjustQuantity(1)" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center">+</button>
-            <span class="text-xs text-slate-500">cuốn</span>
-            
-            <div class="ml-auto text-right">
-              <span class="text-xs text-slate-400">Thành tiền:</span>
-              <div class="text-base font-black text-emerald-600" id="formTotalAmountDisplay">0 đ</div>
-            </div>
-          </div>
-        </div>
-        
         <div>
           <label class="block text-xs font-bold text-slate-800 mb-1">
             Họ và tên đầy đủ <span class="text-rose-500">*</span>
@@ -190,14 +232,29 @@
           />
         </div>
 
-        <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">Số điện thoại (tùy chọn)</label>
-          <input 
-            type="tel" 
-            id="formCustomerPhone" 
-            placeholder="0987 654 321" 
-            class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none"
-          />
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div>
+            <label class="block text-xs font-bold text-slate-800 mb-1">
+              Lớp <span class="text-emerald-600 font-extrabold">(nên điền)</span>
+            </label>
+            <input
+              type="text"
+              id="formCustomerClass"
+              list="classListDatalist"
+              placeholder="Ví dụ: CNTT K15"
+              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            />
+            <datalist id="classListDatalist"></datalist>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Số điện thoại (tùy chọn)</label>
+            <input 
+              type="tel" 
+              id="formCustomerPhone" 
+              placeholder="0987 654 321" 
+              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none"
+            />
+          </div>
         </div>
 
         <button 
@@ -216,7 +273,7 @@
   <!-- MODAL 2: HIỂN THỊ MÃ DYNAMIC VIETQR PAYOS (TỰ ĐỘNG CHECK TIỀN VỀ) -->
   <!-- ========================================================================= -->
   <div id="qrPaymentModal" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
-    <div class="bg-white rounded-3xl max-w-sm w-full p-5 sm:p-6 shadow-2xl relative border border-slate-100 my-auto text-center">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-5 sm:p-6 shadow-2xl relative border border-slate-100 my-auto text-center max-h-[95vh] overflow-y-auto">
       
       <button onclick="closeModal('qrPaymentModal')" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full p-2 transition">
         <i data-lucide="x" class="w-4 h-4"></i>
@@ -229,7 +286,7 @@
           <span>Đang đợi chuyển khoản...</span>
         </div>
 
-        <h3 class="text-base font-bold text-slate-900">Quét mã để đóng tiền sách</h3>
+        <h3 class="text-base font-bold text-slate-900">Quét mã để đóng tiền giáo trình</h3>
         <p class="text-xs text-slate-500">Mở App Ngân hàng quét QR - Số tiền & nội dung tự điền</p>
 
         <!-- KHUNG MÃ VIETQR ĐỘNG -->
@@ -275,37 +332,36 @@
           <i data-lucide="check" class="w-8 h-8 stroke-[3]"></i>
         </div>
         <h3 class="text-lg font-black text-slate-900">ĐÃ NHẬN TIỀN THÀNH CÔNG!</h3>
-        <p class="text-xs text-slate-500 mt-1">Hệ thống đã tự động chốt tên bạn vào danh sách nhận sách.</p>
+        <p class="text-xs text-slate-500 mt-1">Hệ thống đã tự động chốt tên bạn vào danh sách nhận giáo trình.</p>
 
         <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 my-4 text-left text-xs space-y-1">
           <div class="flex justify-between">
             <span class="text-slate-500">Người mua:</span>
             <span class="font-bold text-slate-800" id="successCustomerName">...</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-slate-500">Sách đặt:</span>
-            <span class="font-bold text-slate-800" id="successBookTitle">...</span>
+          <div class="flex justify-between gap-3">
+            <span class="text-slate-500 flex-shrink-0">Giáo trình:</span>
+            <span class="font-bold text-slate-800 text-right" id="successBookTitle">...</span>
           </div>
           <div class="flex justify-between">
             <span class="text-slate-500">Số lượng:</span>
-            <span class="font-bold text-slate-800" id="successQuantity">1 cuốn</span>
+            <span class="font-bold text-slate-800" id="successQuantity">...</span>
           </div>
           <div class="flex justify-between">
             <span class="text-slate-500">Mã đơn:</span>
-            <span class="font-mono font-bold text-slate-800" id="successOrderCode">#...</span>
+            <span class="font-mono font-bold text-slate-800" id="successOrderCode">...</span>
           </div>
         </div>
 
-        <button onclick="closeModal('qrPaymentModal')" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/30 transition text-xs sm:text-sm">
-          Hoàn tất & Đóng cửa sổ
+        <button onclick="closeModal('qrPaymentModal')" class="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition">
+          Hoàn tất
         </button>
       </div>
-
     </div>
   </div>
 
   <!-- ========================================================================= -->
-  <!-- MODAL: XÁC THỰC MẬT KHẨU QUẢN TRỊ VIÊN -->
+  <!-- MODAL ĐĂNG NHẬP QUẢN TRỊ -->
   <!-- ========================================================================= -->
   <div id="adminLoginModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
     <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative border border-slate-100 my-auto text-center">
@@ -349,18 +405,18 @@
   </div>
 
   <!-- ========================================================================= -->
-  <!-- MODAL 3: BẢNG QUẢN TRỊ, THỐNG KÊ SỐ LƯỢNG & CHỐT SỔ ĐĂNG KÝ -->
+  <!-- MODAL BẢNG QUẢN TRỊ: TABS PHÂN LOẠI THEO KHOA / LỚP / TÊN + QUẢN LÝ -->
   <!-- ========================================================================= -->
-  <div id="adminModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
-    <div class="bg-white rounded-3xl max-w-3xl w-full p-5 sm:p-6 shadow-2xl relative border border-slate-100 my-auto" id="printArea">
+  <div id="adminModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-5xl w-full shadow-2xl relative border border-slate-100 my-auto flex flex-col max-h-[94vh]" id="printArea">
       
-      <!-- HEADER ADMIN MODAL: TỐI ƯU CẢ MOBILE VÀ DESKTOP (KHÔNG BAO GIỜ BỊ CHÈN NÚT) -->
-      <div class="border-b border-slate-100 pb-4 mb-4">
-        <!-- HÀNG 1: TIÊU ĐỀ BÊN TRÁI, 2 NÚT THAO TÁC BÊN PHẢI -->
+      <!-- HEADER ADMIN: TIÊU ĐỀ + NÚT THAO TÁC + NÚT CHỐT SỔ + THANH TAB -->
+      <div class="border-b border-slate-100 p-4 sm:p-5 pb-0">
+        <!-- HÀNG 1 -->
         <div class="flex items-center justify-between gap-2 mb-1.5">
           <div class="flex items-center space-x-2 min-w-0">
             <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
-            <h3 class="text-base sm:text-lg font-black text-slate-900 truncate">Bảng Quản Lý Đơn Hàng</h3>
+            <h3 class="text-base sm:text-lg font-black text-slate-900 truncate">Bảng Quản Lý Giáo Trình</h3>
           </div>
           
           <div class="flex items-center space-x-1.5 flex-shrink-0 print:hidden">
@@ -378,10 +434,10 @@
           </div>
         </div>
 
-        <p class="text-xs text-slate-500 mb-3">Thống kê số lượng sách cần lấy và danh sách phát sách trên lớp</p>
+        <p class="text-xs text-slate-500 mb-3">Phân loại theo <strong>Khoa</strong> · <strong>Lớp</strong> · <strong>Tên người mua</strong> — chốt sổ & phát sách</p>
 
-        <!-- HÀNG 2: NÚT CHỐT SỔ / MỞ ĐĂNG KÝ (DÀNH RIÊNG 1 DÒNG ĐỘC LẬP TRÊN MOBILE & DESKTOP) -->
-        <div class="print:hidden">
+        <!-- HÀNG 2: NÚT CHỐT SỔ / MỞ ĐĂNG KÝ -->
+        <div class="print:hidden mb-3">
           <button 
             id="btnToggleRegistration" 
             onclick="handleToggleRegistration()" 
@@ -390,78 +446,229 @@
             <!-- Render động từ JS -->
           </button>
         </div>
+
+        <!-- HÀNG 3: THANH TAB PHÂN LOẠI -->
+        <div class="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pb-3 print:hidden" id="adminTabBar">
+          <button onclick="switchAdminTab('orders')" data-tab="orders" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-emerald-600 text-white shadow-sm">
+            <i data-lucide="package-check" class="w-3.5 h-3.5"></i><span>Đơn hàng</span>
+          </button>
+          <button onclick="switchAdminTab('customer')" data-tab="customer" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
+            <i data-lucide="user" class="w-3.5 h-3.5"></i><span>Theo tên</span>
+          </button>
+          <button onclick="switchAdminTab('class')" data-tab="class" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
+            <i data-lucide="users" class="w-3.5 h-3.5"></i><span>Theo lớp</span>
+          </button>
+          <button onclick="switchAdminTab('department')" data-tab="department" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
+            <i data-lucide="graduation-cap" class="w-3.5 h-3.5"></i><span>Theo khoa</span>
+          </button>
+          <button onclick="switchAdminTab('manage')" data-tab="manage" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
+            <i data-lucide="book-open" class="w-3.5 h-3.5"></i><span>Quản lý giáo trình</span>
+          </button>
+        </div>
       </div>
 
-      <!-- 1. TỔNG HỢP SỐ LƯỢNG SÁCH CẦN NHẬP / IN -->
-      <div class="mb-4">
-        <div class="flex items-center justify-between mb-2">
-          <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
-            <i data-lucide="boxes" class="w-4 h-4 text-emerald-600"></i>
-            <span>Số Lượng Từng Cuốn:</span>
-          </h4>
-          <span class="text-xs font-bold text-emerald-700" id="adminTotalRevenue">Tổng tiền: 0 đ</span>
+      <!-- NỘI DUNG CUỘN CỦA CÁC TAB -->
+      <div class="p-4 sm:p-5 overflow-y-auto flex-1">
+
+        <!-- ============ TAB 1: ĐƠN HÀNG & TỔNG HỢP ============ -->
+        <div id="adminTabOrders" class="admin-tab-panel">
+          <!-- 1. TỔNG HỢP SỐ LƯỢNG SÁCH CẦN NHẬP / IN (NHÓM THEO KHOA) -->
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+                <i data-lucide="boxes" class="w-4 h-4 text-emerald-600"></i>
+                <span>Số Lượng Từng Cuốn (theo Khoa):</span>
+              </h4>
+              <span class="text-xs font-bold text-emerald-700" id="adminTotalRevenue">Tổng tiền: 0 đ</span>
+            </div>
+            <div id="adminBookSummaryCards" class="space-y-3">
+              <!-- Render động: nhóm theo khoa -->
+            </div>
+          </div>
+
+          <!-- 2. DANH SÁCH PHÁT SÁCH: TÌM TÊN + LỌC THEO LỚP -->
+          <div class="mb-1">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <div class="flex items-center justify-between sm:justify-start sm:space-x-3 w-full sm:w-auto">
+                <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+                  <i data-lucide="users" class="w-4 h-4 text-emerald-600"></i>
+                  <span>Danh Sách Phát Sách:</span>
+                </h4>
+                <span id="adminPaidCount" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg whitespace-nowrap">0 bạn đã nộp</span>
+              </div>
+              
+              <div class="flex items-center gap-2 w-full sm:w-auto print:hidden">
+                <!-- LỌC THEO LỚP -->
+                <select id="adminClassFilterSelect" onchange="setAdminClassFilter(this.value)" class="text-xs font-semibold bg-slate-100 border border-slate-200 rounded-xl px-2.5 py-2 focus:bg-white focus:border-brand-500 focus:outline-none max-w-[140px] sm:max-w-[160px]">
+                  <option value="__ALL__">Mọi lớp</option>
+                </select>
+                <!-- TÌM NHANH TÊN -->
+                <div class="relative flex-1 sm:w-56">
+                  <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                  <input 
+                    type="text" 
+                    id="adminSearchStudentInput"
+                    oninput="filterAdminStudentList()"
+                    placeholder="Gõ tên tìm người phát sách..." 
+                    class="w-full pl-8 pr-3 py-2 text-xs bg-slate-100 border border-slate-200 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="max-h-64 sm:max-h-80 overflow-y-auto border border-slate-200 rounded-2xl shadow-inner bg-slate-50/50">
+              <!-- DESKTOP: TABLE -->
+              <table class="w-full text-left text-xs hidden sm:table">
+                <thead class="bg-slate-100 text-slate-700 sticky top-0 border-b border-slate-200 z-10">
+                  <tr>
+                    <th class="p-2.5 font-bold w-10 text-center">STT</th>
+                    <th class="p-2.5 font-bold">Họ và tên</th>
+                    <th class="p-2.5 font-bold">Lớp</th>
+                    <th class="p-2.5 font-bold">Giáo trình & SL</th>
+                    <th class="p-2.5 font-bold">Số tiền</th>
+                    <th class="p-2.5 font-bold text-center w-28 print:hidden">Đã phát</th>
+                  </tr>
+                </thead>
+                <tbody id="adminOrderTableBody" class="divide-y divide-slate-100 bg-white">
+                  <tr><td colspan="6" class="p-4 text-center text-slate-400">Chưa có ai đóng tiền</td></tr>
+                </tbody>
+              </table>
+
+              <!-- MOBILE: DANH SÁCH THẺ DỌC -->
+              <div id="adminOrderMobileList" class="sm:hidden p-2 space-y-2">
+                <div class="p-4 text-center text-slate-400 text-xs">Chưa có ai đóng tiền</div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div id="adminBookSummaryCards" class="grid grid-cols-3 gap-1.5 sm:gap-2.5">
-          <!-- Render động: ví dụ Sách 1: 15 cuốn, Sách 2: 20 cuốn -->
+        <!-- ============ TAB 2: THEO TÊN (1 NGƯỜI MUA NHIỀU CUỐN) ============ -->
+        <div id="adminTabCustomer" class="admin-tab-panel hidden">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+              <i data-lucide="user" class="w-4 h-4 text-emerald-600"></i>
+              <span>Gộp theo tên người mua:</span>
+            </h4>
+            <span id="adminCustomerCount" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">0 người</span>
+          </div>
+          <p class="text-[11px] text-slate-400 mb-3">Mỗi người có thể mua nhiều cuốn khác nhau — hệ thống gộp tất cả đơn cùng tên để dễ phát sách.</p>
+          <div id="adminCustomerList" class="space-y-2.5">
+            <!-- Render động từ JS -->
+          </div>
         </div>
-      </div>
 
-      <!-- 2. DANH SÁCH CHI TIẾT TỪNG BẠN ĐỂ PHÁT SÁCH -->
-      <div class="mb-3">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-          <div class="flex items-center justify-between sm:justify-start sm:space-x-3 w-full sm:w-auto">
+        <!-- ============ TAB 3: THEO LỚP ============ -->
+        <div id="adminTabClass" class="admin-tab-panel hidden">
+          <div class="flex items-center justify-between mb-3">
             <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
               <i data-lucide="users" class="w-4 h-4 text-emerald-600"></i>
-              <span>Danh Sách Phát Sách:</span>
+              <span>Thống kê theo lớp:</span>
             </h4>
-            <span id="adminPaidCount" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">0 bạn đã nộp</span>
+            <span id="adminClassCount" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">0 lớp</span>
           </div>
-          
-          <!-- Ô TÌM NHANH TÊN SINH VIÊN KHI PHÁT SÁCH -->
-          <div class="relative w-full sm:w-60 print:hidden">
-            <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
-            <input 
-              type="text" 
-              id="adminSearchStudentInput"
-              oninput="filterAdminStudentList()"
-              placeholder="Gõ tên tìm người phát sách..." 
-              class="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-100 border border-slate-200 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none"
-            />
+          <p class="text-[11px] text-slate-400 mb-3">Danh sách lớp được tổng hợp từ thông tin đăng ký. Bạn có thể bổ sung tên lớp trong tab "Quản lý giáo trình".</p>
+          <div id="adminClassList" class="space-y-2.5">
+            <!-- Render động từ JS -->
           </div>
         </div>
 
-        <!-- CONTAINER DANH SÁCH: HIỂN THỊ CARD GỌN GÀNG TRÊN MOBILE, BẢNG TRÊN DESKTOP -->
-        <div class="max-h-64 sm:max-h-72 overflow-y-auto border border-slate-200 rounded-2xl shadow-inner bg-slate-50/50">
-          
-          <!-- GIAO DIỆN DESKTOP: TABLE ĐẦY ĐỦ CỘT -->
-          <table class="w-full text-left text-xs hidden sm:table">
-            <thead class="bg-slate-100 text-slate-700 sticky top-0 border-b border-slate-200">
-              <tr>
-                <th class="p-2.5 font-bold w-10 text-center">STT</th>
-                <th class="p-2.5 font-bold">Họ và tên</th>
-                <th class="p-2.5 font-bold">Sách mua & SL</th>
-                <th class="p-2.5 font-bold">Số tiền</th>
-                <th class="p-2.5 font-bold text-center w-28 print:hidden">Đã phát</th>
-              </tr>
-            </thead>
-            <tbody id="adminOrderTableBody" class="divide-y divide-slate-100 bg-white">
-              <tr><td colspan="5" class="p-4 text-center text-slate-400">Chưa có ai đóng tiền</td></tr>
-            </tbody>
-          </table>
-
-          <!-- GIAO DIỆN MOBILE: DANH SÁCH THẺ DỌC SIÊU GỌN, KHÔNG BỊ CHÈN CHỮ -->
-          <div id="adminOrderMobileList" class="sm:hidden p-2 space-y-2">
-            <div class="p-4 text-center text-slate-400 text-xs">Chưa có ai đóng tiền</div>
+        <!-- ============ TAB 4: THEO KHOA (LIST GIÁO TRÌNH CẦN THIẾT) ============ -->
+        <div id="adminTabDepartment" class="admin-tab-panel hidden">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+              <i data-lucide="graduation-cap" class="w-4 h-4 text-emerald-600"></i>
+              <span>List giáo trình cần thiết theo Khoa:</span>
+            </h4>
+            <span id="adminDepartmentCount" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">0 khoa</span>
           </div>
+          <p class="text-[11px] text-slate-400 mb-3">Mỗi khoa hiển thị toàn bộ giáo trình trong danh mục kèm số lượng sinh viên đã đặt (đã thanh toán) — dùng để soạn list báo in.</p>
+          <div id="adminDepartmentList" class="space-y-3">
+            <!-- Render động từ JS -->
+          </div>
+        </div>
 
+        <!-- ============ TAB 5: QUẢN LÝ GIÁO TRÌNH + DANH SÁCH KHOA / LỚP ============ -->
+        <div id="adminTabManage" class="admin-tab-panel hidden">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- DANH SÁCH GIÁO TRÌNH -->
+            <div class="lg:col-span-2">
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+                  <i data-lucide="book-open" class="w-4 h-4 text-emerald-600"></i>
+                  <span>Danh mục giáo trình:</span>
+                </h4>
+                <button onclick="openBookForm()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-sm shadow-emerald-600/20">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                  <span>Thêm giáo trình</span>
+                </button>
+              </div>
+
+              <div class="border border-slate-200 rounded-2xl overflow-hidden bg-white">
+                <!-- DESKTOP TABLE -->
+                <table class="w-full text-left text-xs hidden sm:table">
+                  <thead class="bg-slate-100 text-slate-700 border-b border-slate-200">
+                    <tr>
+                      <th class="p-2.5 font-bold">Tên giáo trình</th>
+                      <th class="p-2.5 font-bold">Khoa</th>
+                      <th class="p-2.5 font-bold">Lớp</th>
+                      <th class="p-2.5 font-bold text-right">Giá</th>
+                      <th class="p-2.5 font-bold text-center w-24">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminBooksTableBody" class="divide-y divide-slate-100">
+                    <!-- Render động -->
+                  </tbody>
+                </table>
+                <!-- MOBILE LIST -->
+                <div id="adminBooksMobileList" class="sm:hidden divide-y divide-slate-100">
+                  <!-- Render động -->
+                </div>
+              </div>
+            </div>
+
+            <!-- CÀI ĐẶT DANH SÁCH KHOA & LỚP -->
+            <div class="space-y-4">
+              <div class="border border-slate-200 rounded-2xl p-3.5 bg-slate-50/60">
+                <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5 mb-2">
+                  <i data-lucide="graduation-cap" class="w-4 h-4 text-emerald-600"></i>
+                  <span>Danh sách Khoa</span>
+                </h4>
+                <div id="deptChipsEditor" class="flex flex-wrap gap-1.5 mb-2.5">
+                  <!-- Render động -->
+                </div>
+                <form onsubmit="handleAddDepartment(event)" class="flex gap-1.5">
+                  <input type="text" id="addDeptInput" placeholder="VD: Khoa Ngoại Ngữ" class="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
+                  <button type="submit" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex-shrink-0">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                  </button>
+                </form>
+              </div>
+
+              <div class="border border-slate-200 rounded-2xl p-3.5 bg-slate-50/60">
+                <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5 mb-2">
+                  <i data-lucide="users" class="w-4 h-4 text-emerald-600"></i>
+                  <span>Danh sách Lớp</span>
+                </h4>
+                <p class="text-[10px] text-slate-400 mb-2">Tên lớp do bạn bổ sung — dùng để gợi ý khi sinh viên đăng ký và lọc đơn hàng.</p>
+                <div id="classChipsEditor" class="flex flex-wrap gap-1.5 mb-2.5">
+                  <!-- Render động -->
+                </div>
+                <form onsubmit="handleAddClass(event)" class="flex gap-1.5">
+                  <input type="text" id="addClassInput" placeholder="VD: CNTT K15" class="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
+                  <button type="submit" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex-shrink-0">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- CÁC NÚT THAO TÁC TIỆN ÍCH -->
-      <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 print:hidden">
+      <!-- FOOTER ADMIN: NÚT TIỆN ÍCH -->
+      <div class="border-t border-slate-100 p-3 sm:p-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <div class="text-[11px] text-slate-400">
-          💡 Tích vào ô "Đã phát" khi mang sách lên lớp giao cho bạn đó.
+          💡 Tích "Đã phát" khi giao giáo trình cho từng bạn trên lớp.
         </div>
         <div class="flex items-center space-x-2">
           <button onclick="exportToExcel()" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm shadow-emerald-600/20">
@@ -478,7 +685,94 @@
           </button>
         </div>
       </div>
+    </div>
+  </div>
 
+  <!-- ========================================================================= -->
+  <!-- MODAL FORM THÊM / SỬA GIÁO TRÌNH -->
+  <!-- ========================================================================= -->
+  <div id="bookFormModal" class="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl relative border border-slate-100 my-auto max-h-[95vh] overflow-y-auto">
+      <button onclick="closeModal('bookFormModal')" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full p-2 transition">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+
+      <div class="flex items-center space-x-3 mb-4">
+        <div class="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center flex-shrink-0">
+          <i data-lucide="book-open" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-slate-900" id="bookFormHeading">Thêm giáo trình mới</h3>
+          <p class="text-xs text-slate-500">Gắn giáo trình vào Khoa và các Lớp cần mua</p>
+        </div>
+      </div>
+
+      <form id="bookForm" onsubmit="handleBookFormSubmit(event)" class="space-y-3">
+        <input type="hidden" id="formBookEditId" value="" />
+
+        <div>
+          <label class="block text-xs font-bold text-slate-800 mb-1">Tên giáo trình <span class="text-rose-500">*</span></label>
+          <input type="text" id="formBookTitle" required placeholder="VD: Cấu trúc dữ liệu và giải thuật"
+            class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-800 mb-1">Giá (đ) <span class="text-rose-500">*</span></label>
+            <input type="number" id="formBookPrice" required min="0" step="1000" placeholder="35000"
+              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-800 mb-1">Số trang</label>
+            <input type="number" id="formBookPages" min="0" placeholder="200"
+              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-800 mb-1">Thuộc Khoa</label>
+            <input type="text" id="formBookDepartment" list="deptDatalist" placeholder="VD: Khoa CNTT"
+              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
+            <datalist id="deptDatalist"></datalist>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-800 mb-1">Các lớp cần mua</label>
+            <input type="text" id="formBookClasses" placeholder="CNTT K15, CNTT K16"
+              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
+            <p class="text-[10px] text-slate-400 mt-1">Phân tách bằng dấu phẩy</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Tác giả / Nguồn</label>
+            <input type="text" id="formBookAuthor" placeholder="Giáo trình ĐH"
+              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Ảnh bìa (URL, tùy chọn)</label>
+            <input type="url" id="formBookCover" placeholder="https://..."
+              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Mô tả ngắn</label>
+          <textarea id="formBookDescription" rows="2" placeholder="Mô tả nội dung giáo trình..."
+            class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none resize-none"></textarea>
+        </div>
+
+        <div class="flex items-center space-x-2 pt-1">
+          <button type="button" onclick="closeModal('bookFormModal')" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-bold transition">
+            Hủy
+          </button>
+          <button type="submit" id="btnBookFormSubmit" class="flex-1 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-sm font-bold transition flex items-center justify-center space-x-1.5">
+            <i data-lucide="save" class="w-4 h-4"></i>
+            <span>Lưu giáo trình</span>
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
