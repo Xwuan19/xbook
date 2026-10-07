@@ -14,6 +14,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
@@ -27,6 +28,33 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ============================================================================
+// PWA: manifest + service worker (để "Thêm vào Màn hình chính" trên iPhone chạy
+// như app thật: mở toàn màn hình, có icon riêng, và dùng được khi mạng chập chờn)
+// ============================================================================
+function sendPublicFile(res, filename, contentType, extraHeaders = {}) {
+  const filePath = path.join(__dirname, 'public', filename);
+  if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
+  res.setHeader('Content-Type', contentType);
+  for (const [key, value] of Object.entries(extraHeaders)) res.setHeader(key, value);
+  return res.sendFile(filePath);
+}
+
+app.get('/manifest.webmanifest', (req, res) =>
+  sendPublicFile(res, 'manifest.webmanifest', 'application/manifest+json', {
+    'Cache-Control': 'public, max-age=3600'
+  })
+);
+
+// Service worker phải nằm ở gốc site để điều khiển toàn bộ phạm vi "/" — không cache file này.
+app.get('/sw.js', (req, res) =>
+  sendPublicFile(res, 'sw.js', 'application/javascript; charset=utf-8', {
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Service-Worker-Allowed': '/'
+  })
+);
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Thư mục chứa ảnh bìa sách đã upload (Quản lý sách)
@@ -474,23 +502,104 @@ if (!isPayOSConfigured) {
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123456';
 
-function requireAdminAuth(req, res, next) {
-  const password = req.headers['x-admin-password'] || req.query.adminPassword || req.body.adminPassword;
-  if (!password || password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ success: false, message: "Mật khẩu quản trị không chính xác!" });
+// ============================================================================
+// PHIÊN ĐĂNG NHẬP QUẢN TRỊ (không cần nhập lại mật khẩu khi mở lại web)
+// Token tự chứa hạn dùng + chữ ký HMAC → hoạt động cả trên Vercel Serverless
+// (không phụ thuộc bộ nhớ của từng instance). Đổi mật khẩu = mọi token cũ hết hiệu lực.
+// ============================================================================
+const ADMIN_SESSION_DAYS = Math.max(1, Number(process.env.ADMIN_SESSION_DAYS || 30));
+const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || ADMIN_PASSWORD;
+
+function issueAdminToken() {
+  const payload = Buffer.from(JSON.stringify({ exp: Date.now() + ADMIN_SESSION_DAYS * 86400000 })).toString('base64url');
+  const signature = crypto.createHmac('sha256', ADMIN_SESSION_SECRET).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function verifyAdminToken(token) {
+  const [payload, signature] = String(token || '').split('.');
+  if (!payload || !signature) return false;
+  const expected = crypto.createHmac('sha256', ADMIN_SESSION_SECRET).update(payload).digest('base64url');
+  const given = Buffer.from(signature);
+  const wanted = Buffer.from(expected);
+  if (given.length !== wanted.length || !crypto.timingSafeEqual(given, wanted)) return false;
+  try {
+    const { exp } = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return Number(exp) > Date.now();
+  } catch (err) {
+    return false;
   }
-  next();
+}
+
+function readAdminToken(req) {
+  const raw = String(req.headers['x-admin-token'] || req.headers.authorization || '').trim();
+  return raw.replace(/^Bearer\s+/i, '');
+}
+
+function readAdminPassword(req) {
+  return req.headers['x-admin-password'] || req.query.adminPassword || (req.body && req.body.adminPassword);
+}
+
+function requireAdminAuth(req, res, next) {
+  if (verifyAdminToken(readAdminToken(req))) return next();
+
+  const password = readAdminPassword(req);
+  if (password && password === ADMIN_PASSWORD) {
+    // Gửi kèm token phiên để lần sau client không phải gửi mật khẩu nữa
+    res.setHeader('x-admin-token', issueAdminToken());
+    return next();
+  }
+  return res.status(401).json({ success: false, message: "Mật khẩu quản trị không chính xác!" });
+}
+
+/**
+ * Gán 1 cuốn sách vào KHOA / LỚP (curriculum của lớp đó).
+ * - Chọn cả khoa → mọi lớp của khoa đều cần cuốn này (VD: Khoa Kinh tế học Triết).
+ * - Chỉ gọi khi client thực sự gửi lên classKeys/departments (tránh phá dữ liệu cũ).
+ */
+async function applyBookScope(bookId, body = {}) {
+  if (!Array.isArray(body.classKeys) && !Array.isArray(body.departments)) return null;
+
+  const settings = await db.getSettings();
+  const departments = (Array.isArray(body.departments) ? body.departments : [])
+    .map(d => String(d).trim()).filter(Boolean);
+  const classKeys = (Array.isArray(body.classKeys) ? body.classKeys : []).map(String);
+
+  const invalid = (message) => Object.assign(new Error(message), { status: 400 });
+  const unknownDepartment = departments.find(d => !(settings.departments || []).includes(d));
+  if (unknownDepartment) throw invalid(`Khoa không tồn tại: ${unknownDepartment}`);
+  const knownKeys = new Set(domain.classes(settings.classes, settings.departments).map(domain.classKey));
+  const unknownClass = classKeys.find(key => !knownKeys.has(key));
+  if (unknownClass) throw invalid('Có lớp không tồn tại trong danh sách khoa / lớp.');
+
+  const classes = domain.assignBookToClasses(
+    domain.classes(settings.classes, settings.departments),
+    bookId,
+    { classKeys, departments }
+  );
+  return await db.updateSettings({ classes });
 }
 
 /**
  * 5. XÁC THỰC MẬT KHẨU QUẢN TRỊ VIÊN
+ * Đăng nhập thành công → trả về token phiên (client tự chọn lưu 30 ngày hay chỉ phiên hiện tại)
  */
 app.post('/api/admin/login', (req, res) => {
-  const { password } = req.body;
+  const { password } = req.body || {};
   if (password && password === ADMIN_PASSWORD) {
-    return res.json({ success: true, message: "Xác thực quyền quản trị thành công!" });
+    return res.json({
+      success: true,
+      message: "Xác thực quyền quản trị thành công!",
+      token: issueAdminToken(),
+      expiresInDays: ADMIN_SESSION_DAYS
+    });
   }
   return res.status(401).json({ success: false, message: "Mật khẩu quản trị không đúng!" });
+});
+
+/** Đăng xuất: token tự chứa hạn dùng nên chỉ cần client xóa token đã lưu. */
+app.post('/api/admin/logout', (req, res) => {
+  res.json({ success: true, message: "Đã đăng xuất khỏi bảng quản trị." });
 });
 
 /**
@@ -591,10 +700,11 @@ app.post('/api/admin/books', requireAdminAuth, async (req, res) => {
       return res.status(400).json({ success: false, message: "Vui lòng nhập giá sách hợp lệ!" });
     }
     const book = await db.createBook(payload);
+    const settings = await applyBookScope(book.id, req.body || {});
     console.log(` [ADMIN] Đã thêm sách: "${book.title}"`);
-    res.json({ success: true, book });
+    res.json({ success: true, book, settings: settings || undefined });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(error.status || 500).json({ success: false, message: error.message });
   }
 });
 
@@ -604,10 +714,11 @@ app.put('/api/admin/books/:id', requireAdminAuth, async (req, res) => {
     if (!payload.title || payload.price <= 0) return res.status(400).json({ success: false, message: 'Vui lòng nhập tên và giá sách hợp lệ.' });
     const book = await db.updateBook(req.params.id, payload);
     if (!book) return res.status(404).json({ success: false, message: "Không tìm thấy sách!" });
+    const settings = await applyBookScope(book.id, req.body || {});
     console.log(` [ADMIN] Đã cập nhật sách: "${book.title}"`);
-    res.json({ success: true, book });
+    res.json({ success: true, book, settings: settings || undefined });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(error.status || 500).json({ success: false, message: error.message });
   }
 });
 

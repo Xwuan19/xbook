@@ -98,7 +98,41 @@ function orderClassLabel(order) {
 // ============================ KHỞI ĐỘNG ============================
 document.addEventListener('DOMContentLoaded', () => {
   fetchBooksAndSettings();
+  initPwa();
 });
+
+// ============================ PWA (CÀI LÊN MÀN HÌNH CHÍNH) ============================
+const IOS_INSTALL_DISMISS_KEY = 'xbook_ios_install_dismissed';
+
+/** iPhone/iPad: Safari không có nút "Cài đặt" → hướng dẫn "Thêm vào Màn hình chính" */
+function maybeShowIosInstallHint() {
+  const ua = window.navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(ua);
+  const standalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  const hint = document.getElementById('iosInstallHint');
+  if (!hint || !isIOS || standalone || !isSafari) return;
+  try {
+    if (localStorage.getItem(IOS_INSTALL_DISMISS_KEY) === '1') return;
+  } catch (e) { /* chế độ riêng tư: vẫn hiện gợi ý */ }
+  hint.classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function dismissIosInstallHint() {
+  const hint = document.getElementById('iosInstallHint');
+  if (hint) hint.classList.add('hidden');
+  try { localStorage.setItem(IOS_INSTALL_DISMISS_KEY, '1'); } catch (e) { /* bỏ qua */ }
+}
+
+function initPwa() {
+  maybeShowIosInstallHint();
+  // Android/Chrome: hiện nút cài khi trình duyệt cho phép
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    window.xbookInstallPrompt = event;
+  });
+}
 
 /**
  * 1. LẤY DANH SÁCH GIÁO TRÌNH & CÀI ĐẶT (KHOA / LỚP / TRẠNG THÁI ĐĂNG KÝ)
@@ -638,23 +672,96 @@ function handlePaymentSuccess(data) {
 }
 
 // ============================ BẢNG QUẢN TRỊ ============================
-let adminAuthPassword = sessionStorage.getItem('xbook_admin_pwd') || '';
+/**
+ * PHIÊN ĐĂNG NHẬP QUẢN TRỊ
+ * - Đăng nhập đúng mật khẩu → server cấp token có hạn (mặc định 30 ngày).
+ * - Tích "Ghi nhớ đăng nhập" → lưu token vào localStorage: mở lại web (kể cả tắt máy) KHÔNG cần nhập lại mật khẩu.
+ * - Không tích → chỉ lưu sessionStorage (đóng trình duyệt là hết phiên).
+ * - Mật khẩu gõ tay chỉ giữ trong bộ nhớ tạm, không ghi ra ổ đĩa.
+ */
+const ADMIN_TOKEN_KEY = 'xbook_admin_token';
+const ADMIN_REMEMBER_KEY = 'xbook_admin_remember';
+
+function readStoredAdminToken() {
+  try {
+    return localStorage.getItem(ADMIN_TOKEN_KEY) || sessionStorage.getItem(ADMIN_TOKEN_KEY) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+let adminToken = readStoredAdminToken();
+let adminAuthPassword = '';
+let adminRemember = (() => {
+  try { return localStorage.getItem(ADMIN_REMEMBER_KEY) !== '0'; } catch (e) { return true; }
+})();
+
+function isAdminAuthed() {
+  return Boolean(adminToken || adminAuthPassword);
+}
+
+function storeAdminToken(token, remember) {
+  adminToken = token || '';
+  adminRemember = Boolean(remember);
+  try {
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+    localStorage.setItem(ADMIN_REMEMBER_KEY, adminRemember ? '1' : '0');
+    if (adminToken) (adminRemember ? localStorage : sessionStorage).setItem(ADMIN_TOKEN_KEY, adminToken);
+  } catch (e) {
+    // Trình duyệt chặn lưu trữ (chế độ riêng tư) → chỉ dùng token trong bộ nhớ
+  }
+}
+
+function clearAdminAuth() {
+  adminToken = '';
+  adminAuthPassword = '';
+  try {
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+  } catch (e) { /* bỏ qua */ }
+}
+
+/** Header xác thực: ưu tiên token phiên, chưa có token thì dùng mật khẩu vừa nhập */
+function adminAuthHeaders() {
+  return adminToken ? { 'x-admin-token': adminToken } : { 'x-admin-password': adminAuthPassword };
+}
+
+/** fetch kèm xác thực quản trị (tự nhận + lưu token mới do server cấp qua header) */
+async function adminFetch(url, options = {}) {
+  const res = await fetch(url, { ...options, headers: { ...(options.headers || {}), ...adminAuthHeaders() } });
+  const freshToken = res.headers && typeof res.headers.get === 'function' ? res.headers.get('x-admin-token') : null;
+  if (freshToken) storeAdminToken(freshToken, adminRemember);
+  if (res.status === 401) clearAdminAuth();
+  return res;
+}
+
+function askAdminLogin(message) {
+  const errorEl = document.getElementById('adminLoginError');
+  const rememberEl = document.getElementById('adminRememberInput');
+  if (rememberEl) rememberEl.checked = adminRemember;
+  if (errorEl) {
+    if (message) { errorEl.innerText = message; errorEl.classList.remove('hidden'); }
+    else errorEl.classList.add('hidden');
+  }
+  document.getElementById('adminPasswordInput').value = '';
+  openModal('adminLoginModal');
+  setTimeout(() => document.getElementById('adminPasswordInput').focus(), 150);
+}
 
 function handleClickAdmin() {
-  if (adminAuthPassword) {
+  if (isAdminAuthed()) {
     openModal('adminModal');
     refreshAdminData();
   } else {
-    document.getElementById('adminPasswordInput').value = '';
-    document.getElementById('adminLoginError').classList.add('hidden');
-    openModal('adminLoginModal');
-    setTimeout(() => document.getElementById('adminPasswordInput').focus(), 150);
+    askAdminLogin();
   }
 }
 
 async function handleAdminLogin(event) {
   event.preventDefault();
   const inputPwd = document.getElementById('adminPasswordInput').value.trim();
+  const rememberEl = document.getElementById('adminRememberInput');
   const errorEl = document.getElementById('adminLoginError');
   const btnSubmit = document.getElementById('btnAdminLoginSubmit');
 
@@ -670,8 +777,9 @@ async function handleAdminLogin(event) {
     const data = await res.json();
 
     if (data.success) {
-      adminAuthPassword = inputPwd;
-      sessionStorage.setItem('xbook_admin_pwd', inputPwd);
+      // Lưu phiên để lần sau không phải nhập lại mật khẩu
+      if (data.token) storeAdminToken(data.token, rememberEl ? rememberEl.checked : true);
+      else adminAuthPassword = inputPwd;
       closeModal('adminLoginModal');
       openModal('adminModal');
       await refreshAdminData();
@@ -688,10 +796,10 @@ async function handleAdminLogin(event) {
 }
 
 function handleAdminLogout() {
-  adminAuthPassword = '';
-  sessionStorage.removeItem('xbook_admin_pwd');
+  clearAdminAuth();
+  fetch('/api/admin/logout', { method: 'POST' }).catch(() => {});
   closeModal('adminModal');
-  alert("🔒 Đã khóa lại Bảng Quản Trị!");
+  alert("🔒 Đã khóa lại Bảng Quản Trị!\nLần sau mở web sẽ cần nhập lại mật khẩu.");
 }
 
 /** Chuyển tab trong bảng quản trị */
@@ -717,9 +825,7 @@ function switchAdminTab(tabName) {
 async function refreshAdminData(opts = {}) {
   try {
     // Fetch 2 API ĐỒNG THỜI để giảm tối đa thời gian chờ (mỗi lần đi mạng ~1 RTT)
-    const statsPromise = fetch('/api/admin/statistics', {
-      headers: { 'x-admin-password': adminAuthPassword }
-    });
+    const statsPromise = adminFetch('/api/admin/statistics');
     const booksPromise = opts.booksData
       ? Promise.resolve(opts.booksData)
       : fetch('/api/books').then(r => r.json()).catch(() => null);
@@ -728,10 +834,8 @@ async function refreshAdminData(opts = {}) {
     const booksData = await booksPromise;
 
     if (res.status === 401) {
-      adminAuthPassword = '';
-      sessionStorage.removeItem('xbook_admin_pwd');
       closeModal('adminModal');
-      openModal('adminLoginModal');
+      askAdminLogin('Phiên đăng nhập đã hết hạn — vui lòng nhập lại mật khẩu quản trị.');
       return;
     }
 
@@ -1100,13 +1204,97 @@ function bookCoverThumb(b, cls) {
     : `<div class="${cls} bg-slate-100 flex items-center justify-center"><i data-lucide="book" class="w-4 h-4 text-slate-300"></i></div>`;
 }
 
+/** Lọc thư viện sách theo khoa / lớp / tên (tab Quản lý sách) */
+let manageDeptFilter = '__ALL__';
+let manageClassFilter = '__ALL__';
+let manageBookSearch = '';
+
+function getManageFilteredBooks() {
+  let books = XBookDomain.filterBooks(allBooks, currentSettings, manageDeptFilter, manageClassFilter);
+  const keyword = manageBookSearch.trim().toLowerCase();
+  if (keyword) books = books.filter(b => `${b.title} ${b.author || ''}`.toLowerCase().includes(keyword));
+  return books;
+}
+
+function setManageDeptFilter(value) {
+  manageDeptFilter = value;
+  manageClassFilter = '__ALL__';
+  renderManageFilters();
+  renderManageBookList();
+}
+
+function setManageClassFilter(value) {
+  manageClassFilter = value;
+  renderManageBookList();
+}
+
+/** Gõ từ khóa chỉ vẽ lại danh sách sách (không vẽ lại ô nhập để không mất con trỏ) */
+function setManageBookSearch(value) {
+  manageBookSearch = value;
+  renderManageBookList();
+}
+
 function renderAdminManageTab() {
-  // 1. Bảng sách
+  renderManageFilters();
+  renderManageBookList();
+  renderSettingsChips();
+  renderClassBookEditor();
+  lucide.createIcons();
+}
+
+/** Bộ lọc thư viện sách: theo khoa / lớp / từ khóa tên sách */
+function renderManageFilters() {
+  const deptSelect = document.getElementById('manageDeptFilter');
+  const classSelect = document.getElementById('manageClassFilter');
+  if (!deptSelect || !classSelect) return;
+
+  const departments = currentSettings.departments || [];
+  if (manageDeptFilter !== '__ALL__' && !departments.includes(manageDeptFilter)) manageDeptFilter = '__ALL__';
+
+  deptSelect.innerHTML = '<option value="__ALL__">Mọi khoa</option>' + departments.map(d =>
+    `<option value="${escapeHtml(d)}" ${manageDeptFilter === d ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('');
+
+  const classes = getClassesForDepartment(manageDeptFilter);
+  if (manageClassFilter !== '__ALL__' && !classes.some(c => XBookDomain.classKey(c) === manageClassFilter)) manageClassFilter = '__ALL__';
+  classSelect.innerHTML = `<option value="__ALL__">${classes.length ? 'Mọi lớp' : 'Chưa có lớp'}</option>` + classes.map(c => {
+    const key = XBookDomain.classKey(c);
+    return `<option value="${escapeHtml(key)}" ${manageClassFilter === key ? 'selected' : ''}>${escapeHtml(manageDeptFilter === '__ALL__' ? classLabel(c) : c.name)}</option>`;
+  }).join('');
+}
+
+/** Mô tả ngắn gọn 1 cuốn sách đang là sách cần học của những khoa / lớp nào */
+function bookScopeChips(bookId) {
+  const scope = XBookDomain.bookScope(currentSettings, bookId);
+  const allClasses = catalogClasses();
+  const text = scope.departments.map(dept => {
+    const inDept = allClasses.filter(c => c.department === dept);
+    const used = inDept.filter(c => c.bookIds.includes(bookId));
+    return used.length === inDept.length
+      ? `${escapeHtml(dept)} (cả khoa)`
+      : used.map(c => escapeHtml(c.name)).join(', ');
+  }).join(' · ');
+  const badge = scope.classes.length
+    ? `<span class="inline-flex items-center text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5 mr-1 whitespace-nowrap">${scope.classes.length} lớp</span>`
+    : '<span class="inline-flex items-center text-[10px] font-bold text-slate-400 bg-slate-100 border border-slate-200 rounded-full px-1.5 py-0.5 mr-1 whitespace-nowrap">Danh mục chung</span>';
+  return { count: scope.classes.length, html: badge + (text || '<span class="text-slate-400">chưa gắn khoa / lớp nào</span>') };
+}
+
+function renderManageBookList() {
   const tbody = document.getElementById('adminBooksTableBody');
   const mobileList = document.getElementById('adminBooksMobileList');
+  const countEl = document.getElementById('manageBooksCount');
 
-  const rows = allBooks.map(b => {
-    const classesText = classesUsingBook(b.id).map(c => escapeHtml(classLabel(c))).join(', ') || '<span class="text-slate-300">Chưa lớp nào sử dụng</span>';
+  const books = getManageFilteredBooks();
+  if (countEl) {
+    const scopeText = manageClassFilter !== '__ALL__'
+      ? ` của lớp đang chọn`
+      : manageDeptFilter !== '__ALL__' ? ` của ${manageDeptFilter}` : '';
+    countEl.innerText = `Hiển thị ${books.length}/${allBooks.length} cuốn sách${scopeText}.`;
+  }
+
+  const rows = books.map(b => {
+    const scope = bookScopeChips(b.id);
+    const classesText = scope.html;
     const meta = [escapeHtml(b.author || ''), escapeHtml(b.year || ''), b.pages ? `${b.pages} trang` : ''].filter(Boolean).join(' · ');
     return { b, classesText, meta };
   });
@@ -1161,12 +1349,6 @@ ${classesText}
       `).join('');
   }
 
-  // 2. Chips danh sách Khoa & Lớp
-  renderSettingsChips();
-
-  renderClassBookEditor();
-
-  lucide.createIcons();
 }
 
 function renderSettingsChips() {
@@ -1199,9 +1381,9 @@ function renderSettingsChips() {
 
 /** Gửi settings mới (khoa / lớp) lên server */
 async function saveSettingsPatch(patch) {
-  const res = await fetch('/api/admin/settings', {
+  const res = await adminFetch('/api/admin/settings', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'x-admin-password': adminAuthPassword },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch)
   });
   const data = await res.json();
@@ -1324,8 +1506,115 @@ function openBookForm(bookId) {
     updateCoverPreview();
   }
 
+  renderBookScopeEditors(bookId || '');
   renderAdminManageTab();
   openModal('bookFormModal');
+}
+
+// ==================== SÁCH CẦN HỌC THEO KHOA / LỚP (CURRICULUM) ====================
+/**
+ * Sách KHÔNG thuộc khoa nào (danh mục chung). Khi admin "add" sách vào khoa/lớp thì
+ * sách đó trở thành sách CẦN CÓ khi học (các) lớp ấy — VD Khoa Kinh tế cũng học Triết.
+ */
+let bookScopeSelection = { departments: [], classKeys: [] };
+
+function scopeDepartment(key) {
+  try { return JSON.parse(key)[0] || ''; } catch (e) { return ''; }
+}
+
+/** Nạp lựa chọn hiện tại của sách vào form (khoa nào dùng đủ mọi lớp → tích ở mức khoa) */
+function renderBookScopeEditors(bookId) {
+  const allClasses = catalogClasses();
+  const scope = bookId ? XBookDomain.bookScope(currentSettings, bookId) : { classes: [], departments: [] };
+  const usedKeys = new Set(scope.classes.map(XBookDomain.classKey));
+  const departmentFullyUsed = (dept) => {
+    const list = allClasses.filter(c => c.department === dept);
+    return list.length > 0 && list.every(c => usedKeys.has(XBookDomain.classKey(c)));
+  };
+  bookScopeSelection = {
+    departments: (currentSettings.departments || []).filter(departmentFullyUsed),
+    classKeys: [...usedKeys].filter(key => !departmentFullyUsed(scopeDepartment(key)))
+  };
+  renderBookScopeChoices();
+}
+
+function renderBookScopeChoices() {
+  const deptWrap = document.getElementById('bookScopeDepartments');
+  const classWrap = document.getElementById('bookScopeClasses');
+  if (!deptWrap || !classWrap) return;
+
+  const departments = currentSettings.departments || [];
+  const allClasses = catalogClasses();
+  const selectedDepts = bookScopeSelection.departments;
+  const selectedKeys = new Set(bookScopeSelection.classKeys);
+
+  deptWrap.innerHTML = departments.length
+    ? departments.map(d => {
+        const active = selectedDepts.includes(d);
+        const total = allClasses.filter(c => c.department === d).length;
+        return `
+          <label class="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border cursor-pointer transition ${
+            active ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-300 hover:border-emerald-400'
+          }">
+            <input type="checkbox" class="hidden" data-scope-dept="${escapeHtml(d)}" ${active ? 'checked' : ''} onchange="toggleBookScopeDepartment(this)" />
+            <span>${escapeHtml(d)}</span>
+            <span class="text-[10px] font-black px-1.5 rounded-full ${active ? 'bg-white/25' : 'bg-slate-100 text-slate-500'}">${total} lớp</span>
+          </label>`;
+      }).join('')
+    : '<span class="text-[11px] text-slate-400">Chưa có khoa nào — bổ sung khoa &amp; lớp ở panel bên phải.</span>';
+
+  classWrap.innerHTML = allClasses.length
+    ? allClasses.map(c => {
+        const key = XBookDomain.classKey(c);
+        const coveredByDepartment = selectedDepts.includes(c.department);
+        const checked = coveredByDepartment || selectedKeys.has(key);
+        return `
+          <label class="flex items-center gap-2 text-[11px] p-1.5 rounded-lg ${coveredByDepartment ? 'opacity-50' : 'hover:bg-emerald-50'}">
+            <input type="checkbox" value="${escapeHtml(key)}" ${checked ? 'checked' : ''} ${coveredByDepartment ? 'disabled' : ''} onchange="toggleBookScopeClass(this)" class="accent-emerald-600" />
+            <span class="font-semibold text-slate-700">${escapeHtml(c.name)}</span>
+            <span class="text-slate-400">· ${escapeHtml(c.department)}</span>
+          </label>`;
+      }).join('')
+    : '<p class="text-[11px] text-slate-400 p-1">Chưa có lớp nào — bổ sung lớp ở panel bên phải.</p>';
+
+  const summary = document.getElementById('bookScopeSummary');
+  if (summary) {
+    const soloKeys = [...selectedKeys];
+    const total = selectedDepts.reduce((sum, d) => sum + allClasses.filter(c => c.department === d).length, 0) + soloKeys.length;
+    const detail = [];
+    if (selectedDepts.length) detail.push(selectedDepts.join(', '));
+    if (soloKeys.length) detail.push(`${soloKeys.length} lớp riêng lẻ`);
+    if (total === 0) {
+      summary.innerText = '📚 Sách nằm trong danh mục chung — chưa gắn khoa/lớp nào (sinh viên vẫn thấy ở mục “Tất cả”).';
+    } else {
+      summary.innerText = `✅ Sách này là sách cần học của ${total} lớp${detail.length ? ` (${detail.join(' + ')})` : ''}.`;
+    }
+    // Cảnh báo khi tích khoa nhưng khoa đó chưa có lớp nào → chưa áp dụng được cho ai
+    const emptyDepartments = selectedDepts.filter(d => !allClasses.some(c => c.department === d));
+    if (emptyDepartments.length) {
+      summary.innerText += ` ⚠️ ${emptyDepartments.join(', ')} chưa có lớp nào — hãy thêm lớp ở panel “Danh sách Lớp” rồi lưu lại.`;
+    }
+  }
+}
+
+function toggleBookScopeDepartment(input) {
+  const dept = input.dataset.scopeDept;
+  if (input.checked) {
+    bookScopeSelection.departments = [...new Set([...bookScopeSelection.departments, dept])];
+    // Cả khoa đã bao trùm → bỏ các lớp riêng lẻ thuộc khoa đó cho gọn
+    bookScopeSelection.classKeys = bookScopeSelection.classKeys.filter(key => scopeDepartment(key) !== dept);
+  } else {
+    bookScopeSelection.departments = bookScopeSelection.departments.filter(d => d !== dept);
+  }
+  renderBookScopeChoices();
+}
+
+function toggleBookScopeClass(input) {
+  const key = input.value;
+  bookScopeSelection.classKeys = input.checked
+    ? [...new Set([...bookScopeSelection.classKeys, key])]
+    : bookScopeSelection.classKeys.filter(k => k !== key);
+  renderBookScopeChoices();
 }
 
 /** Preview ảnh bìa trong form (theo URL đang nhập) */
@@ -1350,7 +1639,7 @@ async function handleCoverUpload(input) {
   const file = input.files && input.files[0];
   const statusEl = document.getElementById('coverUploadStatus');
   if (!file) return;
-  if (!adminAuthPassword) { alert('Cần đăng nhập quản trị để upload ảnh!'); input.value = ''; return; }
+  if (!isAdminAuthed()) { alert('Cần đăng nhập quản trị để upload ảnh!'); input.value = ''; return; }
 
   if (statusEl) { statusEl.innerText = 'Đang upload...'; statusEl.className = 'text-[10px] text-amber-600 font-semibold'; }
 
@@ -1358,11 +1647,11 @@ async function handleCoverUpload(input) {
   formData.append('cover', file);
 
   try {
-    const res = await fetch('/api/admin/upload', {
+    const res = await adminFetch('/api/admin/upload', {
       method: 'POST',
-      headers: { 'x-admin-password': adminAuthPassword },
       body: formData
     });
+    if (res.status === 401) { askAdminLogin('Phiên đăng nhập đã hết hạn — nhập lại mật khẩu để upload ảnh.'); throw new Error('Cần đăng nhập quản trị'); }
     const data = await res.json();
     if (!data.success) throw new Error(data.message || 'Upload thất bại');
     document.getElementById('formBookCover').value = data.url;
@@ -1385,18 +1674,22 @@ async function handleBookFormSubmit(event) {
     year: (document.getElementById('formBookYear')?.value || '').trim(),
     author: document.getElementById('formBookAuthor').value.trim(),
     cover: document.getElementById('formBookCover').value.trim(),
-    description: document.getElementById('formBookDescription').value.trim()
+    description: document.getElementById('formBookDescription').value.trim(),
+    // Gán sách vào khoa / lớp → lớp đó cần có sách này khi học
+    departments: [...bookScopeSelection.departments],
+    classKeys: [...bookScopeSelection.classKeys]
   };
 
   const btn = document.getElementById('btnBookFormSubmit');
   btn.disabled = true;
 
   try {
-    const res = await fetch(editId ? `/api/admin/books/${encodeURIComponent(editId)}` : '/api/admin/books', {
+    const res = await adminFetch(editId ? `/api/admin/books/${encodeURIComponent(editId)}` : '/api/admin/books', {
       method: editId ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-admin-password': adminAuthPassword },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+    if (res.status === 401) { askAdminLogin('Phiên đăng nhập đã hết hạn — nhập lại mật khẩu quản trị.'); return; }
     const data = await res.json();
     if (!data.success) {
       alert("Không lưu được: " + data.message);
@@ -1415,10 +1708,8 @@ async function handleBookFormSubmit(event) {
 async function handleDeleteBook(bookId, bookTitle) {
   if (!confirm(`Xóa sách "${bookTitle}" khỏi danh mục?`)) return;
   try {
-    const res = await fetch(`/api/admin/books/${encodeURIComponent(bookId)}`, {
-      method: 'DELETE',
-      headers: { 'x-admin-password': adminAuthPassword }
-    });
+    const res = await adminFetch(`/api/admin/books/${encodeURIComponent(bookId)}`, { method: 'DELETE' });
+    if (res.status === 401) { askAdminLogin('Phiên đăng nhập đã hết hạn — nhập lại mật khẩu quản trị.'); return; }
     const data = await res.json();
     if (!data.success) {
       alert("Không xóa được: " + data.message);
@@ -1456,15 +1747,12 @@ async function refreshCatalogEverywhere() {
 // ============================ THAO TÁC CHUNG ============================
 async function handleToggleRegistration() {
   try {
-    const res = await fetch('/api/admin/toggle-registration', {
+    const res = await adminFetch('/api/admin/toggle-registration', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-password': adminAuthPassword
-      }
+      headers: { 'Content-Type': 'application/json' }
     });
     if (res.status === 401) {
-      handleClickAdmin();
+      askAdminLogin('Phiên đăng nhập đã hết hạn — vui lòng nhập lại mật khẩu quản trị.');
       return;
     }
     const data = await res.json();
@@ -1501,12 +1789,9 @@ async function handleSaveDelivery() {
 
 async function toggleDelivered(orderCode) {
   try {
-    await fetch('/api/admin/toggle-delivered', {
+    await adminFetch('/api/admin/toggle-delivered', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-password': adminAuthPassword
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orderCode })
     });
     await refreshAdminData();
@@ -1554,8 +1839,8 @@ function loadXlsxLib() {
 
 async function exportToExcel() {
   try {
-    if (!adminAuthPassword) {
-      openModal('adminLoginModal');
+    if (!isAdminAuthed()) {
+      askAdminLogin();
       return;
     }
 
@@ -1568,9 +1853,7 @@ async function exportToExcel() {
 
     let stats = window.currentAdminStats;
     if (!stats) {
-      const res = await fetch('/api/admin/statistics', {
-        headers: { 'x-admin-password': adminAuthPassword }
-      });
+      const res = await adminFetch('/api/admin/statistics');
       const result = await res.json();
       if (!result.success) {
         alert("Không thể tải dữ liệu để xuất Excel!");

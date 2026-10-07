@@ -1,10 +1,24 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.2.1 (Tối ưu tốc độ — giảm delay khi bấm)
+## Phiên bản hiện tại: v1.3.0 (Sách gắn Khoa/Lớp + Ghi nhớ đăng nhập + PWA iPhone)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
-- **Mục tiêu**: Hệ thống đăng ký mua giáo trình và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
+- **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
+
+---
+
+## 0. Điểm mới v1.3.0 (quan trọng — đọc trước)
+
+1. **Sách KHÔNG thuộc khoa nào** — mọi cuốn nằm trong danh mục chung. Khi admin *add sách vào khoa/lớp* thì cuốn đó thành **sách cần có khi học (các) lớp ấy** (VD: *Khoa Kinh tế* cũng học *Triết*, học *Vật lí* — dữ liệu này do admin tự nhập, không seed sẵn).
+   - Form sách có khối **“Sách này cần học ở khoa / lớp nào?”**: tích **cả khoa** (áp dụng mọi lớp của khoa) hoặc mở rộng chọn **từng lớp**; bỏ tích = về danh mục chung.
+   - API nhận thêm `departments: []` + `classKeys: []`; sai khoa/lớp → **400**, không ghi dữ liệu.
+2. **Ghi nhớ đăng nhập** — tích “Ghi nhớ đăng nhập (30 ngày)” khi đăng nhập → mở lại web không cần nhập mật khẩu.
+   - Token phiên **HMAC-SHA256** tự chứa hạn dùng (hoạt động cả trên Vercel Serverless, không cần session store), gửi qua header `x-admin-token`; mật khẩu không lưu ở client.
+   - Không tích → chỉ nhớ trong phiên (`sessionStorage`). Bấm “Khóa lại” → xóa token + gọi `/api/admin/logout`.
+   - `.env`: `ADMIN_SESSION_DAYS` (mặc định 30), `ADMIN_SESSION_SECRET` (mặc định = `ADMIN_PASSWORD`; đổi = mọi token cũ hết hiệu lực).
+3. **PWA cho iPhone** — `public/manifest.webmanifest` + `public/sw.js` + bộ icon `public/icons/`; `server.js` phục vụ `/manifest.webmanifest` và `/sw.js` (kèm `Service-Worker-Allowed: /`, không cache sw). Safari iPhone → Chia sẻ → *Thêm vào Màn hình chính*; trang chủ tự gợi ý cài (`#iosInstallHint`).
+   - Service worker **chỉ cache file tĩnh**, bỏ qua `/api/` và `/uploads/` → dữ liệu đơn hàng không bao giờ cũ.
 
 ---
 
@@ -36,7 +50,11 @@
        2. *Tổng Hợp Báo In*: Thống kê số lượng từng cuốn cần in/lấy và tổng tiền.
        3. *Toàn Bộ Đơn Hàng*: Phục vụ đối soát chi tiết.
      - **An toàn dữ liệu tuyệt đối**: Tính năng hoạt động 100% Client-side Read-Only, không chạm hay chỉnh sửa bất kỳ trường dữ liệu nào của người mua trong cơ sở dữ liệu.
-4. **Cơ Sở Dữ Liệu Bền Vững (Neon PostgreSQL)**:
+4. **Phiên đăng nhập & cài như app (v1.3.0)**:
+   - Bảng Quản Lý mở khóa bằng token phiên 30 ngày (tự gia hạn khi còn hạn): không phải nhập lại mật khẩu mỗi lần vào web.
+   - Bộ lọc thư viện sách theo **khoa / lớp / tên – tác giả**; mỗi cuốn hiển thị số lớp đang cần.
+   - Cài lên màn hình chính iPhone/Android: chạy toàn màn hình, có icon riêng, mở được khi mạng chập chờn (trang tĩnh).
+5. **Cơ Sở Dữ Liệu Bền Vững (Neon PostgreSQL)**:
    - Dữ liệu được lưu trữ trên đám mây PostgreSQL tại Neon Serverless (`neon.tech`).
    - Tự động đồng bộ và cập nhật giá sách vào cơ sở dữ liệu đám mây khi khởi động.
    - Đảm bảo dữ liệu đơn hàng và trạng thái phát sách không bao giờ bị mất khi triển khai trên Vercel Serverless.
@@ -57,6 +75,15 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.3.0**:
+  - **Mục tiêu**: (1) Sách là danh mục chung — *add sách vào khoa/lớp* = đánh dấu **sách cần học của lớp đó** (khoa Kinh tế cũng học Triết/Vật lí, không seed ví dụ vào DB); (2) **Ghi nhớ đăng nhập** để admin không phải nhập lại mật khẩu; (3) **PWA trên iPhone**.
+  - **Giải pháp**:
+    - `public/domain.js`: thêm `bookScope(settings, bookId)` (sách đang được lớp/khoa nào cần) và `assignBookToClasses(rawClasses, bookId, { departments, classKeys })` (tích cả khoa → mọi lớp của khoa; tích lớp lẻ → chỉ lớp đó; bỏ tích → gỡ khỏi phạm vi). Sách vẫn không có trường khoa/lớp riêng — quan hệ nằm ở `settings.classes[].bookIds`.
+    - `server.js`: phiên quản trị **token HMAC** (`issueAdminToken`/`verifyAdminToken`, `requireAdminAuth` chấp nhận token hoặc mật khẩu và tự trả `x-admin-token`), `POST /api/admin/login` trả token, thêm `POST /api/admin/logout`; helper `applyBookScope()` gán sách vào khoa/lớp khi `POST/PUT /api/admin/books` (validate khoa/lớp → 400); route `/manifest.webmanifest` + `/sw.js`.
+    - `public/index.html` + `app.js`: tích **“Ghi nhớ đăng nhập (30 ngày)”** (`localStorage` ↔ `sessionStorage`), `adminFetch()` tự gắn token & bắt 401 → mở lại form đăng nhập, nút “Khóa lại” xóa token; khối **“Sách này cần học ở khoa / lớp nào?”** trong form sách (chips khoa + danh sách lớp, tóm tắt số lớp); bộ lọc thư viện sách (khoa/lớp/từ khóa) + hiển thị “N lớp” mỗi cuốn; meta PWA + đăng ký service worker + gợi ý cài trên Safari iPhone.
+    - `public/manifest.webmanifest`, `public/sw.js`, `public/icons/icon-192.png`, `icon-512.png`, `icon-maskable-512.png` (sinh từ `logo.png`): PWA đầy đủ, cache trang tĩnh, không cache API.
+    - `test/`: thêm bài test domain (`bookScope`/`assignBookToClasses`), API (token phiên, gán sách theo khoa/lớp, validate 400) và giao diện (token lưu/đăng xuất, editor khoa-lớp, bộ lọc thư viện, meta PWA) — tổng **9 bài test pass**.
+  - **Kết quả**: Admin gán sách cho khoa/lớp ngay khi thêm sách; sinh viên thấy đúng danh sách sách cần học của lớp mình; admin đăng nhập một lần dùng luôn 30 ngày; xbook cài được thành app trên iPhone.
 - **v1.2.1**:
   - **Mục tiêu**: Giảm độ trễ (delay) khi bấm nút — nguyên nhân chính là Vercel function chạy ở xa + mỗi thao tác fetch API tuần tự nhiều lần, chứ không phải code chậm (API local đo được ~1ms).
   - **Giải pháp**:

@@ -45,7 +45,26 @@
     const ids = new Set(selected.flatMap(c => c.bookIds));
     return books.filter(b => ids.has(b.id));
   }
-  const api = { deliveryAt, classKey, classes, migrateSettings, filterBooks };
+  // Sách nằm trong danh mục chung (không thuộc khoa nào). Khi admin "add sách vào khoa/lớp"
+  // thì sách đó trở thành sách cần học của (các) lớp ấy.
+  function bookScope(settings, bookId) {
+    const assigned = classes(settings.classes, settings.departments).filter(c => c.bookIds.includes(bookId));
+    return { classes: assigned, departments: [...new Set(assigned.map(c => c.department))] };
+  }
+  // Gán 1 cuốn vào khoa/lớp: chọn cả KHOA → áp dụng cho mọi lớp của khoa đó;
+  // chọn từng LỚP → chỉ lớp đó. Trả về danh sách lớp mới (đã chuẩn hóa).
+  function assignBookToClasses(rawClasses, bookId, options = {}) {
+    const selectedKeys = new Set((options.classKeys || []).map(String));
+    const selectedDepartments = new Set((options.departments || []).map(String));
+    return classes(rawClasses).map(c => {
+      const inScope = selectedDepartments.has(c.department) || selectedKeys.has(classKey(c));
+      const ids = new Set(c.bookIds);
+      if (inScope) ids.add(bookId);
+      else ids.delete(bookId);
+      return { ...c, bookIds: [...ids] };
+    });
+  }
+  const api = { deliveryAt, classKey, classes, migrateSettings, filterBooks, bookScope, assignBookToClasses };
   if (typeof module !== 'undefined') module.exports = api;
   else root.XBookDomain = api;
 })(typeof window !== 'undefined' ? window : globalThis);

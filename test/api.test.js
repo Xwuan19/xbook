@@ -61,6 +61,48 @@ test('API supports global books shared across faculties, class curricula and imm
     assert.deepEqual((await request('/api/books')).data.settings.classes, [{ ...classes[0], bookIds: [] }]);
     // Deleting a book removes references, without deleting the class or changing existing orders.
     await request('/api/admin/settings', 'PUT', { classes: [classes[0]] });
+    // Admin session: đăng nhập trả token, token dùng thay mật khẩu cho mọi API quản trị
+    const login = await request('/api/admin/login', 'POST', { password: 'test-password' });
+    assert.equal(login.status, 200);
+    assert.ok(login.data.token);
+    const withToken = async (url, method = 'GET', body) => {
+      const res = await fetch(`http://127.0.0.1:${server.address().port}${url}`, {
+        method, headers: { 'Content-Type': 'application/json', 'x-admin-token': login.data.token },
+        body: body ? JSON.stringify(body) : undefined
+      });
+      return { status: res.status, data: await res.json() };
+    };
+    assert.equal((await withToken('/api/admin/statistics')).status, 200);
+    assert.equal((await request('/api/admin/logout', 'POST')).status, 200);
+    const notLoggedIn = await fetch(`http://127.0.0.1:${server.address().port}/api/admin/statistics`, { headers: { 'x-admin-token': 'gia.mao' } });
+    assert.equal(notLoggedIn.status, 401);
+    // add sách vào khoa/lớp: chọn cả khoa → mọi lớp của khoa cần cuốn đó (VD Kinh tế học Triết)
+    await request('/api/admin/settings', 'PUT', { classes: classes.map(c => ({ ...c, bookIds: [] })) });
+    const scoped = await request(`/api/admin/books/${globalBook.data.book.id}`, 'PUT', {
+      title: 'Global book', price: 10000, departments: [departments[1]]
+    });
+    assert.equal(scoped.status, 200);
+    assert.deepEqual(scoped.data.settings.classes.find(c => c.department === departments[1]).bookIds, [globalBook.data.book.id]);
+    // chọn từng lớp: lớp không còn trong phạm vi bị bỏ, lớp mới được thêm vào
+    const classKeyOf = (c) => JSON.stringify([c.department, c.name]);
+    const classB = (await request('/api/books')).data.settings.classes.find(c => c.name === 'B');
+    assert.equal((await request(`/api/admin/books/${globalBook.data.book.id}`, 'PUT', {
+      title: 'Global book', price: 10000, classKeys: [classKeyOf(classB)]
+    })).status, 200);
+    const afterPerClass = (await request('/api/books')).data.settings.classes;
+    assert.deepEqual(afterPerClass.find(c => c.name === 'B').bookIds, [globalBook.data.book.id]);
+    assert.deepEqual(afterPerClass.find(c => c.department === departments[1]).bookIds, []);
+    // sai khoa / sai lớp phải bị từ chối, không âm thầm ghi dữ liệu
+    assert.equal((await request(`/api/admin/books/${globalBook.data.book.id}`, 'PUT', {
+      title: 'Global book', price: 10000, departments: ['Khoa Không Tồn Tại']
+    })).status, 400);
+    assert.equal((await request(`/api/admin/books/${globalBook.data.book.id}`, 'PUT', {
+      title: 'Global book', price: 10000, classKeys: ['["IT","Không có lớp này"]']
+    })).status, 400);
+    // sách chưa gắn khoa/lớp nào thì vẫn không gắn gì (danh mục chung)
+    const freeBook = await request('/api/admin/books', 'POST', { title: 'Sách chung', price: 5000 });
+    assert.equal(freeBook.status, 200);
+    assert.deepEqual(freeBook.data.settings, undefined);
     assert.equal((await request('/api/admin/books/sach-04', 'DELETE')).status, 200);
     assert.deepEqual((await request('/api/books')).data.settings.classes[0].bookIds, []);
     assert.equal((await request(`/api/orders/${created.data.data.orderCode}`)).data.data.bookTitle, 'Shared book');

@@ -2,7 +2,18 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## ✨ Điểm mới (v1.2.0) — Chỉ còn Khoa CNTT + Quản lý sách + Chốt sổ theo ngày nhận sách
+## ✨ Điểm mới (v1.3.0) — Sách gắn Khoa/Lớp + Ghi nhớ đăng nhập + PWA iPhone
+
+| Tính năng | Mô tả |
+|---|---|
+| 📚 **Sách KHÔNG thuộc khoa nào** | Toàn bộ sách nằm trong **danh mục chung**. Khi quản trị *add sách vào khoa/lớp* thì cuốn đó trở thành **sách cần có khi học (các) lớp ấy** — VD *Khoa Kinh tế* cũng học *Triết*, học *Vật lí* như bình thường |
+| 🧩 **Tích chọn khoa/lớp ngay trong form sách** | Form *Thêm / Sửa sách* có khối **“Sách này cần học ở khoa / lớp nào?”**: tích cả **khoa** (áp dụng cho mọi lớp của khoa) hoặc mở rộng chọn **từng lớp**. Bỏ tích = sách trở lại danh mục chung |
+| 🔎 **Lọc thư viện sách** | Tab *Quản lý sách* có bộ lọc **Mọi khoa / Mọi lớp / tìm tên sách – tác giả** và hiển thị số lớp đang dùng mỗi cuốn |
+| 🔐 **Ghi nhớ đăng nhập** | Tích **“Ghi nhớ đăng nhập (30 ngày)”** khi đăng nhập → mở lại web **không cần nhập lại mật khẩu**. Bỏ tích nếu dùng máy chung (chỉ nhớ trong phiên). Token phiên có chữ ký HMAC, không lưu mật khẩu, đổi mật khẩu là mọi token cũ hết hiệu lực |
+| 📱 **PWA cho iPhone** | *Thêm vào Màn hình chính* trên Safari → xbook chạy **toàn màn hình như app**, có icon riêng, có manifest + service worker; trang tĩnh mở được khi mạng chập chờn, dữ liệu đơn hàng luôn lấy mới từ server |
+| 🧪 **Kiểm thử mở rộng** | `npm test`: 9 bài test (token phiên, gán sách theo khoa/lớp, bộ lọc thư viện, PWA, luồng API & giao diện) |
+
+## ✨ Điểm cũ (v1.2.0) — Chỉ còn Khoa CNTT + Quản lý sách + Chốt sổ theo ngày nhận sách
 
 | Tính năng | Mô tả |
 |---|---|
@@ -68,10 +79,14 @@ xbook/
 ├── .env                      # File chứa API Key thật của bạn
 ├── package.json              # Khai báo thư viện (@payos/node, express, cors, dotenv)
 ├── database.js               # Module CSDL (Lưu đơn hàng, đối soát sao kê, schema SQL)
-├── server.js                 # Backend Express tích hợp PayOS SDK & Webhook
+├── server.js                 # Backend Express: PayOS SDK, Webhook, phiên quản trị, manifest + service worker
 ├── public/                   # Giao diện Frontend Responsive Mobile & Desktop
 │   ├── index.html            # Trang chủ hiển thị giáo trình, modal QR realtime
-│   ├── app.js                # Xử lý logic đặt hàng, polling, đối soát
+│   ├── app.js                # Xử lý logic đặt hàng, polling, đối soát, phiên quản trị, gán sách theo khoa/lớp
+│   ├── domain.js             # Logic dùng chung: lớp, bộ lọc, lịch giao, phạm vi khoa/lớp của sách
+│   ├── manifest.webmanifest  # Khai báo PWA (icon, màu, chế độ toàn màn hình)
+│   ├── sw.js                 # Service worker: cache trang tĩnh, không cache API
+│   ├── icons/                # Icon PWA 192 / 512 / maskable 512
 │   ├── success.html          # Trang thanh toán thành công
 │   ├── cancel.html           # Trang báo hủy thanh toán
 │   └── mock-checkout.html    # Trang mô phỏng test nội bộ khi chưa có key
@@ -215,3 +230,54 @@ app.post('/api/payos-webhook', (req, res) => {
 - Quan hệ khoa/lớp trên sách cũ được chuyển một lần sang danh sách sách của lớp (`catalogVersion: 2`). Neon giữ cột cũ để không phá dữ liệu nhưng không dùng chúng cho sách mới/bộ lọc. Không tự gán lớp khi danh sách lớp trống.
 - Mỗi đơn mới lưu `deliveryAt`: muộn hơn giữa thời điểm đặt + 24 giờ và 00:00 ngày giao chung (UTC+7). Lịch đơn đã tạo không đổi khi sửa cài đặt. Đơn cũ không tự suy đoán lịch giao.
 - Kiểm thử: `npm test` (unit, API với dữ liệu tạm/PayOS demo và giao diện qua jsdom; không gọi thanh toán thật).
+
+---
+
+## 📱 8. Cài XBook như App trên iPhone & Android (PWA)
+
+XBook đã có **Web App Manifest** (`/manifest.webmanifest`) + **Service Worker** (`/sw.js`) nên cài được lên màn hình chính, mở toàn màn hình (không còn thanh địa chỉ) và có icon riêng.
+
+### Trên iPhone / iPad (bắt buộc dùng **Safari**)
+1. Mở `https://xbook1.vercel.app` bằng **Safari**.
+2. Bấm nút **Chia sẻ** (ô vuông có mũi tên chỉ lên) ở thanh dưới.
+3. Chọn **Thêm vào Màn hình chính** → **Thêm**.
+4. Mở icon **xbook** vừa tạo → web chạy toàn màn hình như app thật.
+
+> Trang chủ tự hiện **gợi ý cài đặt** khi phát hiện bạn đang dùng Safari trên iPhone (bấm ✕ để tắt vĩnh viễn).
+
+### Trên Android (Chrome / Edge / Cốc Cốc)
+- Bấm biểu tượng **Cài đặt / Thêm vào Màn hình chính** ở thanh địa chỉ, hoặc menu ⋮ → *Thêm vào Màn hình chính*.
+
+### Lưu ý kỹ thuật
+- PWA yêu cầu **HTTPS** (Vercel đã có sẵn). Chạy `localhost` vẫn cài được để thử.
+- Service worker **chỉ cache file tĩnh** (HTML, JS, logo, icon). Mọi request `/api/...` luôn đi thẳng lên server → số lượng sách, trạng thái đăng ký, đơn hàng **không bao giờ bị cũ**.
+- Mở app khi mất mạng: các trang tĩnh vẫn hiển thị; thao tác cần dữ liệu (đặt sách, chốt sổ) sẽ báo lỗi kết nối cho tới khi có mạng.
+- **Khi deploy bản mới**: tăng `CACHE_NAME` trong `public/sw.js` (`xbook-static-v3` → `v4`) để mọi máy xoá cache tĩnh cũ và nhận giao diện mới.
+
+---
+
+## 🔐 9. Phiên Đăng Nhập Quản Trị (không cần nhập lại mật khẩu)
+
+- Khi đăng nhập, server cấp **token phiên** ký HMAC-SHA256 (mặc định **30 ngày**); client lưu token này và gửi qua header `x-admin-token` cho mọi API quản trị.
+- Tích **“Ghi nhớ đăng nhập”** → lưu token vào `localStorage` (mở lại web, tắt máy vẫn còn phiên). Bỏ tích → chỉ lưu `sessionStorage` (đóng trình duyệt là hết).
+- **Không lưu mật khẩu** ở bất kỳ đâu; token là chuỗi có hạn dùng và chữ ký, không thể sửa nội dung.
+- Đổi `ADMIN_PASSWORD` (hoặc `ADMIN_SESSION_SECRET`) → **toàn bộ token cũ hết hiệu lực** ngay lập tức.
+- Tùy biến trong `.env`:
+  ```env
+  ADMIN_SESSION_DAYS=30            # số ngày ghi nhớ phiên (mặc định 30)
+  ADMIN_SESSION_SECRET=...         # khóa ký riêng (tùy chọn; mặc định = ADMIN_PASSWORD)
+  ```
+- Bấm **“Khóa lại”** trong Bảng Quản Lý để đăng xuất và xóa token khỏi thiết bị.
+
+---
+
+## 🧩 10. Gán Sách Vào Khoa / Lớp (curriculum của lớp)
+
+- **Sách không thuộc khoa nào**: mọi cuốn nằm trong *danh mục chung*, thêm/sửa/xóa độc lập.
+- Trong form sách, khối **“Sách này cần học ở khoa / lớp nào?”**:
+  - Tích **cả khoa** → mọi lớp của khoa đó đều cần cuốn này (VD *Khoa Kinh tế* cũng học *Triết*).
+  - Hoặc mở *“chọn từng lớp cụ thể”* → chỉ định đích danh lớp cần học.
+  - Bỏ tích hết → sách trở lại danh mục chung (sinh viên vẫn thấy ở mục **Tất cả** và vẫn mua được).
+- Có thể gán nhanh ở khối *“Sách cần học theo lớp”* (panel bên phải tab Quản lý sách) với cách chọn lớp → tích sách.
+- Trang chủ: sinh viên chọn **Khoa → Lớp** để xem danh sách sách cần học của mình; bộ lọc chỉ để **gợi ý**, không chặn mua.
+- API tương ứng: `POST /api/admin/books`, `PUT /api/admin/books/:id` nhận thêm `departments: []` (tên khoa) và `classKeys: []` (khóa `["Khoa","Lớp"]`); phản hồi kèm `settings` mới.

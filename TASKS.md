@@ -3,7 +3,19 @@
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này (v1.2.0)
+## Mục tiêu đợt này (v1.3.0)
+1. **Sách là danh mục chung, không thuộc khoa nào** — add sách vào **khoa/lớp** = đánh dấu *sách cần học của (các) lớp đó* (tích cả khoa, hoặc chọn từng lớp).
+2. **Ghi nhớ đăng nhập** cho admin (token phiên 30 ngày, không phải nhập lại mật khẩu).
+3. **PWA trên iPhone**: manifest + service worker + icon, cài ra màn hình chính chạy toàn màn hình.
+
+## Giai đoạn 6 (v1.3.0) — Sách gắn Khoa/Lớp + Phiên đăng nhập + PWA
+- [x] T22. `public/domain.js`: `bookScope()` + `assignBookToClasses()` (tích khoa → mọi lớp; tích lớp lẻ → lớp đó; bỏ tích → gỡ).
+- [x] T23. `server.js`: token phiên HMAC (`x-admin-token`), `POST /api/admin/logout`, `applyBookScope()` cho `POST/PUT /api/admin/books`, route `/manifest.webmanifest` + `/sw.js`.
+- [x] T24. Frontend: tích “Ghi nhớ đăng nhập (30 ngày)”, `adminFetch()` tự gắn token/401 → đăng nhập lại, khối “Sách này cần học ở khoa / lớp nào?”, bộ lọc thư viện sách.
+- [x] T25. PWA: `manifest.webmanifest`, `sw.js`, `icons/` (192/512/maskable), meta iOS + gợi ý “Thêm vào Màn hình chính”.
+- [x] T26. Kiểm thử (`npm test` — 9 bài pass) + cập nhật README / handover / TASKS / .env.example.
+
+## Mục tiêu đợt trước (v1.2.0)
 1. **Chỉ còn Khoa CNTT**: bỏ phân loại "Đại cương" & "Kế toán", xóa 4 sách demo thuộc 2 khoa cũ.
 2. **Quản lý sách nâng cấp**: đủ trường (tên, ảnh bìa, giá, tác giả/NXB, trang, năm/bản in, mô tả, khoa, lớp) + **upload ảnh bìa từ máy** (Multer → `/uploads/`).
 3. **Chốt sổ theo ngày nhận sách**: admin chọn ngày giao + lưu ý ngắn gọn; mở lại đăng ký → tự đặt ngày nhận = ngày mai; hiển thị ở banner / form đăng ký / màn hình thành công.

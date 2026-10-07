@@ -6,8 +6,18 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>XBook - Đăng Ký Mua Giáo Trình Theo Khoa & Lớp</title>
+
+  <!-- PWA: cài được trên iPhone (Thêm vào Màn hình chính) & Android -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#059669">
+  <meta name="description" content="XBook - Đăng ký mua sách theo lớp, thanh toán VietQR PayOS, quản lý danh sách phát sách trên lớp.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="xbook">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   
   <!-- Tailwind CSS + Lucide Icons (CDN pinned version — load nhanh hơn, không tốn request giải @latest)
        Note: SheetJS (xlsx ~1MB) được nạp CHẬY LƯỜI (lazy) chỉ khi bấm "Xuất Excel" để trang mở nhanh hơn -->
@@ -118,6 +128,23 @@
   <!-- BANNER THÔNG BÁO TRẠNG THÁI ĐĂNG KÝ (ĐÓNG HOẶC MỞ) -->
   <div id="registrationBannerContainer" class="max-w-6xl mx-auto px-4 sm:px-6 pt-5 w-full">
     <!-- Render động từ JS: Mở hoặc Đã chốt sổ -->
+  </div>
+
+  <!-- PWA: GỢI Ý CÀI WEB LÊN MÀN HÌNH CHÍNH (chỉ hiện trên iPhone/iPad dùng Safari) -->
+  <div id="iosInstallHint" class="hidden max-w-6xl mx-auto px-4 sm:px-6 pt-3 w-full">
+    <div class="bg-slate-900 text-white rounded-2xl p-3.5 shadow-lg flex items-start gap-3">
+      <img src="icons/icon-192.png" alt="xbook" class="w-10 h-10 rounded-xl flex-shrink-0 border border-white/20" />
+      <div class="flex-1 min-w-0">
+        <p class="text-xs font-extrabold">Cài xbook vào iPhone để dùng như app</p>
+        <p class="text-[11px] text-slate-300 mt-0.5 leading-snug">
+          Bấm nút <strong class="text-white">Chia sẻ</strong> (ô vuông có mũi tên) ở thanh dưới Safari → chọn
+          <strong class="text-white">Thêm vào Màn hình chính</strong> → <strong class="text-white">Thêm</strong>.
+        </p>
+      </div>
+      <button onclick="dismissIosInstallHint()" class="text-slate-400 hover:text-white flex-shrink-0" title="Đóng gợi ý">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
   </div>
 
   <!-- NỘI DUNG CHÍNH: DANH SÁCH GIÁO TRÌNH PHÂN LOẠI THEO KHOA / LỚP -->
@@ -412,6 +439,15 @@
           <p class="text-[11px] text-slate-400 mt-1">Mật khẩu mặc định: <strong class="text-slate-600">123456</strong></p>
         </div>
 
+        <!-- LƯU PHIÊN ĐĂNG NHẬP: lần sau vào web không cần nhập lại mật khẩu -->
+        <label for="adminRememberInput" class="flex items-start gap-2 text-left bg-emerald-50/70 border border-emerald-200 rounded-xl px-3 py-2 cursor-pointer">
+          <input type="checkbox" id="adminRememberInput" checked class="mt-0.5 w-4 h-4 accent-emerald-600 flex-shrink-0" />
+          <span class="text-[11px] leading-snug text-emerald-900">
+            <strong class="font-extrabold">Ghi nhớ đăng nhập (30 ngày)</strong><br />
+            Không cần nhập lại mật khẩu khi mở lại web. Bỏ tích nếu dùng máy chung.
+          </span>
+        </label>
+
         <div id="adminLoginError" class="hidden text-rose-600 text-xs font-bold bg-rose-50 py-1.5 px-3 rounded-xl border border-rose-200">
           Mật khẩu quản trị không chính xác!
         </div>
@@ -652,6 +688,24 @@
                 </button>
               </div>
 
+              <!-- LỌC THƯ VIỆN SÁCH THEO KHOA / LỚP -->
+              <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
+                <select id="manageDeptFilter" onchange="setManageDeptFilter(this.value)" aria-label="Lọc sách theo khoa"
+                  class="flex-1 min-w-[110px] px-2.5 py-2 text-xs font-semibold bg-slate-100 border border-slate-200 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none">
+                  <option value="__ALL__">Mọi khoa</option>
+                </select>
+                <select id="manageClassFilter" onchange="setManageClassFilter(this.value)" aria-label="Lọc sách theo lớp"
+                  class="flex-1 min-w-[110px] px-2.5 py-2 text-xs font-semibold bg-slate-100 border border-slate-200 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none">
+                  <option value="__ALL__">Mọi lớp</option>
+                </select>
+                <div class="relative flex-1 min-w-[140px]">
+                  <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                  <input type="text" id="manageBookSearch" oninput="setManageBookSearch(this.value)" placeholder="Tìm tên sách / tác giả..."
+                    class="w-full pl-8 pr-3 py-2 text-xs bg-slate-100 border border-slate-200 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none" />
+                </div>
+              </div>
+              <p id="manageBooksCount" class="text-[11px] text-slate-400 mb-1.5"></p>
+
               <div class="border border-slate-200 rounded-2xl overflow-hidden bg-white">
                 <!-- DESKTOP TABLE -->
                 <table class="w-full text-left text-xs hidden sm:table">
@@ -786,7 +840,30 @@
           </div>
         </div>
 
-        <p class="text-xs text-slate-500">Sách thuộc danh mục chung. Để chọn sách cần học cho một lớp, dùng phần “Sách cần học theo lớp” trong quản trị.</p>
+        <!-- PHÂN LOẠI SÁCH THEO KHOA / LỚP: sách thêm vào khoa/lớp nào thì đó là sách cần học của lớp ấy -->
+        <div class="border border-emerald-200 bg-emerald-50/60 rounded-2xl p-3">
+          <div class="flex items-start gap-1.5 mb-2">
+            <i data-lucide="graduation-cap" class="w-3.5 h-3.5 text-emerald-700 mt-0.5 flex-shrink-0"></i>
+            <div>
+              <p class="text-xs font-extrabold text-emerald-900">Sách này cần học ở khoa / lớp nào?</p>
+              <p class="text-[11px] text-emerald-800/80 leading-snug">Sách nằm trong <strong>danh mục chung</strong> (không thuộc khoa nào). Tích vào khoa/lớp để đánh dấu <strong>sách cần có khi học (các) lớp đó</strong> — VD Khoa Kinh tế cũng học Triết, học Vật lí.</p>
+            </div>
+          </div>
+
+          <p class="text-[10px] font-black uppercase tracking-wider text-emerald-700 mb-1">Theo khoa (áp dụng cho mọi lớp của khoa)</p>
+          <div id="bookScopeDepartments" class="flex flex-wrap gap-1.5 mb-2">
+            <!-- Render động -->
+          </div>
+
+          <details class="group">
+            <summary class="cursor-pointer text-[11px] font-bold text-emerald-800 select-none">Hoặc chọn từng lớp cụ thể ▾</summary>
+            <div id="bookScopeClasses" class="mt-2 max-h-44 overflow-y-auto space-y-0.5 bg-white border border-emerald-100 rounded-xl p-2">
+              <!-- Render động -->
+            </div>
+          </details>
+
+          <p id="bookScopeSummary" class="text-[11px] font-bold text-emerald-800 mt-2"></p>
+        </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -845,6 +922,14 @@
 
   <script src="domain.js"></script>
   <script src="app.js"></script>
+  <script>
+    // PWA: đăng ký service worker (phạm vi gốc) để web cài được lên màn hình chính iPhone
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+      });
+    }
+  </script>
   <script>lucide.createIcons();</script>
 </body>
 </html>

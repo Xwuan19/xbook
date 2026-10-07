@@ -39,3 +39,22 @@ test('legacy book assignments migrate once and never reappear after removal', ()
   migrated.classes = [{ ...migrated.classes[0], bookIds: [] }];
   assert.deepEqual(migrateSettings(migrated, legacy), migrated);
 });
+test('book scope: books live in a shared catalog and get assigned to faculties or single classes', () => {
+  const { bookScope, assignBookToClasses } = require('../public/domain');
+  const settings = { departments: ['Kinh tế', 'CNTT'], classes: [
+    { name: 'KT1', department: 'Kinh tế', bookIds: ['triet'] },
+    { name: 'KT2', department: 'Kinh tế', bookIds: [] },
+    { name: 'IT1', department: 'CNTT', bookIds: ['triet'] }
+  ] };
+  const scope = bookScope(settings, 'triet');
+  assert.deepEqual(scope.departments, ['Kinh tế', 'CNTT']);
+  assert.deepEqual(scope.classes.map(c => c.name), ['KT1', 'IT1']);
+  assert.deepEqual(bookScope(settings, 'chua-gan').classes, []);
+  // Chọn cả khoa → mọi lớp của khoa đó cần cuốn sách này (Kinh tế cũng học Triết)
+  assert.deepEqual(assignBookToClasses(settings.classes, 'triet', { departments: ['Kinh tế'] }).map(c => c.bookIds.includes('triet')), [true, true, false]);
+  // Chỉ chọn 1 lớp → các lớp khác bị bỏ khỏi phạm vi
+  const perClass = assignBookToClasses(settings.classes, 'triet', { classKeys: [JSON.stringify(['Kinh tế', 'KT1'])] });
+  assert.deepEqual(perClass.map(c => c.bookIds.includes('triet')), [true, false, false]);
+  // Bỏ tích hết → sách trở lại danh mục chung
+  assert.deepEqual(assignBookToClasses(settings.classes, 'triet', {}).map(c => c.bookIds.length), [0, 0, 0]);
+});
