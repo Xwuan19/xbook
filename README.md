@@ -2,6 +2,19 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
+## ✨ Điểm mới (v1.1.0) — Phân loại Khoa / Lớp / Tên
+
+| Phân loại | Mô tả | Dùng để làm gì |
+|---|---|---|
+| 🎓 **Theo Khoa** | Mỗi giáo trình gắn 1 khoa (VD: *Khoa CNTT*, *Khoa Kế toán*, *Đại cương*) | Lọc nhanh **list giáo trình cần thiết** theo từng khoa, soạn list báo in |
+| 🏫 **Theo Lớp** | Danh sách tên lớp do **người quản trị tự bổ sung** (tab *Quản lý giáo trình*) | Gợi ý lớp khi sinh viên đăng ký, lọc & thống kê đơn theo từng lớp |
+| 👤 **Theo Tên** | 1 người mua được **nhiều cuốn khác nhau trong 1 đơn / 1 mã QR** (giỏ hàng) | Gộp toàn bộ đơn trùng tên để phát sách, tránh thất lạc |
+
+- Giao diện mới: lọc theo Khoa (chips) + Lớp (dropdown), giỏ hàng nổi, grid 1→2→3 cột (Mobile→Tablet→Desktop).
+- Bảng quản trị 5 tab: **Đơn hàng · Theo tên · Theo lớp · Theo khoa · Quản lý giáo trình** (thêm/sửa/xóa sách, quản lý danh sách khoa & lớp).
+- Xuất Excel 4 sheet: *Danh sách phát sách · Tổng hợp theo khoa · Theo tên người mua · Toàn bộ đơn hàng*.
+- Xem kế hoạch công việc chi tiết tại [`TASKS.md`](./TASKS.md).
+
 ---
 
 ## 📸 1. Quy Trình Vận Hành (End-to-End Workflow)

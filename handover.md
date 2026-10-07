@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.0.6 (Export to Excel Feature)
+## Phiên bản hiện tại: v1.1.0 (Phân loại Khoa / Lớp / Tên + Giỏ hàng đa cuốn)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -57,6 +57,14 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.1.0**:
+  - **Mục tiêu**: Bổ sung logic phân loại **Khoa** (Khoa CNTT, Khoa Kế toán…) để soạn list giáo trình cần thiết, phân loại **Lớp** (người quản trị tự bổ sung tên lớp), phân loại **Tên** (1 người mua nhiều cuốn khác nhau), cập nhật giao diện và tối ưu tỷ lệ hiển thị Desktop/Mobile.
+  - **Giải pháp**:
+    - `database.js`: thêm `department` + `classes` cho sách, `departments` + `classes` cho settings, cột `items_json` cho đơn hàng (1 đơn nhiều cuốn), migration `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` cho Neon, CRUD giáo trình (`createBook/updateBook/deleteBook`), tương thích ngược toàn bộ dữ liệu cũ (JSON + Neon).
+    - `server.js`: `POST /api/orders/create-payment-link` nhận `items[]` (vẫn hỗ trợ định dạng 1 cuốn cũ), thêm `POST/PUT/DELETE /api/admin/books` và `PUT /api/admin/settings`.
+    - `public/index.html` + `app.js`: bộ lọc Khoa (chips) + Lớp (dropdown), **giỏ hàng đa cuốn** thanh toán 1 mã QR, form đăng ký thêm ô **Lớp** (datalist gợi ý), grid 1→2→3 cột (mobile→tablet→desktop, container `max-w-6xl`), bảng quản trị 5 tab (Đơn hàng / Theo tên / Theo lớp / Theo khoa / Quản lý giáo trình), xuất Excel 4 sheet có cột Khoa & Lớp.
+    - `TASKS.md`: danh sách task làm việc thống nhất toàn dự án.
+  - **Kết quả**: Lọc giáo trình theo khoa/lớp, 1 sinh viên đặt nhiều cuốn trong 1 lần chuyển khoản, thống kê gộp theo tên/lớp/khoa, quản trị tự thêm lớp & giáo trình không cần đụng code.
 - **v1.0.6**:
   - **Mục tiêu**: Bổ sung tính năng Xuất Excel (.xlsx) từ Bảng Quản Trị, bảo đảm an toàn dữ liệu người mua không bị chỉnh sửa.
   - **Giải pháp**: Tích hợp thư viện SheetJS qua CDN, xây dựng hàm `exportToExcel()` tạo 3 sheet (Phát sách, Báo in, Toàn bộ đơn hàng) với độ rộng cột chuẩn và autofilter. Đặt nút xuất Excel tại Header và Footer của Modal Admin.
