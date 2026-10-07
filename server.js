@@ -673,18 +673,8 @@ app.post('/api/admin/toggle-registration', requireAdminAuth, async (req, res) =>
     const current = await db.getSettings();
     const patch = { isRegistrationOpen: !current.isRegistrationOpen };
 
-    if (patch.isRegistrationOpen) {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const today = ymd(new Date());
-      if (!current.deliveryDate || current.deliveryDate < today) {
-        patch.deliveryDate = ymd(tomorrow);
-      }
-    }
-
     const updated = await db.updateSettings(patch);
-    console.log(` Đã đổi trạng thái đăng ký: ${updated.isRegistrationOpen ? `MỞ ĐĂNG KÝ (nhận sách ${updated.deliveryDate || 'chưa chọn'})` : 'ĐÃ ĐÓNG / CHỐT SỔ'}`);
+    console.log(` Đã đổi trạng thái đăng ký: ${updated.isRegistrationOpen ? 'MỞ ĐĂNG KÝ' : 'ĐÃ ĐÓNG / CHỐT SỔ'}`);
     res.json({ success: true, settings: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

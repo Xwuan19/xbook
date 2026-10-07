@@ -144,6 +144,8 @@ test('admin page owns login + dashboard and edits class curricula / book form', 
   assert.equal(window.document.getElementById('checkoutModal'), null);
   assert.equal(window.document.getElementById('bookGrid'), null);
   assert.equal(window.document.getElementById('qrPaymentModal'), null);
+  assert.equal(window.document.getElementById('deliveryDateInput'), null);
+  assert.equal(window.document.getElementById('deliveryNoteInput'), null);
 
   // 2. Chưa đăng nhập → hiện form mật khẩu, ẩn Bảng Quản Lý
   assert.equal(window.isAdminAuthed(), false);

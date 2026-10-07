@@ -290,19 +290,15 @@ async function refreshAdminData(opts = {}) {
 
     // Nút bật/tắt chốt sổ
     const btnToggle = document.getElementById('btnToggleRegistration');
-    if (stats.settings.isRegistrationOpen) {
-      btnToggle.className = 'w-full py-2.5 px-4 rounded-xl text-xs font-black transition flex items-center justify-center space-x-2 shadow-sm bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300';
-      btnToggle.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i><span>Bấm để ĐÓNG / CHỐT SỔ ĐĂNG KÝ</span>`;
-    } else {
-      btnToggle.className = 'w-full py-2.5 px-4 rounded-xl text-xs font-black transition flex items-center justify-center space-x-2 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white';
-      btnToggle.innerHTML = `<i data-lucide="unlock" class="w-4 h-4"></i><span>Bấm để MỞ LẠI ĐĂNG KÝ (ngày nhận sách tự đặt = ngày mai, chỉnh được bên dưới)</span>`;
+    if (btnToggle) {
+      if (stats.settings.isRegistrationOpen) {
+        btnToggle.className = 'w-full py-2.5 px-4 rounded-xl text-xs font-black transition flex items-center justify-center space-x-2 shadow-sm bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300';
+        btnToggle.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i><span>Bấm để ĐÓNG / CHỐT SỔ ĐĂNG KÝ</span>`;
+      } else {
+        btnToggle.className = 'w-full py-2.5 px-4 rounded-xl text-xs font-black transition flex items-center justify-center space-x-2 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white';
+        btnToggle.innerHTML = `<i data-lucide="unlock" class="w-4 h-4"></i><span>Bấm để MỞ LẠI ĐĂNG KÝ MUA SÁCH</span>`;
+      }
     }
-
-    // Điền lại ngày nhận sách + lưu ý (không làm mất giá trị admin vừa gõ)
-    const dateInput = document.getElementById('deliveryDateInput');
-    const noteInput = document.getElementById('deliveryNoteInput');
-    if (dateInput && document.activeElement !== dateInput) dateInput.value = stats.settings.deliveryDate || '';
-    if (noteInput && document.activeElement !== noteInput) noteInput.value = stats.settings.deliveryNote || '';
 
     // Dữ liệu gốc (chưa lọc) để bộ lọc ngày tính lại mọi thống kê
     const paidOrders = (stats.allOrders || []).filter(o => o.status === 'PAID');
@@ -656,8 +652,12 @@ function renderAdminOrderList() {
           <tr class="hover:bg-slate-50 transition border-b border-slate-100">
             <td class="p-2.5 text-center font-bold text-slate-400 text-xs">${index + 1}</td>
             <td class="p-2.5 font-extrabold text-sm ${deliveredClass}">
-              ${escapeHtml(o.customerName)}<div class="text-[10px] text-emerald-700">Giao dự kiến: ${escapeHtml(formatDelivery(o.deliveryAt))}</div>
-              ${o.customerPhone ? `<div class="text-[10px] text-slate-400 font-normal">SĐT: ${escapeHtml(o.customerPhone)}</div>` : ''}
+              <div>${escapeHtml(o.customerName)}</div>
+              <div class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-0.5 mt-1">
+                <i data-lucide="calendar" class="w-3.5 h-3.5 text-emerald-600"></i>
+                Nhận sách: ${escapeHtml(formatDelivery(o.deliveryAt))}
+              </div>
+              ${o.customerPhone ? `<div class="text-[10px] text-slate-400 font-normal mt-0.5">SĐT: ${escapeHtml(o.customerPhone)}</div>` : ''}
             </td>
             <td class="p-2.5 text-xs font-bold text-slate-600">${o.customerClass ? escapeHtml(orderClassLabel(o)) : '<span class="text-slate-300">—</span>'}</td>
             <td class="p-2.5 font-medium text-xs max-w-xs">
@@ -704,9 +704,13 @@ function renderAdminOrderList() {
             <div class="flex items-start space-x-2.5 min-w-0">
               <span class="w-6 h-6 rounded-full bg-slate-200/90 text-slate-700 font-extrabold text-[11px] flex items-center justify-center flex-shrink-0 mt-0.5">${index + 1}</span>
               <div class="min-w-0">
-                <div class="font-extrabold text-sm ${nameClass} truncate">${escapeHtml(o.customerName)}<div class="text-[10px] text-emerald-700">Giao dự kiến: ${escapeHtml(formatDelivery(o.deliveryAt))}</div></div>
+                <div class="font-extrabold text-sm ${nameClass} truncate">${escapeHtml(o.customerName)}</div>
+                <div class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-1.5 py-0.5 mt-0.5">
+                  <i data-lucide="calendar" class="w-3 h-3 text-emerald-600"></i>
+                  Nhận sách: ${escapeHtml(formatDelivery(o.deliveryAt))}
+                </div>
                 ${o.customerClass ? `<div class="text-[10px] font-bold text-sky-600 mt-0.5">${escapeHtml(orderClassLabel(o))}</div>` : ''}
-                <div class="text-[11px] text-slate-500 mt-0.5">${escapeHtml(orderItemsLabel(o))}</div>
+                <div class="text-[11px] text-slate-700 font-medium mt-0.5">Sách: ${escapeHtml(orderItemsLabel(o))}</div>
                 <div class="text-[10px] font-bold text-slate-400 mt-0.5">
                   Đặt: ${escapeHtml(formatDateKeyVN(localDateKey(o.createdAt)))}${o.paidAt ? ` · TT: ${escapeHtml(formatDateKeyVN(localDateKey(o.paidAt)))}` : ''}
                 </div>
@@ -794,8 +798,14 @@ function renderAdminCustomerTab(paidOrders) {
           ${g.orders.map(o => `
             <div class="flex items-center justify-between gap-2 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
               <div class="text-xs text-slate-700 min-w-0">
-                <span class="font-semibold">${escapeHtml(orderItemsLabel(o))}</span>
-                <span class="text-slate-400"> — ${formatMoney(o.amount)}</span>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="font-bold text-slate-900">${escapeHtml(orderItemsLabel(o))}</span>
+                  <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+                    <i data-lucide="calendar" class="w-3 h-3 text-emerald-600"></i>
+                    Nhận: ${escapeHtml(formatDelivery(o.deliveryAt))}
+                  </span>
+                </div>
+                <div class="text-[10px] text-slate-400 mt-0.5">${formatMoney(o.amount)} · Đặt: ${escapeHtml(formatDateKeyVN(localDateKey(o.createdAt)))}</div>
               </div>
               <button onclick="toggleDelivered(${o.orderCode})"
                 class="flex-shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg border transition ${o.isDelivered ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'}">
@@ -863,8 +873,14 @@ function renderAdminClassTab(paidOrders) {
           ${students.map(o => `
             <div class="flex items-center justify-between gap-2 px-3.5 py-2">
               <div class="min-w-0">
-                <span class="text-xs font-extrabold text-slate-900">${escapeHtml(o.customerName)}<div class="text-[10px] text-emerald-700">Giao dự kiến: ${escapeHtml(formatDelivery(o.deliveryAt))}</div></span>
-                <span class="text-[11px] text-slate-500"> — ${escapeHtml(orderItemsLabel(o))}</span>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-xs font-extrabold text-slate-900">${escapeHtml(o.customerName)}</span>
+                  <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+                    <i data-lucide="calendar" class="w-3 h-3 text-emerald-600"></i>
+                    Nhận: ${escapeHtml(formatDelivery(o.deliveryAt))}
+                  </span>
+                </div>
+                <div class="text-[11px] text-slate-600 mt-0.5">${escapeHtml(orderItemsLabel(o))}</div>
               </div>
               <div class="flex items-center space-x-2 flex-shrink-0">
                 <span class="text-xs font-black text-emerald-600">${formatMoney(o.amount)}</span>
@@ -1484,29 +1500,10 @@ async function handleToggleRegistration() {
       currentSettings = { ...currentSettings, ...data.settings };
       renderStorefrontCatalogIfPresent();
       await refreshAdminData();
-      if (data.settings.isRegistrationOpen && data.settings.deliveryDate) {
-        alert(`Đã mở lại nhận đơn.\nNgày nhận sách hiện tại: ${formatDateVN(data.settings.deliveryDate)} (mặc định = ngày mai, bạn có thể đổi ở ô "Ngày nhận sách").`);
-      }
+      alert(data.settings.isRegistrationOpen ? "Đã mở lại nhận đơn." : "Đã đóng / chốt sổ đăng ký.");
     }
   } catch (e) {
     alert("Lỗi khi đổi trạng thái: " + e.message);
-  }
-}
-
-/** Lưu ngày nhận sách + lưu ý giao sách (chốt sổ) */
-async function handleSaveDelivery() {
-  const dateInput = document.getElementById('deliveryDateInput');
-  const noteInput = document.getElementById('deliveryNoteInput');
-  if (!dateInput) return;
-  try {
-    await saveSettingsPatch({
-      deliveryDate: (dateInput.value || '').trim(),
-      deliveryNote: (noteInput ? noteInput.value : '').trim()
-    });
-    renderStorefrontCatalogIfPresent();
-    alert("✅ Đã lưu ngày nhận sách và lưu ý cho sinh viên.");
-  } catch (e) {
-    alert("Lỗi khi lưu: " + e.message);
   }
 }
 
@@ -1581,7 +1578,7 @@ async function exportToExcel() {
       [
         "STT", "Mã Đơn", "Họ và Tên", "Lớp", "Khoa (theo sách)", "Số Điện Thoại",
         "Giáo Trình Đã Mua", "Tổng Số Cuốn", "Thành Tiền (đ)",
-        "Tình Trạng Phát Sách", "Ngày Đặt", "Ngày Nộp Tiền", "Ghi Chú / Mã GD"
+        "Ngày Nhận Sách", "Tình Trạng Phát Sách", "Ngày Đặt", "Ngày Nộp Tiền", "Ghi Chú / Mã GD"
       ]
     ];
 
@@ -1597,6 +1594,7 @@ async function exportToExcel() {
         orderItemsLabel(o),
         orderBookCount(o),
         Number(o.amount) || 0,
+        formatDelivery(o.deliveryAt),
         o.isDelivered ? "Đã nhận sách" : "Chưa nhận",
         formatDateKeyVN(localDateKey(o.createdAt)),
         o.paidAt ? new Date(o.paidAt).toLocaleString('vi-VN') : '',
@@ -1609,7 +1607,7 @@ async function exportToExcel() {
       "TỔNG CỘNG", "", `${paidOrders.length} đơn`, "", "", "", "",
       paidOrders.reduce((sum, o) => sum + orderBookCount(o), 0),
       paidOrders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0),
-      `${paidOrders.filter(o => o.isDelivered).length} đã nhận`, "", "", ""
+      "", `${paidOrders.filter(o => o.isDelivered).length} đã nhận`, "", "", ""
     ]);
 
     const ws1 = XLSX.utils.aoa_to_sheet(sheet1Rows);

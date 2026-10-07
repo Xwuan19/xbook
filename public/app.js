@@ -399,7 +399,7 @@ function openCheckoutModal() {
     }
   }
 
-  // Khởi tạo ngày khách muốn nhận sách (tối thiểu từ ngày mai)
+  // Khởi tạo ngày khách muốn nhận sách (bắt buộc sau thời điểm đặt 1 ngày)
   const dateInput = document.getElementById('formCustomerDeliveryDate');
   if (dateInput) {
     const tomorrow = new Date(Date.now() + 86400000);
@@ -409,9 +409,7 @@ function openCheckoutModal() {
     const minDateStr = `${yyyy}-${mm}-${dd}`;
     dateInput.min = minDateStr;
     if (!dateInput.value || dateInput.value < minDateStr) {
-      dateInput.value = (currentSettings.deliveryDate && currentSettings.deliveryDate >= minDateStr)
-        ? currentSettings.deliveryDate
-        : minDateStr;
+      dateInput.value = minDateStr;
     }
   }
 
@@ -527,7 +525,7 @@ async function handleCreatePayment(event) {
     return;
   }
   if (deliveryDateInput?.min && deliveryDate < deliveryDateInput.min) {
-    alert("Ngày nhận sách phải từ ngày mai trở đi!");
+    alert("Ngày nhận sách bắt buộc phải sau ngày đặt đơn ít nhất 1 ngày!");
     deliveryDateInput?.focus();
     return;
   }

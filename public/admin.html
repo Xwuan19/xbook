@@ -210,10 +210,10 @@
           </div>
         </div>
 
-        <p class="text-xs text-slate-500 mb-3">Phân loại theo <strong>Khoa</strong> · <strong>Lớp</strong> · <strong>Tên người mua</strong> — chốt sổ, ngày nhận sách & phát sách</p>
+        <p class="text-xs text-slate-500 mb-3">Phân loại theo <strong>Khoa</strong> · <strong>Lớp</strong> · <strong>Tên người mua</strong> — chốt sổ & phát sách</p>
 
-        <!-- HÀNG 2: NÚT CHỐT SỔ / MỞ ĐĂNG KÝ + NGÀY NHẬN SÁCH + LƯU Ý GIAO -->
-        <div class="print:hidden mb-3 bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2.5">
+        <!-- HÀNG 2: NÚT CHỐT SỔ / MỞ ĐĂNG KÝ -->
+        <div class="print:hidden mb-3 bg-slate-50 border border-slate-200 rounded-2xl p-3">
           <button 
             id="btnToggleRegistration" 
             onclick="handleToggleRegistration()" 
@@ -221,31 +221,6 @@
           >
             <!-- Render động từ JS -->
           </button>
-
-          <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-            <label class="text-[11px] font-bold text-slate-600 whitespace-nowrap flex items-center gap-1 sm:w-28 flex-shrink-0">
-              <i data-lucide="calendar-days" class="w-3.5 h-3.5 text-emerald-600"></i> Ngày nhận sách
-            </label>
-            <input 
-              type="date" 
-              id="deliveryDateInput" 
-              class="flex-1 min-w-0 px-2.5 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:bg-white focus:border-brand-500 focus:outline-none"
-            />
-            <button onclick="handleSaveDelivery()" title="Lưu ngày nhận sách" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm shadow-emerald-600/20 flex-shrink-0">
-              <i data-lucide="save" class="w-3.5 h-3.5"></i>
-              <span>Lưu ngày</span>
-            </button>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <i data-lucide="info" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0"></i>
-            <input 
-              type="text" 
-              id="deliveryNoteInput" 
-              placeholder="Lưu ý hiển thị cho sinh viên (VD: Sách thường giao ngay hôm sau nếu có tiết.)" 
-              class="flex-1 min-w-0 px-2.5 py-2 text-[11px] bg-white border border-slate-200 rounded-xl focus:border-brand-500 focus:outline-none"
-            />
-          </div>
         </div>
 
         <!-- LỌC THEO NGÀY ĐẶT HÀNG / NGÀY THANH TOÁN — HIỆN Ở MỌI TAB ĐỂ QUYẾT TOÁN TỪNG NGÀY -->
