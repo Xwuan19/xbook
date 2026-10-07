@@ -10,7 +10,8 @@
         "name": "CNTT K15",
         "department": "Khoa CNTT",
         "bookIds": [
-          "sach-04"
+          "sach-04",
+          "sach-05"
         ]
       }
     ],
@@ -27,6 +28,16 @@
       "pages": 250,
       "description": "Giáo trình mẫu của Khoa CNTT: mảng, danh sách liên kết, cây, đồ thị và các giải thuật sắp xếp.",
       "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80"
+    },
+    {
+      "id": "sach-05",
+      "title": "Bài tập Cấu trúc dữ liệu và giải thuật",
+      "price": 25000,
+      "author": "Giáo trình Khoa CNTT",
+      "pages": 180,
+      "year": "",
+      "description": "Sách bài tập kèm theo giáo trình (dữ liệu demo để xem thống kê nhiều đầu sách).",
+      "cover": ""
     }
   ],
   "orders": [
@@ -64,36 +75,6 @@
         {
           "bookId": "sach-04",
           "bookTitle": "Cấu trúc dữ liệu và giải thuật",
-          "quantity": 1,
-          "unitPrice": 35000
-        }
-      ],
-      "bookId": "sach-04",
-      "bookTitle": "Cấu trúc dữ liệu và giải thuật",
-      "quantity": 1,
-      "unitPrice": 35000,
-      "amount": 35000,
-      "customerName": "Trần Minh Anh",
-      "customerClass": "CNTT K15",
-      "customerDepartment": "Khoa CNTT",
-      "customerPhone": "0901234567",
-      "note": "ĐƠN DEMO — dùng để xem bộ lọc/quyết toán theo ngày, xoá được trong data.json",
-      "status": "PAID",
-      "isDelivered": false,
-      "checkoutUrl": "",
-      "qrCode": "",
-      "createdAt": "2026-10-07T08:30:00Z",
-      "updatedAt": "2026-10-07T09:30:00Z",
-      "paidAt": "2026-10-07T09:30:00Z",
-      "bankReference": "DEMO900000001",
-      "accountNumber": "0123456789"
-    },
-    {
-      "orderCode": 900000002,
-      "items": [
-        {
-          "bookId": "sach-04",
-          "bookTitle": "Cấu trúc dữ liệu và giải thuật",
           "quantity": 2,
           "unitPrice": 35000
         }
@@ -103,18 +84,54 @@
       "quantity": 2,
       "unitPrice": 35000,
       "amount": 70000,
-      "customerName": "Lê Quốc Bảo",
+      "customerName": "Trần Minh Anh",
       "customerClass": "CNTT K15",
       "customerDepartment": "Khoa CNTT",
-      "customerPhone": "0912345678",
-      "note": "ĐƠN DEMO — dùng để xem bộ lọc/quyết toán theo ngày, xoá được trong data.json",
+      "customerPhone": "0901234567",
+      "note": "ĐƠN DEMO — xem thống kê/quyết toán, xoá được trong data.json",
       "status": "PAID",
       "isDelivered": false,
       "checkoutUrl": "",
       "qrCode": "",
-      "createdAt": "2026-10-07T14:30:00Z",
-      "updatedAt": "2026-10-07T15:30:00Z",
-      "paidAt": "2026-10-07T15:30:00Z",
+      "createdAt": "2026-10-07T08:00:00Z",
+      "updatedAt": "2026-10-07T08:45:00Z",
+      "paidAt": "2026-10-07T08:45:00Z",
+      "bankReference": "DEMO900000001",
+      "accountNumber": "0123456789"
+    },
+    {
+      "orderCode": 900000002,
+      "items": [
+        {
+          "bookId": "sach-04",
+          "bookTitle": "Cấu trúc dữ liệu và giải thuật",
+          "quantity": 1,
+          "unitPrice": 35000
+        },
+        {
+          "bookId": "sach-05",
+          "bookTitle": "Bài tập Cấu trúc dữ liệu và giải thuật",
+          "quantity": 1,
+          "unitPrice": 25000
+        }
+      ],
+      "bookId": "sach-04",
+      "bookTitle": "Cấu trúc dữ liệu và giải thuật, Bài tập Cấu trúc dữ liệu và giải thuật",
+      "quantity": 2,
+      "unitPrice": 35000,
+      "amount": 60000,
+      "customerName": "Lê Quốc Bảo",
+      "customerClass": "CNTT K15",
+      "customerDepartment": "Khoa CNTT",
+      "customerPhone": "0912345678",
+      "note": "ĐƠN DEMO — xem thống kê/quyết toán, xoá được trong data.json",
+      "status": "PAID",
+      "isDelivered": false,
+      "checkoutUrl": "",
+      "qrCode": "",
+      "createdAt": "2026-10-07T14:00:00Z",
+      "updatedAt": "2026-10-07T14:45:00Z",
+      "paidAt": "2026-10-07T14:45:00Z",
       "bankReference": "DEMO900000002",
       "accountNumber": "0123456789"
     },
@@ -124,27 +141,27 @@
         {
           "bookId": "sach-04",
           "bookTitle": "Cấu trúc dữ liệu và giải thuật",
-          "quantity": 1,
+          "quantity": 3,
           "unitPrice": 35000
         }
       ],
       "bookId": "sach-04",
       "bookTitle": "Cấu trúc dữ liệu và giải thuật",
-      "quantity": 1,
+      "quantity": 3,
       "unitPrice": 35000,
-      "amount": 35000,
+      "amount": 105000,
       "customerName": "Phạm Thùy Linh",
       "customerClass": "CNTT K15",
       "customerDepartment": "Khoa CNTT",
       "customerPhone": "0987654321",
-      "note": "ĐƠN DEMO — dùng để xem bộ lọc/quyết toán theo ngày, xoá được trong data.json",
+      "note": "ĐƠN DEMO — xem thống kê/quyết toán, xoá được trong data.json",
       "status": "PAID",
       "isDelivered": true,
       "checkoutUrl": "",
       "qrCode": "",
-      "createdAt": "2026-10-06T15:30:00Z",
-      "updatedAt": "2026-10-06T16:30:00Z",
-      "paidAt": "2026-10-06T16:30:00Z",
+      "createdAt": "2026-10-06T15:00:00Z",
+      "updatedAt": "2026-10-06T15:45:00Z",
+      "paidAt": "2026-10-06T15:45:00Z",
       "bankReference": "DEMO900000003",
       "accountNumber": "0123456789"
     }

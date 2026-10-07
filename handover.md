@@ -1,12 +1,23 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.3.3 (Thanh lọc ngày dùng chung + tab Quyết toán)
+## Phiên bản hiện tại: v1.3.4 (Số sách đã bán & mỗi đầu sách bao nhiêu cuốn)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
 - **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
+
+## 0e. Điểm mới v1.3.4 (sách đã bán theo từng đầu sách)
+
+- Tab **Quyết toán** có thêm khối **“Sách đã bán — mỗi đầu sách bao nhiêu cuốn”**:
+  - Badge tổng hợp: `N đầu sách · X cuốn · Y đ`.
+  - Bảng: **Tên sách · SL bán · Tỷ trọng (thanh + %) · Doanh thu · Đơn giá TB** + dòng **TỔNG CỘNG**, xếp theo SL giảm dần.
+  - **Bấm một đầu sách** → nhảy tab *Đơn hàng* và lọc sẵn tên cuốn đó (bấm lại để bỏ).
+  - Số liệu bám đúng khoảng ngày + mốc thời gian đang lọc (`computeBookSummary(filterOrdersByAdminDate(cachedPaidOrders))`).
+- **Excel** thêm sheet **“Sách Đã Bán”** (STT · Tên sách · SL bán · Tỷ trọng % · Doanh thu · Đơn giá TB + TỔNG CỘNG) — tổng 6 sheet.
+- `data.json` demo thêm đầu sách thứ 2 (*Bài tập Cấu trúc dữ liệu và giải thuật*, đã gán vào lớp CNTT K15) để thấy breakdown nhiều đầu sách; xoá được trực tiếp, không ảnh hưởng Neon.
+- **SW cache v4 → v5** (đổi file tĩnh thì phải tăng).
 
 ## 0d. Điểm mới v1.3.3 (thanh lọc dùng chung + tab Quyết toán)
 
@@ -103,6 +114,10 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.3.4**:
+  - **Mục tiêu**: Cho biết **tổng số sách đã bán** và **trong đó mỗi đầu sách bán bao nhiêu cuốn** để quyết toán/chốt sổ theo ngày.
+  - **Giải pháp**: thêm bảng “Sách đã bán” + badge tổng hợp trong tab Quyết toán (`renderSoldBooksTable`), bấm đầu sách để lọc người mua (`filterBySoldBook` + delegation `data-sold-book`), Excel thêm sheet *Sách Đã Bán*, dữ liệu demo thêm đầu sách thứ 2, mở rộng test 11 (đơn nhiều đầu sách, tỷ trọng, lọc theo đầu sách).
+  - **Kết quả**: Một màn hình thấy ngay hôm nay/khoảng này bán ra bao nhiêu cuốn, cuốn nào bán chạy nhất, thu bao nhiêu tiền; 11/11 test pass.
 - **v1.3.3**:
   - **Mục tiêu**: Làm bộ lọc theo ngày **dễ thấy & dễ dùng hơn** để quyết toán từng ngày (người dùng phản hồi chưa thấy vì nó nằm sâu trong tab Đơn hàng).
   - **Giải pháp**: đưa thanh lọc lên header (mọi tab), thêm tab *Quyết toán* với 4 thẻ tổng hợp + bảng ngày có thanh tỷ trọng/TB-đơn + nút xuất Excel theo khoảng; chuyển chip/ngày sang event delegation; `initApp()` chạy khi DOM đã sẵn sàng; bump SW cache v4; mở rộng test 11 để bấm thật.

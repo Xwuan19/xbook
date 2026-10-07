@@ -286,20 +286,25 @@ test('admin filters orders by order date / payment date and settles per day', as
   };
   const at = (offset, hour = 10) => new Date(`${dayKey(offset)}T${String(hour).padStart(2, '0')}:00:00`).toISOString();
 
-  const order = (orderCode, createdAt, paidAt, amount) => ({
+  const item = (bookId, bookTitle, quantity, unitPrice) => ({ bookId, bookTitle, quantity, unitPrice });
+  const order = (orderCode, createdAt, paidAt, items) => ({
     orderCode, status: 'PAID', customerName: `Bạn ${orderCode}`, customerClass: 'A', customerDepartment: 'IT',
-    customerPhone: '0987654321', amount, createdAt, paidAt, isDelivered: false,
-    items: [{ bookId: 'shared', bookTitle: 'Shared', quantity: 1, unitPrice: amount }]
+    customerPhone: '0987654321', amount: items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0),
+    createdAt, paidAt, isDelivered: false, items
   });
 
   const stats = {
-    totalOrders: 4, paidOrdersCount: 3, totalBooksPaid: 3, totalRevenue: 300000,
+    totalOrders: 4, paidOrdersCount: 3, totalBooksPaid: 5, totalRevenue: 300000,
     bookSummary: [], settings: { isRegistrationOpen: true, departments: ['IT', 'Business'], classes: [] },
     allOrders: [
-      order(1, at(0), at(0), 100000),        // đặt & trả hôm nay
-      order(2, at(-1), at(0), 150000),       // đặt hôm qua, trả hôm nay
-      order(3, at(-1), at(-1), 50000),       // đặt & trả hôm qua
-      { ...order(4, at(-5), null, 70000), status: 'PENDING', paidAt: null }
+      // 1: hôm nay, 100k, Shared x1
+      order(1, at(0), at(0), [item('shared', 'Shared', 1, 100000)]),
+      // 2: đặt hôm qua / trả hôm nay, 150k, Shared x1 + Other x2
+      order(2, at(-1), at(0), [item('shared', 'Shared', 1, 50000), item('other', 'Other', 2, 50000)]),
+      // 3: hôm qua, 50k, Other x1
+      order(3, at(-1), at(-1), [item('other', 'Other', 1, 50000)]),
+      // 4: chưa thanh toán
+      { ...order(4, at(-5), null, [item('shared', 'Shared', 1, 70000)]), status: 'PENDING', paidAt: null }
     ]
   };
 
@@ -323,7 +328,7 @@ test('admin filters orders by order date / payment date and settles per day', as
   assert.match(window.document.getElementById('adminDateSummary').textContent, /Tất cả thời gian/);
   assert.equal(window.document.getElementById('settlementDayCount').innerText, '2');
   assert.equal(window.document.getElementById('settlementOrders').innerText, '3');
-  assert.equal(window.document.getElementById('settlementBooks').innerText, '3');
+  assert.equal(window.document.getElementById('settlementBooks').innerText, '5');
   assert.equal(window.document.getElementById('settlementAmount').innerText, '300.000 đ');
 
   // 1b. Thanh lọc ngày nằm NGOÀI các tab (hiện ở mọi tab) + có tab "Quyết toán" riêng
@@ -344,8 +349,43 @@ test('admin filters orders by order date / payment date and settles per day', as
   assert.match(todayRow.textContent, /1\s*1\s*100\.000 đ/);
   assert.ok(todayRow.querySelector('.bg-emerald-500'), 'mỗi ngày có thanh tỷ trọng doanh thu');
   const yesterdayRow = rows.find(r => r.textContent.includes(window.formatDateKeyVN(dayKey(-1))));
-  assert.match(yesterdayRow.textContent, /2\s*2\s*200\.000 đ/);
+  assert.match(yesterdayRow.textContent, /2\s*4\s*200\.000 đ/); // 2 đơn · 4 cuốn · 200k
   assert.match(rows[rows.length - 1].textContent, /TỔNG CỘNG/);
+
+  // 2b. SÁCH ĐÃ BÁN: mỗi đầu sách bao nhiêu cuốn + tỷ trọng + TỔNG CỘNG
+  let soldRows = [...window.document.querySelectorAll('#adminSoldBooksBody tr')];
+  assert.equal(soldRows.length, 3); // Other, Shared, TỔNG CỘNG (xếp theo SL giảm dần)
+  assert.match(soldRows[0].textContent, /Other/);
+  assert.match(soldRows[0].textContent, /3/);          // 3 cuốn Other
+  assert.match(soldRows[0].textContent, /60%/);        // 3/5
+  assert.match(soldRows[0].textContent, /150\.000 đ/);
+  assert.match(soldRows[1].textContent, /Shared/);
+  assert.match(soldRows[1].textContent, /2/);          // 2 cuốn Shared
+  assert.match(soldRows[1].textContent, /40%/);        // 2/5
+  assert.match(soldRows[2].textContent, /TỔNG CỘNG \(2 đầu sách\)/);
+  assert.match(soldRows[2].textContent, /5/);
+  assert.match(soldRows[2].textContent, /300\.000 đ/);
+  assert.equal(window.document.getElementById('settlementBookTitles').innerText, '2 đầu sách · 5 cuốn · 300.000 đ');
+  assert.ok(soldRows[0].querySelector('.bg-emerald-500'), 'có thanh tỷ trọng theo đầu sách');
+
+  // 2c. Bấm một đầu sách → nhảy sang tab Đơn hàng và lọc đúng người mua cuốn đó (bấm lại để bỏ)
+  soldRows[1].click();
+  // Bấm đầu sách → tự chuyển sang tab Đơn hàng và điền sẵn tên sách vào ô tìm kiếm
+  assert.equal(window.document.getElementById('adminTabOrders').classList.contains('hidden'), false);
+  assert.equal(window.document.getElementById('adminTabSettlement').classList.contains('hidden'), true);
+  assert.equal(window.document.getElementById('adminSearchStudentInput').value, 'Shared');
+  assert.deepEqual(window.getFilteredPaidOrders().map(o => o.orderCode).sort(), [1, 2]);
+  window.filterBySoldBook('Shared');
+  assert.equal(window.document.getElementById('adminSearchStudentInput').value, '');
+
+  // 2d. Lọc riêng một ngày → bảng "sách đã bán" chỉ còn các cuốn bán trong ngày đó
+  window.setAdminDateSingleDay(dayKey(-1));
+  const soldYesterday = [...window.document.querySelectorAll('#adminSoldBooksBody tr')];
+  assert.match(soldYesterday[0].textContent, /Other/);
+  assert.match(soldYesterday[0].textContent, /3/);   // Other x3 trong ngày hôm qua
+  assert.match(soldYesterday[1].textContent, /Shared/);
+  assert.match(soldYesterday[1].textContent, /1/);   // Shared x1
+  window.setAdminDatePreset('all');
 
   // 3. Chip "Hôm nay" trên thanh lọc → số liệu, 4 thẻ quyết toán và bảng đều theo đúng ngày đó
   [...window.document.querySelectorAll('#adminDatePresetChips button')].find(b => b.textContent === 'Hôm nay').click();
@@ -357,6 +397,10 @@ test('admin filters orders by order date / payment date and settles per day', as
   assert.equal(window.document.getElementById('settlementBooks').innerText, '1');
   assert.equal(window.document.getElementById('settlementAmount').innerText, '100.000 đ');
   assert.equal(window.document.querySelectorAll('#adminDailyBreakdownBody tr').length, 1);
+  const soldToday = [...window.document.querySelectorAll('#adminSoldBooksBody tr')];
+  assert.match(soldToday[0].textContent, /Shared/);
+  assert.match(soldToday[0].textContent, /100%/);
+  assert.equal(window.document.getElementById('settlementBookTitles').innerText, '1 đầu sách · 1 cuốn · 100.000 đ');
 
   // 4. Bấm một dòng ngày để lọc đúng ngày đó — bấm lại để bỏ lọc
   window.setAdminDatePreset('all');
@@ -393,10 +437,11 @@ test('admin filters orders by order date / payment date and settles per day', as
 
   // 7. Bảng tổng hợp sách + số liệu đầu trang đổi theo khoảng lọc
   window.setAdminDatePreset('yesterday');
-  assert.match(window.document.getElementById('adminPaidCount').innerText, /2 đơn đã nộp \(2 cuốn\)/);
+  assert.match(window.document.getElementById('adminPaidCount').innerText, /2 đơn đã nộp \(4 cuốn\)/);
   assert.match(window.document.getElementById('adminTotalRevenue').innerText, /200\.000 đ/);
   const summary = window.computeBookSummary(window.filteredPaidOrders);
-  assert.equal(summary.find(b => b.id === 'shared').totalQuantity, 2);
+  assert.equal(summary.find(b => b.id === 'shared').totalQuantity, 1);
+  assert.equal(summary.find(b => b.id === 'other').totalQuantity, 3);
 
   // 8. Khoảng không có đơn nào → mọi số liệu về 0, bảng quyết toán báo trống
   window.document.getElementById('adminDateFromInput').value = dayKey(30);
@@ -407,6 +452,8 @@ test('admin filters orders by order date / payment date and settles per day', as
   assert.match(window.document.getElementById('adminPaidCount').innerText, /0 đơn đã nộp \(0 cuốn\)/);
   assert.equal(window.document.getElementById('settlementAmount').innerText, '0 đ');
   assert.match(window.document.getElementById('adminDailyBreakdownBody').textContent, /Chưa có đơn nào đã thanh toán/);
+  assert.match(window.document.getElementById('adminSoldBooksBody').textContent, /Chưa có sách nào được bán/);
+  assert.equal(window.document.getElementById('settlementBookTitles').innerText, '0 đầu sách · 0 cuốn · 0 đ');
 
   // 9. Bỏ lọc → trở lại toàn bộ dữ liệu gốc
   window.setAdminDatePreset('all');

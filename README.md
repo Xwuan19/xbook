@@ -2,7 +2,16 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## ✨ Điểm mới (v1.3.3) — Thanh lọc ngày dùng chung + Tab “Quyết toán” riêng
+## ✨ Điểm mới (v1.3.4) — Số sách đã bán & mỗi đầu sách bao nhiêu cuốn
+
+| Tính năng | Mô tả |
+|---|---|
+| 📚 **Bảng “Sách đã bán” trong tab Quyết toán** | Tổng số sách bán ra + **bóc tách từng đầu sách**: SL bán · **tỷ trọng** · doanh thu · đơn giá TB, xếp theo số lượng giảm dần, kèm dòng **TỔNG CỘNG (N đầu sách)** |
+| 🔢 **Badge tổng hợp** | `2 đầu sách · 7 cuốn · 235.000 đ` — luôn khớp với khoảng ngày/mốc thời gian đang lọc |
+| 🖱️ **Bấm một đầu sách → xem ai mua** | Nhảy sang tab *Đơn hàng*, tự điền tên sách vào ô tìm kiếm để ra đúng danh sách bạn đã mua cuốn đó (bấm lại để bỏ lọc) |
+| 📊 **Excel thêm sheet “Sách Đã Bán”** | STT · Tên sách · SL bán · **Tỷ trọng (%)** · Doanh thu · Đơn giá TB + dòng TỔNG CỘNG, bám đúng khoảng ngày đang lọc |
+
+## ✨ Điểm cũ (v1.3.3) — Thanh lọc ngày dùng chung + Tab “Quyết toán” riêng
 
 | Tính năng | Mô tả |
 |---|---|
@@ -349,5 +358,26 @@ XBook đã có **Web App Manifest** (`/manifest.webmanifest`) + **Service Worker
 - Ngày được tính theo **giờ địa phương của máy** (`YYYY-MM-DD`), không lệch múi giờ khi đối soát.
 - Bộ lọc chạy **hoàn toàn ở client** trên dữ liệu `/api/admin/statistics` (không đổi API, không ảnh hưởng dữ liệu gốc).
 - Đơn **PENDING** không được tính vào doanh thu/quyết toán (chỉ tính đơn `PAID`); khi lọc theo *Ngày thanh toán*, đơn chưa trả tiền bị loại khỏi mọi danh sách.
+- Tab **Quyết toán** còn có bảng **“Sách đã bán — mỗi đầu sách bao nhiêu cuốn”** (xem mục 14).
 - Test tự động: `test/frontend.test.js` kiểm tra đủ 4 trường hợp (ngày đặt, ngày thanh toán, khoảng tùy chọn, khoảng rỗng), vị trí thanh lọc (ngoài mọi tab), tab Quyết toán + 4 thẻ tổng hợp, và **bấm thật** vào chip ngày / dòng ngày để lọc & bỏ lọc.
 - Thanh lọc và bảng quyết toán bắt sự kiện bằng **delegation** (`data-date-preset`, `data-date-basis`, `data-date-day`, `data-goto-settlement`) — không dùng `onclick` inline.
+
+---
+
+## 📚 14. Số Sách Đã Bán & Mỗi Đầu Sách Bao Nhiêu Cuốn
+
+Nằm trong **Bảng Quản Lý → tab Quyết toán**, ngay dưới bảng quyết toán từng ngày:
+
+1. **Badge tổng hợp**: `N đầu sách · X cuốn · Y đ` (VD: `2 đầu sách · 7 cuốn · 235.000 đ`).
+2. **Bảng chi tiết từng đầu sách** (xếp theo số lượng bán giảm dần):
+
+| Tên sách | SL bán | Tỷ trọng | Doanh thu | Đơn giá |
+|---|---|---|---|---|
+| Cấu trúc dữ liệu và giải thuật | **6** | ▓▓▓▓▓▓▓▓ 86% | 210.000 đ | 35.000 đ |
+| Bài tập Cấu trúc dữ liệu và giải thuật | **1** | ▓ 14% | 25.000 đ | 25.000 đ |
+| **TỔNG CỘNG (2 đầu sách)** | **7** | | **235.000 đ** | |
+
+3. **Bấm một dòng sách** → tự chuyển sang tab *Đơn hàng* và lọc sẵn ô tìm kiếm theo tên cuốn đó (danh sách bạn đã mua cuốn ấy); bấm lại dòng đó để bỏ lọc.
+4. Mọi số liệu **bám đúng khoảng ngày + mốc thời gian** đang chọn ở thanh *“Lọc theo ngày”* (VD chọn *Hôm nay* → chỉ tính sách bán hôm nay).
+5. **Excel**: sheet **“Sách Đã Bán”** có STT · Tên sách · SL bán · Tỷ trọng (%) · Doanh thu · Đơn giá TB + dòng TỔNG CỘNG.
+6. Nguồn dữ liệu: `computeBookSummary()` (tính tại client từ `items[]` của đơn **PAID**) → tương thích cả đơn 1 cuốn đời cũ và đơn nhiều cuốn.

@@ -1345,6 +1345,9 @@ function initAdminDelegatedEvents() {
 
     const goto = target.closest('[data-goto-settlement]');
     if (goto) { switchAdminTab('settlement'); return; }
+
+    const soldBookRow = target.closest('[data-sold-book]');
+    if (soldBookRow) { filterBySoldBook(soldBookRow.dataset.soldBook); return; }
   });
 }
 
@@ -1435,11 +1438,12 @@ function renderAdminDateFilter() {
   if (fromEl && document.activeElement !== fromEl) fromEl.value = adminDateFrom;
   if (toEl && document.activeElement !== toEl) toEl.value = adminDateTo;
 
-  // Bảng quyết toán từng ngày (chỉ tính đơn đã thanh toán, trong khoảng ngày đang chọn)
+  // Bảng quyết toán từng ngày + Sách đã bán (chỉ tính đơn đã thanh toán, trong khoảng ngày đang chọn)
   const tbody = document.getElementById('adminDailyBreakdownBody');
   if (tbody) {
     const paidInRange = filterOrdersByAdminDate(window.cachedPaidOrders || []);
     const days = groupOrdersByDay(paidInRange);
+    renderSoldBooksTable(paidInRange);
     const maxAmount = days.reduce((max, d) => Math.max(max, d.amount), 0);
     tbody.innerHTML = days.length === 0
       ? `<tr><td colspan="6" class="p-3 text-center text-slate-400">Chưa có đơn nào đã thanh toán</td></tr>`
@@ -1480,6 +1484,73 @@ function renderAdminDateFilter() {
   }
 
   lucide.createIcons();
+}
+
+/**
+ * SÁCH ĐÃ BÁN — mỗi đầu sách đã bán bao nhiêu cuốn trong khoảng ngày đang lọc.
+ * Kèm tỷ trọng và doanh thu từng đầu sách; bấm một dòng để lọc danh sách người mua cuốn đó.
+ */
+function renderSoldBooksTable(paidOrders) {
+  const tbody = document.getElementById('adminSoldBooksBody');
+  const badge = document.getElementById('settlementBookTitles');
+  if (!tbody) return;
+
+  const soldBooks = computeBookSummary(paidOrders)
+    .filter(b => Number(b.totalQuantity) > 0)
+    .sort((a, b) => (b.totalQuantity - a.totalQuantity) || a.title.localeCompare(b.title, 'vi'));
+  const totalQuantity = soldBooks.reduce((sum, b) => sum + Number(b.totalQuantity || 0), 0);
+  const totalRevenue = soldBooks.reduce((sum, b) => sum + Number(b.totalRevenue || 0), 0);
+
+  if (badge) {
+    badge.innerText = `${soldBooks.length} đầu sách · ${totalQuantity} cuốn · ${formatMoney(totalRevenue)}`;
+  }
+
+  if (soldBooks.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-slate-400">Chưa có sách nào được bán trong khoảng này</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = soldBooks.map(b => {
+    const quantity = Number(b.totalQuantity) || 0;
+    const revenue = Number(b.totalRevenue) || 0;
+    const share = totalQuantity ? Math.round((quantity / totalQuantity) * 100) : 0;
+    const searching = (document.getElementById('adminSearchStudentInput')?.value || '').trim() === b.title;
+    const unitPrice = quantity ? Math.round(revenue / quantity) : (Number(b.price) || 0);
+    return `<tr class="transition cursor-pointer ${searching ? 'bg-emerald-50' : 'hover:bg-slate-50'}"
+        title="Bấm để xem danh sách bạn đã mua cuốn này" data-sold-book="${escapeHtml(b.title)}">
+      <td class="p-2.5 font-bold text-slate-800">
+        ${escapeHtml(b.title)}
+        ${searching ? '<span class="ml-1 text-[10px] font-black text-emerald-700">• đang xem</span>' : ''}
+      </td>
+      <td class="p-2.5 text-center"><span class="inline-block min-w-[2rem] px-2 py-0.5 rounded-lg bg-emerald-600 text-white text-xs font-black">${quantity}</span></td>
+      <td class="p-2.5 hidden sm:table-cell">
+        <div class="flex items-center gap-2">
+          <div class="h-2 flex-1 bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full bg-emerald-500 rounded-full" style="width:${Math.max(3, share)}%"></div>
+          </div>
+          <span class="text-[10px] font-bold text-slate-500 w-8 text-right">${share}%</span>
+        </div>
+      </td>
+      <td class="p-2.5 text-right font-black text-emerald-600 whitespace-nowrap">${formatMoney(revenue)}</td>
+      <td class="p-2.5 text-right text-slate-500 font-semibold whitespace-nowrap hidden sm:table-cell">${formatMoney(unitPrice)}</td>
+    </tr>`;
+  }).join('') + `<tr class="bg-slate-50 font-black">
+      <td class="p-2.5 text-slate-700">TỔNG CỘNG (${soldBooks.length} đầu sách)</td>
+      <td class="p-2.5 text-center text-slate-800">${totalQuantity}</td>
+      <td class="hidden sm:table-cell"></td>
+      <td class="p-2.5 text-right text-emerald-700 whitespace-nowrap">${formatMoney(totalRevenue)}</td>
+      <td class="hidden sm:table-cell"></td>
+    </tr>`;
+}
+
+/** Bấm một đầu sách → lọc danh sách phát sách theo đúng cuốn đó (bấm lại để bỏ) */
+function filterBySoldBook(bookTitle) {
+  const input = document.getElementById('adminSearchStudentInput');
+  if (!input) return;
+  input.value = input.value.trim() === bookTitle ? '' : bookTitle;
+  renderAdminOrderList();
+  renderAdminDateFilter();
+  switchAdminTab('orders');
 }
 
 function weekdayLabel(dateKey) {
@@ -2694,6 +2765,35 @@ async function exportToExcel() {
     ws5['!cols'] = [{ wch: 14 }, { wch: 8 }, { wch: 16 }, { wch: 12 }, { wch: 16 }, { wch: 20 }];
     if (daily.length > 0) ws5['!autofilter'] = { ref: `A4:F${4 + daily.length}` };
     XLSX.utils.book_append_sheet(wb, ws5, "Quyết Toán Theo Ngày");
+
+    // ========== SHEET 6: SÁCH ĐÃ BÁN (MỖI ĐẦU SÁCH BAO NHIÊU CUỐN) ==========
+    const soldBooks = computeBookSummary(paidOrders)
+      .filter(b => Number(b.totalQuantity) > 0)
+      .sort((a, b) => (b.totalQuantity - a.totalQuantity) || a.title.localeCompare(b.title, 'vi'));
+    const soldTotalQuantity = soldBooks.reduce((sum, b) => sum + Number(b.totalQuantity || 0), 0);
+    const soldTotalRevenue = soldBooks.reduce((sum, b) => sum + Number(b.totalRevenue || 0), 0);
+    const sheet6Rows = [
+      ["SÁCH ĐÃ BÁN — MỖI ĐẦU SÁCH BAO NHIÊU CUỐN"],
+      [`Thời gian xuất: ${exportTime} | ${rangeLabel} | ${soldBooks.length} đầu sách · ${soldTotalQuantity} cuốn`],
+      [],
+      ["STT", "Tên Sách", "SL Bán (cuốn)", "Tỷ Trọng (%)", "Doanh Thu (đ)", "Đơn Giá TB (đ)"]
+    ];
+    soldBooks.forEach((b, idx) => {
+      sheet6Rows.push([
+        idx + 1,
+        b.title,
+        Number(b.totalQuantity) || 0,
+        soldTotalQuantity ? Math.round(((Number(b.totalQuantity) || 0) / soldTotalQuantity) * 1000) / 10 : 0,
+        Number(b.totalRevenue) || 0,
+        Number(b.totalQuantity) ? Math.round((Number(b.totalRevenue) || 0) / Number(b.totalQuantity)) : 0
+      ]);
+    });
+    sheet6Rows.push([]);
+    sheet6Rows.push(["TỔNG CỘNG", `${soldBooks.length} đầu sách`, soldTotalQuantity, 100, soldTotalRevenue, '']);
+    const ws6 = XLSX.utils.aoa_to_sheet(sheet6Rows);
+    ws6['!cols'] = [{ wch: 6 }, { wch: 38 }, { wch: 15 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
+    if (soldBooks.length > 0) ws6['!autofilter'] = { ref: `A4:F${4 + soldBooks.length}` };
+    XLSX.utils.book_append_sheet(wb, ws6, "Sách Đã Bán");
 
     const now = new Date();
     const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;

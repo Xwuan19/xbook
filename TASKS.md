@@ -3,7 +3,18 @@
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này (v1.3.3)
+## Mục tiêu đợt này (v1.3.4)
+1. **Thống kê số sách đã bán** (tổng cuốn) và **mỗi đầu sách bán bao nhiêu cuốn** trong tab Quyết toán.
+2. Bấm một đầu sách để xem danh sách người mua cuốn đó; xuất Excel thêm sheet **Sách Đã Bán**.
+
+## Giai đoạn 10 (v1.3.4) — Sách đã bán theo từng đầu sách
+- [x] T41. `public/index.html`: thêm khối **“Sách đã bán — mỗi đầu sách bao nhiêu cuốn”** trong tab Quyết toán (badge tổng hợp + bảng SL bán / tỷ trọng / doanh thu / đơn giá + TỔNG CỘNG).
+- [x] T42. `public/app.js`: `renderSoldBooksTable()` (xếp theo SL giảm dần, thanh tỷ trọng) + `filterBySoldBook()` (bấm đầu sách → nhảy tab Đơn hàng + lọc tên sách) qua delegation `data-sold-book`.
+- [x] T43. Excel: thêm **sheet 6 “Sách Đã Bán”** (STT · Tên sách · SL bán · Tỷ trọng % · Doanh thu · Đơn giá TB + TỔNG CỘNG).
+- [x] T44. Kiểm thử: test 11 mở rộng (đơn nhiều đầu sách: Other x3/60% + Shared x2/40%, lọc theo ngày, bấm đầu sách để lọc người mua) — 11/11 pass. Bump SW cache v5.
+- [x] T45. `data.json` demo thêm đầu sách thứ 2 + cập nhật README (mục 14) / handover / TASKS / version 1.3.4.
+
+## Mục tiêu đợt trước (v1.3.3)
 1. **Thanh lọc ngày luôn hiển thị** ở mọi tab quản trị (không còn nằm trong tab Đơn hàng).
 2. **Tab “Quyết toán” riêng** với 4 thẻ tổng hợp + bảng từng ngày (tỷ trọng, TB/đơn) + nút xuất Excel theo khoảng.
 3. Chuyển các nút lọc/ngày sang **event delegation** để chạy thật & test được.
