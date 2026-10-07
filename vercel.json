@@ -6,6 +6,18 @@
       "maxDuration": 15
     }
   },
+  "redirects": [
+    {
+      "source": "/admin",
+      "destination": "/admin.html",
+      "permanent": false
+    },
+    {
+      "source": "/admin/",
+      "destination": "/admin.html",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

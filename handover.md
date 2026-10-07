@@ -1,12 +1,29 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.3.4 (Số sách đã bán & mỗi đầu sách bao nhiêu cuốn)
+## Phiên bản hiện tại: v1.4.0 (Tách giao diện quản lý sang trang riêng /admin.html)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
+- **Trang quản trị**: [https://xbook1.vercel.app/admin](https://xbook1.vercel.app/admin) (chuyển hướng sang `/admin.html`)
 - **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
+
+## 0f. Điểm mới v1.4.0 (trang quản trị riêng /admin.html — gỡ modal khỏi trang chủ)
+
+- **Giao diện quản lý tách hẳn sang trang riêng `public/admin.html`**:
+  - Route **`/admin`** (và `/admin/`) **chuyển hướng 302 → `/admin.html`** trong `server.js`; trên Vercel khai báo tương ứng trong `vercel.json` (`redirects`).
+  - Trang quản trị gồm: **form đăng nhập** (`#adminLoginPanel`) + **Bảng Quản Lý** (`#adminPanel`, giữ `id="printArea"` để in) + **modal form thêm/sửa sách** (`#bookFormModal`) + header riêng (logo, nút *Trang chủ*, nút *Khóa lại*).
+  - Không còn là modal: **chưa có phiên** → hiện form mật khẩu; **đăng nhập xong / còn phiên 30 ngày** → `showAdminDashboard()` hiện thẳng Bảng Quản Lý; 401 giữa chừng → `askAdminLogin(message)` quay lại form.
+- **Trang chủ `index.html` đã gỡ sạch 3 modal quản trị** (`adminLoginModal`, `adminModal`, `bookFormModal`) — chỉ còn danh mục sách, giỏ hàng, form đặt mua, modal mã QR. Nút **“Quản Lý”** trên header đổi thành **link `<a href="/admin.html">`** (bỏ hẳn `handleClickAdmin()`).
+- **Code frontend tách 3 file** (trang nào nạp đúng file của trang đó):
+  - `public/core.js` — dùng chung: state danh mục (`allBooks`, `currentSettings`), tiện ích (`formatMoney`, `formatDateVN`, `formatDelivery`, `localDateKey`, `shiftDateKey`, `formatDateKeyVN`, `escapeHtml`, `compareByLastName`, helper đơn hàng/lớp), **component `XBookSelect`**, `openModal`/`closeModal`/`copyToClipboard`, `fetchBooksAndSettings()` + `renderCatalogViews()`.
+  - `public/app.js` — trang chủ: banner, chips khoa, lọc lớp, grid sách, giỏ hàng, form đặt mua, QR PayOS + polling (`stopOrderPolling()`), gợi ý cài PWA, `initApp()`, `renderStorefrontCatalog()`.
+  - `public/admin.js` — trang quản trị: phiên đăng nhập (`adminFetch`, token HMAC), 6 tab, bộ lọc ngày + quyết toán + sách đã bán, quản lý sách/khoa/lớp, chốt sổ & ngày nhận sách, đánh dấu đã phát, xuất Excel, `initAdminPage()`, `renderAdminCatalog()`.
+  - ⚠️ **Bài học kỹ thuật**: 2 trang là 2 document khác nhau nên mọi lời gọi vẽ giao diện trang chủ từ code quản trị phải qua `renderStorefrontCatalogIfPresent()` (check `typeof`), và `core.js` điều phối bằng `renderCatalogViews()` — nếu gọi thẳng `renderBooks()` trên `/admin.html` sẽ `ReferenceError`.
+  - ⚠️ **Test với jsdom**: `let`/`const` trong `window.eval()` **chỉ sống trong phạm vi của lần eval đó**, nên test phải eval **gộp** `domain.js + core.js + app.js` (hoặc `+ admin.js`) trong **một lần** để mô phỏng đúng phạm vi toàn cục dùng chung của các thẻ `<script>` trên trình duyệt thật.
+- **`public/sw.js` bump cache v5 → v6** và **cache offline riêng từng trang**: thêm `/admin`, `/admin.html`, `/core.js`, `/admin.js` vào `CORE_ASSETS`; điều hướng nào lưu theo đường dẫn đó (trước đây mọi navigation đều ghi đè `/index.html` → mở `/admin.html` lúc mất mạng sẽ ra nhầm trang chủ).
+- **Kiểm thử 13/13 pass**: `test/routes.test.js` mới (bật server thật: `/admin` → 302 `/admin.html`, `/admin.html` có `#adminPanel`/`#adminLoginPanel`/`#bookFormModal` và không nạp `app.js`, trang chủ không còn `#adminModal`/`#adminLoginModal`/`#bookFormModal`/`handleClickAdmin` và có link `/admin.html`); `test/frontend.test.js` tách theo trang (test trang chủ + 2 test trang quản trị + checkout + lọc ngày/quyết toán).
 
 ## 0e. Điểm mới v1.3.4 (sách đã bán theo từng đầu sách)
 
@@ -101,12 +118,16 @@
 ---
 
 ## 2. Cấu Trúc Dự Án
-- `server.js`: Node.js Express server, tích hợp PayOS SDK, routes quản trị có xác thực mật khẩu, xử lý bất đồng bộ kết nối DB.
+- `server.js`: Node.js Express server, tích hợp PayOS SDK, routes quản trị có xác thực mật khẩu, route chuyển hướng `/admin` → `/admin.html`, xử lý bất đồng bộ kết nối DB.
+- `vercel.json`: region `sin1`, rewrite `/api` + `/uploads` về function, redirect `/admin` → `/admin.html`.
 - `database.js`: Quản lý truy xuất dữ liệu Hybrid: tương tác với Neon PostgreSQL qua `@neondatabase/serverless` nếu có `DATABASE_URL`, tự động fallback sang `data.json` nếu chạy offline/local không có DB.
 - `data.json`: Lưu trữ cục bộ dự phòng.
 - `public/`:
-  - `index.html`: Giao diện người dùng responsive (Tailwind CSS, Lucide Icons, SheetJS XLSX).
-  - `app.js`: Xử lý giao diện, tạo link VietQR, polling đơn hàng, đăng nhập admin, xuất Excel và quản lý danh sách.
+  - `index.html`: **Trang chủ** cho sinh viên (Tailwind CSS, Lucide Icons): danh mục sách, giỏ hàng, form đặt mua, modal QR realtime.
+  - `admin.html`: **Trang quản trị riêng** (route `/admin`): đăng nhập + Bảng Quản Lý 6 tab + form thêm/sửa sách (SheetJS XLSX nạp lười khi xuất Excel).
+  - `core.js`: Phần dùng chung 2 trang — tiện ích, dropdown tự vẽ `XBookSelect`, modal, nạp danh mục sách & cài đặt.
+  - `app.js`: Logic trang chủ — tạo link VietQR, polling đơn hàng, giỏ hàng, PWA hint.
+  - `admin.js`: Logic trang quản trị — phiên đăng nhập, thống kê, lọc ngày/quyết toán, CRUD sách, khoa/lớp, xuất Excel.
   - `logo.png`: Logo nhận diện thương hiệu xbook.
 - `.env`: Cấu hình cổng, PayOS Client ID / API Key / Checksum Key, DATABASE_URL và mật khẩu Admin.
 - `.gitignore`: Bỏ qua `node_modules/` và `.env`.
@@ -114,6 +135,10 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.4.0**:
+  - **Mục tiêu**: Tách **toàn bộ giao diện quản lý** ra khỏi trang chủ thành **trang riêng `/admin.html`** (kèm route chuyển hướng `/admin`), gỡ modal quản trị khỏi trang chủ để trang sinh viên nhẹ và sạch.
+  - **Giải pháp**: dựng `public/admin.html` (form đăng nhập + Bảng Quản Lý + form sách, giữ nguyên `#printArea`/CSS in), tách `public/app.js` thành `core.js` (dùng chung) + `app.js` (trang chủ) + `admin.js` (quản trị), thêm route `/admin` → 302 `/admin.html` ở `server.js` + `redirects` trong `vercel.json`, bump SW cache v6 và cache offline riêng từng trang, viết thêm `test/routes.test.js` + tách `test/frontend.test.js` theo trang.
+  - **Kết quả**: Trang chủ không còn DOM/code quản trị nào; quản trị viên vào `/admin` là đăng nhập và làm việc trên 1 trang đầy đủ (in/Excel giữ nguyên); 13/13 test pass.
 - **v1.3.4**:
   - **Mục tiêu**: Cho biết **tổng số sách đã bán** và **trong đó mỗi đầu sách bán bao nhiêu cuốn** để quyết toán/chốt sổ theo ngày.
   - **Giải pháp**: thêm bảng “Sách đã bán” + badge tổng hợp trong tab Quyết toán (`renderSoldBooksTable`), bấm đầu sách để lọc người mua (`filterBySoldBook` + delegation `data-sold-book`), Excel thêm sheet *Sách Đã Bán*, dữ liệu demo thêm đầu sách thứ 2, mở rộng test 11 (đơn nhiều đầu sách, tỷ trọng, lọc theo đầu sách).

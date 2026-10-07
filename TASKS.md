@@ -3,7 +3,18 @@
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này (v1.3.4)
+## Mục tiêu đợt này (v1.4.0)
+1. **Tách toàn bộ giao diện quản lý** từ trang chủ sang **trang riêng `/admin.html`** (kèm route chuyển hướng **`/admin`**).
+2. **Gỡ modal quản lý khỏi trang chủ** — trang chủ chỉ còn phần dành cho sinh viên; code frontend tách rõ phần dùng chung / trang chủ / quản trị.
+
+## Giai đoạn 11 (v1.4.0) — Trang quản trị riêng /admin.html
+- [x] T46. `public/admin.html`: dựng trang quản trị riêng (header + form đăng nhập `#adminLoginPanel` + Bảng Quản Lý `#adminPanel` giữ `id="printArea"` + modal form sách `#bookFormModal` + footer), nạp `domain.js` + `core.js` + `admin.js`.
+- [x] T47. Tách `public/app.js` → `public/core.js` (tiện ích, `XBookSelect`, modal, `fetchBooksAndSettings` + `renderCatalogViews`), `public/app.js` (trang chủ), `public/admin.js` (quản trị); thay lời gọi vẽ trang chủ bằng `renderStorefrontCatalogIfPresent()`.
+- [x] T48. `public/index.html`: **gỡ 3 modal quản trị** (`adminLoginModal`, `adminModal`, `bookFormModal`), nút “Quản Lý” đổi thành link `/admin.html`; đăng nhập/quản trị nay chạy trên trang riêng (`askAdminLogin` / `showAdminDashboard` / `initAdminPage`).
+- [x] T49. Route: `server.js` thêm `GET /admin`, `/admin/` → 302 `/admin.html`; `vercel.json` thêm `redirects` tương ứng; `public/sw.js` bump cache **v5 → v6**, thêm `/admin`, `/admin.html`, `/core.js`, `/admin.js` và **cache offline riêng từng trang**.
+- [x] T50. Kiểm thử: thêm `test/routes.test.js` (route `/admin` + trang chủ sạch giao diện quản lý), tách `test/frontend.test.js` theo 2 trang (eval gộp để đúng phạm vi toàn cục như trình duyệt) — **13/13 pass**; cập nhật README / handover / TASKS / version 1.4.0.
+
+## Mục tiêu đợt trước (v1.3.4)
 1. **Thống kê số sách đã bán** (tổng cuốn) và **mỗi đầu sách bán bao nhiêu cuốn** trong tab Quyết toán.
 2. Bấm một đầu sách để xem danh sách người mua cuốn đó; xuất Excel thêm sheet **Sách Đã Bán**.
 

@@ -3,31 +3,64 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { JSDOM } = require('jsdom');
 
-test('UI filters by curriculum, edits class lists and has no book ownership field', async () => {
-  const html = fs.readFileSync('public/index.html', 'utf8');
+/**
+ * Giao diện quản lý đã tách khỏi trang chủ thành trang riêng /admin.html (route /admin):
+ *  - trang chủ (/)          nạp domain.js + core.js + app.js
+ *  - trang quản trị (/admin)  nạp domain.js + core.js + admin.js
+ * core.js là phần dùng chung (tiện ích, dropdown tự vẽ, modal, nạp danh mục sách).
+ */
+const STOREFRONT_SCRIPTS = ['public/domain.js', 'public/core.js', 'public/app.js'];
+const ADMIN_SCRIPTS = ['public/domain.js', 'public/core.js', 'public/admin.js'];
+
+function loadPage(htmlFile, scriptFiles, { fetch: fetchMock } = {}) {
+  const html = fs.readFileSync(htmlFile, 'utf8');
   const dom = new JSDOM(html, { url: 'https://xbook.test', runScripts: 'outside-only' });
   const { window } = dom;
   window.lucide = { createIcons() {} };
   window.alert = () => {};
-  const fixture = {
-    books: [{ id: 'shared', title: 'Shared', price: 100 }, { id: 'it', title: 'IT only', price: 200 }, { id: 'other', title: 'Other', price: 300 }],
-    settings: { isRegistrationOpen: true, departments: ['IT', 'Business'], classes: [
+  window.confirm = () => true;
+  // Phải gán fetch TRƯỚC khi eval script: script tự khởi động ngay khi nạp
+  if (fetchMock) window.fetch = fetchMock;
+  // Eval GỘP 1 lần: trên trình duyệt thật các thẻ <script> dùng chung 1 phạm vi toàn cục
+  // (biến `let` của core.js nhìn thấy được từ app.js / admin.js) — jsdom chỉ có hành vi đó
+  // khi các file nằm trong cùng một lần eval.
+  const bundle = scriptFiles.map((file) => fs.readFileSync(file, 'utf8')).join('\n;\n');
+  window.eval(bundle);
+  return dom;
+}
+
+const demoFixture = () => ({
+  books: [
+    { id: 'shared', title: 'Shared', price: 100 },
+    { id: 'it', title: 'IT only', price: 200 },
+    { id: 'other', title: 'Other', price: 300 }
+  ],
+  settings: {
+    isRegistrationOpen: true,
+    departments: ['IT', 'Business'],
+    classes: [
       { name: 'A', department: 'IT', bookIds: ['shared', 'it'] },
       { name: 'A', department: 'Business', bookIds: ['shared'] },
       { name: 'B', department: 'IT', bookIds: [] }
-    ] }
-  };
-  window.fetch = async (url, options) => {
-    const reply = (payload) => ({ status: 200, headers: { get: () => null }, json: async () => payload });
-    if (url === '/api/admin/settings') {
-      fixture.settings = { ...fixture.settings, ...JSON.parse(options.body) };
-      return reply({ success: true, settings: fixture.settings });
+    ]
+  }
+});
+
+test('home page filters the catalog by curriculum and keeps no admin UI at all', async () => {
+  const fixture = demoFixture();
+  const dom = loadPage('public/index.html', STOREFRONT_SCRIPTS, {
+    fetch: async (url, options) => {
+      const reply = (payload) => ({ status: 200, headers: { get: () => null }, json: async () => payload });
+      if (url === '/api/admin/settings') {
+        fixture.settings = { ...fixture.settings, ...JSON.parse(options.body) };
+        return reply({ success: true, settings: fixture.settings });
+      }
+      return reply({ success: true, ...fixture });
     }
-    return reply({ success: true, ...fixture });
-  };
-  window.eval(fs.readFileSync('public/domain.js', 'utf8'));
-  window.eval(fs.readFileSync('public/app.js', 'utf8'));
+  });
+  const { window } = dom;
   await window.fetchBooksAndSettings();
+
   assert.equal(window.document.querySelectorAll('#bookGrid h3').length, 3);
   window.setDepartmentFilter('Business');
   assert.equal(window.document.querySelectorAll('#bookGrid h3').length, 1);
@@ -46,6 +79,80 @@ test('UI filters by curriculum, edits class lists and has no book ownership fiel
   assert.equal(window.document.querySelectorAll('#bookGrid h3').length, 2);
   window.setClassFilter(window.XBookDomain.classKey(fixture.settings.classes[2]));
   assert.match(window.document.querySelector('#bookGrid').textContent, /Chưa có sách/);
+
+  // 1. TOÀN BỘ giao diện quản lý đã rời trang chủ: không còn modal quản trị nào trong DOM
+  assert.equal(window.document.getElementById('adminModal'), null);
+  assert.equal(window.document.getElementById('adminLoginModal'), null);
+  assert.equal(window.document.getElementById('bookFormModal'), null);
+  assert.equal(window.document.getElementById('adminTabBar'), null);
+  assert.equal(window.document.getElementById('adminPasswordInput'), null);
+  assert.match(window.document.body.innerHTML, /^((?!handleClickAdmin).)*$/s);
+
+  // 2. Nút "Quản Lý" trên header giờ là link sang trang quản trị riêng
+  const adminLink = window.document.querySelector('header a[href="/admin.html"]');
+  assert.ok(adminLink, 'header trang chủ có link sang /admin.html');
+  assert.match(adminLink.textContent, /Quản Lý/);
+
+  // 3. Code quản trị KHÔNG được nạp ở trang chủ (chỉ core.js + app.js)
+  assert.equal(typeof window.handleAdminLogin, 'undefined');
+  assert.equal(typeof window.refreshAdminData, 'undefined');
+  assert.equal(typeof window.openBookForm, 'undefined');
+  assert.equal(typeof window.exportToExcel, 'undefined');
+  // Phần dùng chung vẫn có ở trang chủ
+  assert.equal(typeof window.fetchBooksAndSettings, 'function');
+  assert.equal(typeof window.renderXBookSelect, 'function');
+
+  // 4. Ô chọn lớp trong form đặt mua vẫn là dropdown tự vẽ (không dùng select mặc định)
+  assert.equal(window.document.querySelectorAll('select').length, 0);
+  window.renderCheckoutClassPicker();
+  const classLabels = window.xbookSelectOptions('formCustomerClass').map(o => o.label);
+  assert.ok(classLabels.includes('Business / A'));
+  assert.ok(classLabels.includes('IT / A'));
+  assert.ok(window.document.getElementById('formCustomerDeliveryDate') !== null);
+  window.toggleCartBook('shared');
+  window.openCheckoutModal();
+  assert.ok(window.document.getElementById('formCustomerDeliveryDate').min.length > 0);
+
+  // 5. PWA: manifest + service worker + meta iPhone vẫn khai báo ở trang chủ
+  assert.ok(window.document.querySelector('link[rel="manifest"]').getAttribute('href').includes('manifest.webmanifest'));
+  assert.equal(window.document.querySelector('meta[name="apple-mobile-web-app-capable"]').getAttribute('content'), 'yes');
+  assert.ok(window.document.querySelector('link[rel="apple-touch-icon"]'));
+  assert.ok(window.document.getElementById('iosInstallHint'));
+  dom.window.close();
+});
+
+test('admin page owns login + dashboard and edits class curricula / book form', async () => {
+  const fixture = demoFixture();
+  const dom = loadPage('public/admin.html', ADMIN_SCRIPTS, {
+    fetch: async (url, options) => {
+      const reply = (payload) => ({ status: 200, headers: { get: () => null }, json: async () => payload });
+      if (url === '/api/admin/settings') {
+        fixture.settings = { ...fixture.settings, ...JSON.parse(options.body) };
+        return reply({ success: true, settings: fixture.settings });
+      }
+      return reply({ success: true, ...fixture });
+    }
+  });
+  const { window } = dom;
+
+  // 1. Trang quản trị là 1 TRANG RIÊNG: có khối đăng nhập + Bảng Quản Lý, không dính giao diện trang chủ
+  assert.ok(window.document.getElementById('adminLoginPanel'));
+  assert.ok(window.document.getElementById('adminPanel'));
+  assert.ok(window.document.getElementById('bookFormModal'));
+  assert.equal(window.document.getElementById('adminModal'), null);
+  assert.equal(window.document.getElementById('adminLoginModal'), null);
+  assert.equal(window.document.getElementById('checkoutModal'), null);
+  assert.equal(window.document.getElementById('bookGrid'), null);
+  assert.equal(window.document.getElementById('qrPaymentModal'), null);
+
+  // 2. Chưa đăng nhập → hiện form mật khẩu, ẩn Bảng Quản Lý
+  assert.equal(window.isAdminAuthed(), false);
+  assert.equal(window.document.getElementById('adminLoginPanel').classList.contains('hidden'), false);
+  assert.equal(window.document.getElementById('adminPanel').classList.contains('hidden'), true);
+  assert.ok(window.document.getElementById('adminPasswordInput'));
+  assert.ok(window.document.getElementById('adminRememberInput'));
+
+  await window.fetchBooksAndSettings();
   window.renderAdminManageTab();
   // Ô chọn lớp là dropdown tự vẽ (không dùng select mặc định của trình duyệt)
   assert.equal(window.document.querySelectorAll('select').length, 0);
@@ -55,76 +162,59 @@ test('UI filters by curriculum, edits class lists and has no book ownership fiel
   window.document.querySelector('#classBookChoices input[value="it"]').checked = true;
   await window.saveClassBooks({ preventDefault() {} });
   assert.deepEqual(fixture.settings.classes[1].bookIds, ['shared', 'it']);
+
+  // 3. Form thêm/sửa sách là modal của riêng trang quản trị
   window.openBookForm('shared');
   assert.equal(window.document.getElementById('formBookTitle').value, 'Shared');
   assert.equal(window.document.getElementById('formBookDepartment'), null);
   assert.equal(window.document.getElementById('formBookClasses'), null);
-  window.renderCheckoutClassPicker();
-  const classLabels = window.xbookSelectOptions('formCustomerClass').map(o => o.label);
-  assert.ok(classLabels.includes('Business / A'));
-  assert.ok(classLabels.includes('IT / A'));
-  assert.ok(window.document.getElementById('formCustomerDeliveryDate') !== null);
-  window.toggleCartBook('shared');
-  window.openCheckoutModal();
-  assert.ok(window.document.getElementById('formCustomerDeliveryDate').min.length > 0);
+  assert.equal(window.document.getElementById('bookFormModal').classList.contains('hidden'), false);
+  window.closeModal('bookFormModal');
+  assert.equal(window.document.getElementById('bookFormModal').classList.contains('hidden'), true);
   dom.window.close();
 });
 
 test('admin session token, book scope editor and book library filters', async () => {
-  const html = fs.readFileSync('public/index.html', 'utf8');
-  const dom = new JSDOM(html, { url: 'https://xbook.test', runScripts: 'outside-only' });
-  const { window } = dom;
-  window.lucide = { createIcons() {} };
-  window.alert = () => {};
-  window.confirm = () => true;
-
-  const fixture = {
-    books: [
-      { id: 'shared', title: 'Shared', price: 100 },
-      { id: 'it', title: 'IT only', price: 200 },
-      { id: 'other', title: 'Other', price: 300 }
-    ],
-    settings: { isRegistrationOpen: true, departments: ['IT', 'Business'], classes: [
-      { name: 'A', department: 'IT', bookIds: ['shared', 'it'] },
-      { name: 'A', department: 'Business', bookIds: ['shared'] },
-      { name: 'B', department: 'IT', bookIds: [] }
-    ] }
-  };
+  const fixture = demoFixture();
   const calls = [];
   const reply = (payload, status = 200, headers = {}) => ({
     status,
     headers: { get: (name) => headers[name.toLowerCase()] || null },
     json: async () => payload
   });
-  window.fetch = async (url, options = {}) => {
-    calls.push({ url, options });
-    if (url === '/api/admin/login') {
-      const body = JSON.parse(options.body);
-      return body.password === 'secret'
-        ? reply({ success: true, token: 'token-abc', expiresInDays: 30 })
-        : reply({ success: false, message: 'Sai mật khẩu' }, 401);
+  const dom = loadPage('public/admin.html', ADMIN_SCRIPTS, {
+    fetch: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url === '/api/admin/login') {
+        const body = JSON.parse(options.body);
+        return body.password === 'secret'
+          ? reply({ success: true, token: 'token-abc', expiresInDays: 30 })
+          : reply({ success: false, message: 'Sai mật khẩu' }, 401);
+      }
+      if (url === '/api/admin/books' || String(url).startsWith('/api/admin/books/')) {
+        return reply({ success: true, book: { id: 'new-book', title: 'New', price: 1000 } });
+      }
+      if (url === '/api/books') return reply({ success: true, ...fixture });
+      return reply({ success: true, settings: fixture.settings });
     }
-    if (url === '/api/admin/books' || String(url).startsWith('/api/admin/books/')) {
-      return reply({ success: true, book: { id: 'new-book', title: 'New', price: 1000 } });
-    }
-    if (url === '/api/books') return reply({ success: true, ...fixture });
-    return reply({ success: true, settings: fixture.settings });
-  };
-
-  window.eval(fs.readFileSync('public/domain.js', 'utf8'));
-  window.eval(fs.readFileSync('public/app.js', 'utf8'));
+  });
+  const { window } = dom;
   await window.fetchBooksAndSettings();
 
-  // 1. Chưa đăng nhập → không có quyền quản trị
+  // 1. Chưa đăng nhập → không có quyền quản trị, trang hiện form mật khẩu
   assert.equal(window.isAdminAuthed(), false);
   assert.equal(window.localStorage.getItem('xbook_admin_token'), null);
+  assert.equal(window.document.getElementById('adminPanel').classList.contains('hidden'), true);
 
-  // 2. Đăng nhập có tích "Ghi nhớ" → token lưu localStorage (mở lại web không cần nhập mật khẩu)
+  // 2. Đăng nhập có tích "Ghi nhớ" → token lưu localStorage (mở lại trang không cần nhập mật khẩu)
   window.document.getElementById('adminPasswordInput').value = 'secret';
   window.document.getElementById('adminRememberInput').checked = true;
   await window.handleAdminLogin({ preventDefault() {} });
   assert.equal(window.localStorage.getItem('xbook_admin_token'), 'token-abc');
   assert.equal(window.isAdminAuthed(), true);
+  // Đăng nhập xong → ẩn form mật khẩu, hiện thẳng Bảng Quản Lý trên cùng trang
+  assert.equal(window.document.getElementById('adminLoginPanel').classList.contains('hidden'), true);
+  assert.equal(window.document.getElementById('adminPanel').classList.contains('hidden'), false);
 
   // 3. Bỏ tích "Ghi nhớ" → chỉ lưu trong phiên (sessionStorage), không ghi ra ổ đĩa
   window.document.getElementById('adminPasswordInput').value = 'secret';
@@ -175,26 +265,17 @@ test('admin session token, book scope editor and book library filters', async ()
   window.setManageBookSearch('');
   assert.equal(window.document.querySelectorAll('#adminBooksTableBody tr').length, 3);
 
-  // 7. PWA: đã khai báo manifest + service worker + meta iPhone
-  assert.ok(window.document.querySelector('link[rel="manifest"]').getAttribute('href').includes('manifest.webmanifest'));
-  assert.equal(window.document.querySelector('meta[name="apple-mobile-web-app-capable"]').getAttribute('content'), 'yes');
-  assert.ok(window.document.querySelector('link[rel="apple-touch-icon"]'));
-  assert.ok(window.document.getElementById('iosInstallHint'));
-
+  // 7. Khóa lại → xóa token và quay về form mật khẩu ngay trên trang quản trị
   window.handleAdminLogout();
   assert.equal(window.isAdminAuthed(), false);
   assert.equal(window.localStorage.getItem('xbook_admin_token'), null);
   assert.equal(window.sessionStorage.getItem('xbook_admin_token'), null);
+  assert.equal(window.document.getElementById('adminPanel').classList.contains('hidden'), true);
+  assert.equal(window.document.getElementById('adminLoginPanel').classList.contains('hidden'), false);
   dom.window.close();
 });
 
 test('checkout requires name, phone and class — picked from the custom dropdown, never a native select', async () => {
-  const html = fs.readFileSync('public/index.html', 'utf8');
-  const dom = new JSDOM(html, { url: 'https://xbook.test', runScripts: 'outside-only' });
-  const { window } = dom;
-  window.lucide = { createIcons() {} };
-  window.alert = () => {};
-
   const fixture = {
     books: [{ id: 'shared', title: 'Shared', price: 100 }],
     settings: { isRegistrationOpen: true, departments: ['IT', 'Business'], classes: [
@@ -204,17 +285,17 @@ test('checkout requires name, phone and class — picked from the custom dropdow
   };
   let orderBody = null;
   const reply = (payload) => ({ status: 200, headers: { get: () => null }, json: async () => payload });
-  window.fetch = async (url, options = {}) => {
-    if (url === '/api/orders/create-payment-link') {
-      orderBody = JSON.parse(options.body);
-      return reply({ success: true, data: { orderCode: 1, amount: 100, quantity: 1, bookTitle: 'Shared', qrCode: '', accountNumber: '', bin: '', accountName: '', description: 'XB1' } });
+  const dom = loadPage('public/index.html', STOREFRONT_SCRIPTS, {
+    fetch: async (url, options = {}) => {
+      if (url === '/api/orders/create-payment-link') {
+        orderBody = JSON.parse(options.body);
+        return reply({ success: true, data: { orderCode: 1, amount: 100, quantity: 1, bookTitle: 'Shared', qrCode: '', accountNumber: '', bin: '', accountName: '', description: 'XB1' } });
+      }
+      if (url === '/api/books') return reply({ success: true, ...fixture });
+      return reply({ success: true });
     }
-    if (url === '/api/books') return reply({ success: true, ...fixture });
-    return reply({ success: true });
-  };
-
-  window.eval(fs.readFileSync('public/domain.js', 'utf8'));
-  window.eval(fs.readFileSync('public/app.js', 'utf8'));
+  });
+  const { window } = dom;
   await window.fetchBooksAndSettings();
   window.toggleCartBook('shared');
   window.openCheckoutModal();
@@ -273,12 +354,6 @@ test('checkout requires name, phone and class — picked from the custom dropdow
 });
 
 test('admin filters orders by order date / payment date and settles per day', async () => {
-  const html = fs.readFileSync('public/index.html', 'utf8');
-  const dom = new JSDOM(html, { url: 'https://xbook.test', runScripts: 'outside-only' });
-  const { window } = dom;
-  window.lucide = { createIcons() {} };
-  window.alert = () => {};
-
   const today = new Date();
   const dayKey = (offset) => {
     const d = new Date(today.getTime() + offset * 86400000);
@@ -309,9 +384,10 @@ test('admin filters orders by order date / payment date and settles per day', as
   };
 
   const reply = (payload) => ({ status: 200, headers: { get: () => null }, json: async () => payload });
-  window.fetch = async () => reply({ success: true, data: stats, books: [], settings: stats.settings });
-  window.eval(fs.readFileSync('public/domain.js', 'utf8'));
-  window.eval(fs.readFileSync('public/app.js', 'utf8'));
+  const dom = loadPage('public/admin.html', ADMIN_SCRIPTS, {
+    fetch: async () => reply({ success: true, data: stats, books: [], settings: stats.settings })
+  });
+  const { window } = dom;
 
   window.allAdminOrders = stats.allOrders;
   window.cachedPaidOrders = stats.allOrders.filter(o => o.status === 'PAID');

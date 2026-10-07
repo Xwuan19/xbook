@@ -2,7 +2,18 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## ✨ Điểm mới (v1.3.4) — Số sách đã bán & mỗi đầu sách bao nhiêu cuốn
+## ✨ Điểm mới (v1.4.0) — Trang quản trị riêng `/admin.html` (route `/admin`)
+
+| Tính năng | Mô tả |
+|---|---|
+| 🧭 **Giao diện quản lý tách thành 1 trang riêng** | Toàn bộ Bảng Quản Lý (đăng nhập, 6 tab, lọc ngày, quyết toán, quản lý sách, form thêm/sửa sách, xuất Excel, in) chuyển sang **`/admin.html`**; vào bằng **`/admin`**, `/admin/` hoặc `/admin.html` đều được (`/admin` **chuyển hướng 302** sang `/admin.html`) |
+| 🏠 **Trang chủ sạch hoàn toàn** | Đã **gỡ 3 modal quản trị** (`adminLoginModal`, `adminModal`, `bookFormModal`) khỏi `index.html` — trang chủ chỉ còn danh mục sách, giỏ hàng, form đặt mua & modal mã QR. Nút **“Quản Lý”** trên header giờ là **link sang `/admin.html`** |
+| 📦 **Code tách 3 file rõ ràng** | `public/core.js` (tiện ích + dropdown tự vẽ + modal + nạp danh mục — dùng chung), `public/app.js` (trang chủ), `public/admin.js` (trang quản trị). Trang chủ **không tải** code quản trị nữa và ngược lại |
+| 🔐 **Đăng nhập ngay trên trang quản trị** | Không còn modal: chưa có phiên → hiện **form mật khẩu** (`#adminLoginPanel`); đăng nhập thành công / còn phiên 30 ngày → hiện thẳng **Bảng Quản Lý** (`#adminPanel`). “Khóa lại” quay về form mật khẩu |
+| 🖨️ **In & Excel giữ nguyên** | `#printArea` + CSS `@media print` chuyển sang trang quản trị; nút *In danh sách* chỉ in Bảng Quản Lý (header/footer `print:hidden`) |
+| 🧪 **Test** | 13/13 bài pass: thêm `test/routes.test.js` (route `/admin` → 302 `/admin.html`, trang chủ không còn DOM quản trị) và tách `test/frontend.test.js` theo 2 trang |
+
+## ✨ Điểm cũ (v1.3.4) — Số sách đã bán & mỗi đầu sách bao nhiêu cuốn
 
 | Tính năng | Mô tả |
 |---|---|
@@ -118,10 +129,14 @@ xbook/
 ├── .env                      # File chứa API Key thật của bạn
 ├── package.json              # Khai báo thư viện (@payos/node, express, cors, dotenv)
 ├── database.js               # Module CSDL (Lưu đơn hàng, đối soát sao kê, schema SQL)
-├── server.js                 # Backend Express: PayOS SDK, Webhook, phiên quản trị, manifest + service worker
+├── server.js                 # Backend Express: PayOS SDK, Webhook, phiên quản trị, route /admin, manifest + service worker
+├── vercel.json               # Region sin1 + rewrite /api, /uploads + redirect /admin → /admin.html
 ├── public/                   # Giao diện Frontend Responsive Mobile & Desktop
-│   ├── index.html            # Trang chủ hiển thị giáo trình, modal QR realtime
-│   ├── app.js                # Xử lý logic đặt hàng, polling, đối soát, phiên quản trị, gán sách theo khoa/lớp
+│   ├── index.html            # TRANG CHỦ cho sinh viên: danh mục sách, giỏ hàng, form đặt mua, modal QR realtime
+│   ├── admin.html            # TRANG QUẢN TRỊ riêng (route /admin): đăng nhập + Bảng Quản Lý 6 tab + form sách
+│   ├── core.js               # Phần dùng chung 2 trang: tiện ích, dropdown tự vẽ XBookSelect, modal, nạp danh mục
+│   ├── app.js                # Logic trang chủ: lọc khoa/lớp, giỏ hàng, đặt hàng, polling tiền về, PWA hint
+│   ├── admin.js              # Logic trang quản trị: phiên đăng nhập, thống kê, lọc ngày/quyết toán, CRUD sách, Excel
 │   ├── domain.js             # Logic dùng chung: lớp, bộ lọc, lịch giao, phạm vi khoa/lớp của sách
 │   ├── manifest.webmanifest  # Khai báo PWA (icon, màu, chế độ toàn màn hình)
 │   ├── sw.js                 # Service worker: cache trang tĩnh, không cache API
@@ -129,6 +144,11 @@ xbook/
 │   ├── success.html          # Trang thanh toán thành công
 │   ├── cancel.html           # Trang báo hủy thanh toán
 │   └── mock-checkout.html    # Trang mô phỏng test nội bộ khi chưa có key
+├── test/                     # Kiểm thử tự động (npm test)
+│   ├── api.test.js           # API sách / khoa-lớp / đơn hàng / ngày giao
+│   ├── domain.test.js        # Logic thuần trong public/domain.js
+│   ├── frontend.test.js      # Giao diện 2 trang (trang chủ & /admin.html) chạy trong jsdom
+│   └── routes.test.js        # Route /admin → 302 /admin.html + trang chủ không còn DOM quản trị
 └── README.md                 # Hướng dẫn chi tiết
 ```
 
@@ -291,12 +311,15 @@ XBook đã có **Web App Manifest** (`/manifest.webmanifest`) + **Service Worker
 - PWA yêu cầu **HTTPS** (Vercel đã có sẵn). Chạy `localhost` vẫn cài được để thử.
 - Service worker **chỉ cache file tĩnh** (HTML, JS, logo, icon). Mọi request `/api/...` luôn đi thẳng lên server → số lượng sách, trạng thái đăng ký, đơn hàng **không bao giờ bị cũ**.
 - Mở app khi mất mạng: các trang tĩnh vẫn hiển thị; thao tác cần dữ liệu (đặt sách, chốt sổ) sẽ báo lỗi kết nối cho tới khi có mạng.
-- **Khi deploy bản mới**: tăng `CACHE_NAME` trong `public/sw.js` (`xbook-static-v3` → `v4`) để mọi máy xoá cache tĩnh cũ và nhận giao diện mới.
+- **Khi deploy bản mới**: tăng `CACHE_NAME` trong `public/sw.js` (`xbook-static-v6` → `v7`) để mọi máy xoá cache tĩnh cũ và nhận giao diện mới.
+- Trang chủ `/` và trang quản trị `/admin.html` được **cache offline riêng từng trang** (rớt mạng vẫn mở đúng trang đang dùng, không bị trả nhầm trang chủ).
+- **Nhấn giữ icon app** (iOS/Android) có shortcut **“Bảng Quản Lý”** mở thẳng trang quản trị `/admin.html` (khai báo trong `manifest.webmanifest`).
 
 ---
 
 ## 🔐 9. Phiên Đăng Nhập Quản Trị (không cần nhập lại mật khẩu)
 
+- Giao diện quản trị nằm ở **trang riêng `/admin`** (`/admin.html`): mở trang → nếu **còn phiên** thì hiện thẳng Bảng Quản Lý, nếu **chưa đăng nhập** thì hiện form nhập mật khẩu quản trị ngay trên trang (không còn modal trên trang chủ).
 - Khi đăng nhập, server cấp **token phiên** ký HMAC-SHA256 (mặc định **30 ngày**); client lưu token này và gửi qua header `x-admin-token` cho mọi API quản trị.
 - Tích **“Ghi nhớ đăng nhập”** → lưu token vào `localStorage` (mở lại web, tắt máy vẫn còn phiên). Bỏ tích → chỉ lưu `sessionStorage` (đóng trình duyệt là hết).
 - **Không lưu mật khẩu** ở bất kỳ đâu; token là chuỗi có hạn dùng và chữ ký, không thể sửa nội dung.
@@ -306,7 +329,7 @@ XBook đã có **Web App Manifest** (`/manifest.webmanifest`) + **Service Worker
   ADMIN_SESSION_DAYS=30            # số ngày ghi nhớ phiên (mặc định 30)
   ADMIN_SESSION_SECRET=...         # khóa ký riêng (tùy chọn; mặc định = ADMIN_PASSWORD)
   ```
-- Bấm **“Khóa lại”** trong Bảng Quản Lý để đăng xuất và xóa token khỏi thiết bị.
+- Bấm **“Khóa lại”** (ở header trang quản trị hoặc trong Bảng Quản Lý) để đăng xuất, xóa token khỏi thiết bị và quay lại form mật khẩu.
 
 ---
 
@@ -325,7 +348,7 @@ XBook đã có **Web App Manifest** (`/manifest.webmanifest`) + **Service Worker
 
 ## 🎛️ 11. Ô Chọn Khoa / Lớp (dropdown tự vẽ)
 
-- Toàn bộ ô chọn **khoa / lớp** dùng component `XBookSelect` trong `public/app.js`; **không** còn `<select>` hay `<datalist>` mặc định của trình duyệt (đã có test `document.querySelectorAll('select').length === 0`).
+- Toàn bộ ô chọn **khoa / lớp** dùng component `XBookSelect` trong `public/core.js` (nạp ở **cả 2 trang**); **không** còn `<select>` hay `<datalist>` mặc định của trình duyệt (đã có test `document.querySelectorAll('select').length === 0` cho cả trang chủ lẫn trang quản trị).
 - Áp dụng ở: bộ lọc lớp trang chủ, **form đăng ký mua sách**, lọc lớp trong tab *Đơn hàng*, bộ lọc thư viện sách (khoa + lớp), *Sách cần học theo lớp*, ô chọn khoa khi thêm lớp.
 - Đặc điểm: panel bo tròn theo theme xbook, **chia nhóm theo khoa**, ô *tìm nhanh* (bỏ dấu tiếng Việt — gõ `kinh te` vẫn ra `Kinh tế`) khi có hơn 7 lựa chọn, điều hướng bàn phím `Enter` / `Space` / `↑` / `↓` / `Esc`, bấm ra ngoài tự đóng.
 - Giá trị truyền đi vẫn là khóa chuẩn `["Khoa","Lớp"]` nên đồng bộ với bộ lọc, thống kê và Excel.
@@ -347,14 +370,14 @@ XBook đã có **Web App Manifest** (`/manifest.webmanifest`) + **Service Worker
 ## 📅 13. Lọc Theo Ngày & Quyết Toán Từng Ngày
 
 ### Cách dùng
-1. Mở **Bảng Quản Lý** → khối **“Lọc theo ngày”** ngay trên thanh tab (hiện ở **mọi tab**).
+1. Mở trang quản trị **`/admin`** (nút *Quản Lý* ở trang chủ) → khối **“Lọc theo ngày”** ngay trên thanh tab (hiện ở **mọi tab**).
 2. Chọn nhanh: **Hôm nay / Hôm qua / 7 ngày / 30 ngày**, hoặc nhập **Từ ngày → Đến ngày** (nhập ngược sẽ tự đảo).
 3. Chọn mốc thời gian: **Ngày đặt hàng** (khách bấm mua) hay **Ngày thanh toán** (tiền về tài khoản).
 4. Mở tab **“Quyết toán”** để xem 4 thẻ tổng hợp (Ngày có đơn · Đơn đã nộp · Sách đã bán · Tiền thực nhận) và bảng **“Quyết toán theo từng ngày”** (có thanh tỷ trọng + TB/đơn) — bấm một dòng để lọc đúng ngày đó (tiện chốt sổ cuối ngày).
 5. Bấm **Xuất Excel** để lấy file quyết toán của khoảng đang lọc.
 
 ### Chi tiết kỹ thuật
-- Hàm thuần trong `public/app.js`: `localDateKey`, `orderFilterDateKey`, `filterOrdersByAdminDate`, `groupOrdersByDay`, `computeBookSummary`, `adminDateFilterState`.
+- Hàm thuần trong `public/core.js` (`localDateKey`, `shiftDateKey`, `formatDateKeyVN`) + `public/admin.js` (`orderFilterDateKey`, `filterOrdersByAdminDate`, `groupOrdersByDay`, `computeBookSummary`, `adminDateFilterState`).
 - Ngày được tính theo **giờ địa phương của máy** (`YYYY-MM-DD`), không lệch múi giờ khi đối soát.
 - Bộ lọc chạy **hoàn toàn ở client** trên dữ liệu `/api/admin/statistics` (không đổi API, không ảnh hưởng dữ liệu gốc).
 - Đơn **PENDING** không được tính vào doanh thu/quyết toán (chỉ tính đơn `PAID`); khi lọc theo *Ngày thanh toán*, đơn chưa trả tiền bị loại khỏi mọi danh sách.
@@ -366,7 +389,7 @@ XBook đã có **Web App Manifest** (`/manifest.webmanifest`) + **Service Worker
 
 ## 📚 14. Số Sách Đã Bán & Mỗi Đầu Sách Bao Nhiêu Cuốn
 
-Nằm trong **Bảng Quản Lý → tab Quyết toán**, ngay dưới bảng quyết toán từng ngày:
+Nằm trong **trang quản trị `/admin` → Bảng Quản Lý → tab Quyết toán**, ngay dưới bảng quyết toán từng ngày:
 
 1. **Badge tổng hợp**: `N đầu sách · X cuốn · Y đ` (VD: `2 đầu sách · 7 cuốn · 235.000 đ`).
 2. **Bảng chi tiết từng đầu sách** (xếp theo số lượng bán giảm dần):

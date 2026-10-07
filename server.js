@@ -55,6 +55,13 @@ app.get('/sw.js', (req, res) =>
   })
 );
 
+// ============================================================================
+// TRANG QUẢN TRỊ RIÊNG: /admin.html (route /admin chuyển hướng sang)
+// Toàn bộ giao diện quản lý đã tách khỏi trang chủ nên admin có 1 trang riêng,
+// vào bằng /admin, /admin/ hay /admin.html đều được.
+// ============================================================================
+app.get(['/admin', '/admin/'], (req, res) => res.redirect(302, '/admin.html'));
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Thư mục chứa ảnh bìa sách đã upload (Quản lý sách)
