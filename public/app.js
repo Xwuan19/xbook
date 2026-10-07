@@ -40,10 +40,7 @@ function formatDateVN(ymd) {
 
 // Dòng lưu ý ngày nhận sách ngắn gọn cho sinh viên (dùng chung banner + form + màn hình thành công)
 function deliveryInfoLine() {
-  const date = currentSettings.deliveryDate;
-  const note = (currentSettings.deliveryNote || '').trim();
-  if (!date && !note) return '';
-  return [date ? `Nhận sách: <strong>${formatDateVN(date)}</strong>` : '', note].filter(Boolean).join(' · ');
+  return '';
 }
 
 function formatDelivery(value) {
@@ -153,7 +150,6 @@ function renderRegistrationBanner() {
   if (!container) return;
 
   if (currentSettings.isRegistrationOpen) {
-    const deliveryLine = deliveryInfoLine();
     container.innerHTML = `
       <div class="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200/90 rounded-2xl p-3.5 sm:p-4 shadow-sm">
         <div class="flex items-center justify-between gap-2">
@@ -164,9 +160,8 @@ function renderRegistrationBanner() {
             </span>
             <span class="whitespace-nowrap">ĐANG MỞ NHẬN ĐƠN</span>
           </div>
-          ${deliveryLine ? `<span class="text-[11px] font-bold text-emerald-800 text-right leading-snug">📦 ${deliveryLine}</span>` : ''}
         </div>
-        ${deliveryLine ? `<p class="text-xs text-slate-600 mt-1.5 leading-relaxed">Chọn sách, nhập đúng họ tên và quét QR chuyển khoản — hệ thống tự ghi nhận vào danh sách.</p>` : ''}
+        <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">Chọn sách, nhập đúng họ tên và quét QR chuyển khoản — hệ thống tự ghi nhận vào danh sách.</p>
       </div>
     `;
   } else {
