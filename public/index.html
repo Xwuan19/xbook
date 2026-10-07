@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>XBook - Đăng Ký Mua Giáo Trình Theo Khoa & Lớp</title>
   
-  <!-- Tailwind CSS, Lucide Icons & SheetJS (Excel) CDN -->
+  <!-- Tailwind CSS + Lucide Icons (CDN pinned version — load nhanh hơn, không tốn request giải @latest)
+       Note: SheetJS (xlsx ~1MB) được nạp CHẬY LƯỜI (lazy) chỉ khi bấm "Xuất Excel" để trang mở nhanh hơn -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@1.52.0/dist/umd/lucide.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">

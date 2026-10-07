@@ -131,8 +131,8 @@ function verifyPayOSWebhook(webhookBody) {
  */
 app.get('/api/books', async (req, res) => {
   try {
-    const books = await db.getAllBooks();
-    const settings = await db.getSettings();
+    // Gọi DB SONG SONG: với Neon (1 request HTTP/query) thời gian chờ giảm ~một nửa
+    const [books, settings] = await Promise.all([db.getAllBooks(), db.getSettings()]);
     res.json({ success: true, books, settings });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.2.0 (Chỉ còn Khoa CNTT + Quản lý sách + Chốt sổ theo ngày nhận sách)
+## Phiên bản hiện tại: v1.2.1 (Tối ưu tốc độ — giảm delay khi bấm)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -57,6 +57,14 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.2.1**:
+  - **Mục tiêu**: Giảm độ trễ (delay) khi bấm nút — nguyên nhân chính là Vercel function chạy ở xa + mỗi thao tác fetch API tuần tự nhiều lần, chứ không phải code chậm (API local đo được ~1ms).
+  - **Giải pháp**:
+    - Thêm `vercel.json`: pin function về **region `sin1` (Singapore)** — gần Việt Nam nhất, giảm ~200ms+ thời gian đi-về mỗi request so với region Mỹ mặc định.
+    - `server.js`: `/api/books` gọi DB bằng `Promise.all` (song song 2 query → thời gian chờ giảm ~một nửa, đặc biệt khi chạy Neon trên Vercel).
+    - `public/app.js`: `refreshAdminData()` fetch `/api/admin/statistics` và `/api/books` **song song** thay vì tuần tự; `refreshCatalogEverywhere()` trả về dữ liệu để dùng lại (tránh fetch `/api/books` lần 2 sau khi thêm/sửa/xóa sách).
+    - `public/index.html`: **gỡ SheetJS (~1MB) khỏi load ban đầu** — thư viện Excel chỉ tự nạp (lazy load) khi bấm "Xuất Excel"; pin `lucide@1.52.0` trên jsDelivr (không tốn thêm 1 request giải `@latest` trên unpkg như trước).
+  - **Lưu ý về Vercel**: Dù đã tối ưu, **cold start** (function "thức dậy" sau khi ngủ) vẫn có thể làm lần bấm ĐẦU TIÊN sau khoảng nghỉ hơi chậm ~1–2s — đây là đặc trưng của serverless, không phải lỗi code. Sau lần đầu, các thao tác tiếp theo sẽ nhanh. Muốn loại gần như hẳn cold start thì cân nhắc gói **Fluid Compute** (trả phí) của Vercel.
 - **v1.2.0**:
   - **Mục tiêu**: (1) Gọn nhẹ danh mục — bỏ 2 khoa "Đại cương" & "Kế toán", chỉ còn **Khoa CNTT**; (2) Nâng cấp **Quản lý sách** đủ trường (tên, ảnh bìa, giá, tác giả/NXB, trang, năm/bản in, mô tả, khoa, lớp) + **upload ảnh bìa từ máy**; (3) Thêm **chốt sổ theo ngày nhận sách** — admin tự chọn ngày giao và lưu ý thời gian ngắn gọn.
   - **Giải pháp**:

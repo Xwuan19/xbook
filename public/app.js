@@ -686,12 +686,20 @@ function switchAdminTab(tabName) {
 
 /**
  * TẢI DỮ LIỆU BẢNG QUẢN TRỊ & RENDER TẤT CẢ CÁC TAB
+ * opts.booksData: dùng dữ liệu /api/books vừa fetch xong (tránh fetch 2 lần)
  */
-async function refreshAdminData() {
+async function refreshAdminData(opts = {}) {
   try {
-    const res = await fetch('/api/admin/statistics', {
+    // Fetch 2 API ĐỒNG THỜI để giảm tối đa thời gian chờ (mỗi lần đi mạng ~1 RTT)
+    const statsPromise = fetch('/api/admin/statistics', {
       headers: { 'x-admin-password': adminAuthPassword }
     });
+    const booksPromise = opts.booksData
+      ? Promise.resolve(opts.booksData)
+      : fetch('/api/books').then(r => r.json()).catch(() => null);
+
+    const res = await statsPromise;
+    const booksData = await booksPromise;
 
     if (res.status === 401) {
       adminAuthPassword = '';
@@ -707,15 +715,11 @@ async function refreshAdminData() {
     const stats = result.data;
     currentSettings = { ...currentSettings, ...(stats.settings || {}) };
 
-    // Đồng bộ lại danh mục sách mới nhất (phục vụ tab quản lý & theo khoa)
-    try {
-      const booksRes = await fetch('/api/books');
-      const booksData = await booksRes.json();
-      if (booksData.success) {
-        allBooks = booksData.books || [];
-        currentSettings = { ...currentSettings, ...(booksData.settings || {}) };
-      }
-    } catch (e) { /* giữ dữ liệu cũ */ }
+    // Danh mục sách (phục vụ tab quản lý & theo khoa)
+    if (booksData && booksData.success) {
+      allBooks = booksData.books || [];
+      currentSettings = { ...currentSettings, ...(booksData.settings || {}) };
+    }
 
     window.currentAdminStats = stats;
 
@@ -1403,8 +1407,8 @@ async function handleBookFormSubmit(event) {
       return;
     }
     closeModal('bookFormModal');
-    await refreshCatalogEverywhere();
-    if (window.currentAdminStats) await refreshAdminData();
+    const booksData = await refreshCatalogEverywhere();
+    if (window.currentAdminStats) await refreshAdminData({ booksData });
   } catch (e) {
     alert("Lỗi kết nối: " + e.message);
   } finally {
@@ -1424,18 +1428,20 @@ async function handleDeleteBook(bookId, bookTitle) {
       alert("Không xóa được: " + data.message);
       return;
     }
-    await refreshCatalogEverywhere();
-    if (window.currentAdminStats) await refreshAdminData();
+    const booksData = await refreshCatalogEverywhere();
+    if (window.currentAdminStats) await refreshAdminData({ booksData });
   } catch (e) {
     alert("Lỗi kết nối: " + e.message);
   }
 }
 
 /** Tải lại danh mục sách + settings, đồng bộ trang chủ & bảng quản trị */
+// Trả về data vừa fetch để caller dùng lại (tránh fetch /api/books lần 2)
 async function refreshCatalogEverywhere() {
+  let data = null;
   try {
     const res = await fetch('/api/books');
-    const data = await res.json();
+    data = await res.json();
     if (data.success) {
       allBooks = data.books || [];
       currentSettings = { ...currentSettings, ...(data.settings || {}) };
@@ -1448,6 +1454,7 @@ async function refreshCatalogEverywhere() {
   } catch (e) {
     console.error("Lỗi tải lại danh mục:", e);
   }
+  return data;
 }
 
 // ============================ THAO TÁC CHUNG ============================
@@ -1536,6 +1543,19 @@ function copyToClipboard(elementId) {
 }
 
 // ============================ XUẤT EXCEL (.XLSX) ============================
+
+/** Nạp thư viện Excel (SheetJS ~1MB) CHỈ KHI CẦN — không tải trước làm chậm trang */
+function loadXlsxLib() {
+  return new Promise((resolve, reject) => {
+    if (typeof XLSX !== 'undefined') return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Không tải được thư viện Excel — kiểm tra mạng rồi thử lại!'));
+    document.head.appendChild(s);
+  });
+}
+
 async function exportToExcel() {
   try {
     if (!adminAuthPassword) {
@@ -1543,8 +1563,10 @@ async function exportToExcel() {
       return;
     }
 
-    if (typeof XLSX === 'undefined') {
-      alert("Đang tải thư viện xử lý Excel, vui lòng thử lại sau vài giây...");
+    try {
+      await loadXlsxLib();
+    } catch (e) {
+      alert(e.message);
       return;
     }
 
