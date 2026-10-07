@@ -271,3 +271,121 @@ test('checkout requires name, phone and class — picked from the custom dropdow
   assert.equal(orderBody.customerDepartment, 'Business');
   dom.window.close();
 });
+
+test('admin filters orders by order date / payment date and settles per day', async () => {
+  const html = fs.readFileSync('public/index.html', 'utf8');
+  const dom = new JSDOM(html, { url: 'https://xbook.test', runScripts: 'outside-only' });
+  const { window } = dom;
+  window.lucide = { createIcons() {} };
+  window.alert = () => {};
+
+  const today = new Date();
+  const dayKey = (offset) => {
+    const d = new Date(today.getTime() + offset * 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const at = (offset, hour = 10) => new Date(`${dayKey(offset)}T${String(hour).padStart(2, '0')}:00:00`).toISOString();
+
+  const order = (orderCode, createdAt, paidAt, amount) => ({
+    orderCode, status: 'PAID', customerName: `Bạn ${orderCode}`, customerClass: 'A', customerDepartment: 'IT',
+    customerPhone: '0987654321', amount, createdAt, paidAt, isDelivered: false,
+    items: [{ bookId: 'shared', bookTitle: 'Shared', quantity: 1, unitPrice: amount }]
+  });
+
+  const stats = {
+    totalOrders: 4, paidOrdersCount: 3, totalBooksPaid: 3, totalRevenue: 300000,
+    bookSummary: [], settings: { isRegistrationOpen: true, departments: ['IT', 'Business'], classes: [] },
+    allOrders: [
+      order(1, at(0), at(0), 100000),        // đặt & trả hôm nay
+      order(2, at(-1), at(0), 150000),       // đặt hôm qua, trả hôm nay
+      order(3, at(-1), at(-1), 50000),       // đặt & trả hôm qua
+      { ...order(4, at(-5), null, 70000), status: 'PENDING', paidAt: null }
+    ]
+  };
+
+  const reply = (payload) => ({ status: 200, headers: { get: () => null }, json: async () => payload });
+  window.fetch = async () => reply({ success: true, data: stats, books: [], settings: stats.settings });
+  window.eval(fs.readFileSync('public/domain.js', 'utf8'));
+  window.eval(fs.readFileSync('public/app.js', 'utf8'));
+
+  window.allAdminOrders = stats.allOrders;
+  window.cachedPaidOrders = stats.allOrders.filter(o => o.status === 'PAID');
+  window.renderAdminDateFilter();
+  window.renderAdminTabsWithFilter();
+
+  // 1. Mặc định: tất cả thời gian
+  assert.equal(window.isAdminDateFilterActive(), false);
+  assert.equal(window.filteredPaidOrders.length, 3);
+  assert.match(window.document.getElementById('adminDateSummary').textContent, /Tất cả thời gian/);
+
+  // 2. Quyết toán theo NGÀY ĐẶT HÀNG: hôm nay = 1 đơn, hôm qua = 1 đơn (+ 1 đơn đặt hôm qua nhưng trả hôm nay)
+  window.renderAdminDateFilter();
+  window.setAdminDatePreset('today');
+  assert.equal(window.filteredPaidOrders.length, 1);
+  assert.equal(window.filteredPaidOrders[0].orderCode, 1);
+  assert.match(window.document.getElementById('adminDateSummary').textContent, /100\.000 đ/);
+  window.setAdminDatePreset('yesterday');
+  assert.deepEqual(window.filteredPaidOrders.map(o => o.orderCode).sort(), [2, 3]);
+
+  // 3. Bảng quyết toán từng ngày: gộp đúng theo ngày đặt
+  const rows = [...window.document.querySelectorAll('#adminDailyBreakdownBody tr')];
+  assert.equal(rows.length, 3); // hôm nay, hôm qua, dòng TỔNG CỘNG
+  const todayRow = rows.find(r => r.textContent.includes(window.formatDateKeyVN(dayKey(0))));
+  assert.match(todayRow.textContent, /1\s*1\s*100\.000 đ/);
+  const yesterdayRow = rows.find(r => r.textContent.includes(window.formatDateKeyVN(dayKey(-1))));
+  assert.match(yesterdayRow.textContent, /2\s*2\s*200\.000 đ/);
+  assert.match(rows[rows.length - 1].textContent, /TỔNG CỘNG/);
+
+  // 4. Bấm 1 dòng ngày → lọc đúng ngày đó, bấm lại → bỏ lọc
+  yesterdayRow.click();
+  const clickedState = window.adminDateFilterState();
+  assert.equal(clickedState.preset, 'yesterday');
+  assert.equal(clickedState.from, dayKey(-1));
+  assert.equal(clickedState.to, dayKey(-1));
+  assert.deepEqual(window.filteredPaidOrders.map(o => o.orderCode).sort(), [2, 3]);
+  window.setAdminDateSingleDay(dayKey(-1));
+  assert.equal(window.isAdminDateFilterActive(), false);
+
+  // 5. Đổi sang NGÀY THANH TOÁN: hôm nay = 2 đơn (1 + 2), hôm qua = 1 đơn
+  window.setAdminDateBasis('paid');
+  window.setAdminDatePreset('today');
+  assert.deepEqual(window.filteredPaidOrders.map(o => o.orderCode).sort(), [1, 2]);
+  assert.match(window.document.getElementById('adminDateSummary').textContent, /250\.000 đ/);
+  window.setAdminDatePreset('yesterday');
+  assert.deepEqual(window.filteredPaidOrders.map(o => o.orderCode), [3]);
+
+  // 6. Khoảng tùy chọn (Từ ngày → Đến ngày) và tự đảo nếu nhập ngược
+  window.setAdminDateBasis('created');
+  window.document.getElementById('adminDateFromInput').value = dayKey(-1);
+  window.document.getElementById('adminDateToInput').value = dayKey(0);
+  window.handleAdminDateRangeInput();
+  assert.equal(window.adminDateFilterState().preset, 'custom');
+  assert.equal(window.filteredPaidOrders.length, 3);
+  assert.match(window.adminDateRangeLabel(), /Từ .* đến .*/);
+  window.document.getElementById('adminDateFromInput').value = dayKey(0);
+  window.document.getElementById('adminDateToInput').value = dayKey(-1);
+  window.handleAdminDateRangeInput();
+  assert.deepEqual([window.adminDateFilterState().from, window.adminDateFilterState().to], [dayKey(-1), dayKey(0)]);
+
+  // 7. Bảng tổng hợp sách + số liệu đầu trang đổi theo khoảng lọc
+  window.setAdminDatePreset('yesterday');
+  assert.match(window.document.getElementById('adminPaidCount').innerText, /2 đơn đã nộp \(2 cuốn\)/);
+  assert.match(window.document.getElementById('adminTotalRevenue').innerText, /200\.000 đ/);
+  const summary = window.computeBookSummary(window.filteredPaidOrders);
+  assert.equal(summary.find(b => b.id === 'shared').totalQuantity, 2);
+
+  // 8. Khoảng không có đơn nào → mọi số liệu về 0, bảng quyết toán vẫn liệt kê ngày để bấm chọn
+  window.document.getElementById('adminDateFromInput').value = dayKey(30);
+  window.document.getElementById('adminDateToInput').value = dayKey(30);
+  window.handleAdminDateRangeInput();
+  assert.equal(window.filteredPaidOrders.length, 0);
+  assert.match(window.document.getElementById('adminDateSummary').textContent, /0 đơn đã nộp/);
+  assert.match(window.document.getElementById('adminPaidCount').innerText, /0 đơn đã nộp \(0 cuốn\)/);
+  assert.match(window.document.getElementById('adminDailyBreakdownBody').textContent, /TỔNG CỘNG/);
+
+  // 9. Giới hạn khoảng ngày không ảnh hưởng tới dữ liệu gốc
+  window.setAdminDatePreset('all');
+  assert.equal(window.filteredPaidOrders.length, 3);
+  assert.equal(window.isAdminDateFilterActive(), false);
+  dom.window.close();
+});

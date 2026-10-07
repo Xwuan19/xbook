@@ -2,7 +2,18 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## ✨ Điểm mới (v1.3.1) — Chọn lớp đồng bộ giao diện + Bắt buộc Tên / SĐT / Lớp
+## ✨ Điểm mới (v1.3.2) — Lọc theo ngày & Quyết toán từng ngày
+
+| Tính năng | Mô tả |
+|---|---|
+| 📅 **Lọc theo ngày** | Bảng Quản Lý → tab *Đơn hàng*: chips **Tất cả · Hôm nay · Hôm qua · 7 ngày · 30 ngày** + ô **Từ ngày → Đến ngày** để chọn khoảng bất kỳ |
+| 🔀 **2 cách tính ngày** | Chọn lọc theo **Ngày đặt hàng** (`createdAt`) hoặc **Ngày thanh toán** (`paidAt`) — đúng nhu cầu đối soát tiền về |
+| 🧮 **Bảng “Quyết toán theo từng ngày”** | Liệt kê từng ngày: số **đơn đã nộp · số cuốn · doanh thu** + dòng TỔNG CỘNG. **Bấm vào một dòng để lọc đúng ngày đó** (bấm lại để bỏ lọc) |
+| 🔄 **Lọc áp dụng toàn bảng** | Số lượng từng cuốn cần in, danh sách phát sách, tab *Theo tên · Theo lớp · Theo khoa*, tổng tiền và số đơn đều tính theo khoảng ngày đang chọn |
+| 📊 **Excel theo ngày** | File xuất bám đúng khoảng đang lọc (tiêu đề ghi rõ khoảng ngày), thêm **sheet “Quyết Toán Theo Ngày”** (ngày, thứ, đơn, cuốn, doanh thu, trung bình/đơn) và cột **Ngày Đặt** ở sheet phát sách & toàn bộ đơn hàng. Tên file: `XBook_QuyetToan_..._20261007.xlsx` |
+| 🖨️ **In theo ngày** | Bảng đang lọc in ra đúng danh sách của ngày đó (khối lọc tự ẩn khi in) |
+
+## ✨ Điểm cũ (v1.3.1) — Chọn lớp đồng bộ giao diện + Bắt buộc Tên / SĐT / Lớp
 
 | Tính năng | Mô tả |
 |---|---|
@@ -312,3 +323,21 @@ XBook đã có **Web App Manifest** (`/manifest.webmanifest`) + **Service Worker
 - Form hiển thị lỗi ngay dưới ô nhập (`formCustomerNameError`, `formCustomerPhoneError`, `formCustomerClassError`).
 - Server (`POST /api/orders/create-payment-link`) kiểm tra lại toàn bộ và trả **400** nếu thiếu/sai — API không thể bị lách từ bên ngoài.
 - ⚠️ **Lưu ý vận hành**: vì lớp là bắt buộc, quản trị viên cần khai báo **Khoa → Lớp** (tab *Quản lý sách*) trước khi mở nhận đơn; nếu chưa có lớp nào, sinh viên sẽ thấy thông báo yêu cầu liên hệ quản trị viên và nút đặt mua tạm khóa.
+
+---
+
+## 📅 13. Lọc Theo Ngày & Quyết Toán Từng Ngày
+
+### Cách dùng
+1. Mở **Bảng Quản Lý** → tab **Đơn hàng** → khối **“Lọc theo ngày”** ở trên cùng.
+2. Chọn nhanh: **Hôm nay / Hôm qua / 7 ngày / 30 ngày**, hoặc nhập **Từ ngày → Đến ngày** (nhập ngược sẽ tự đảo).
+3. Chọn mốc thời gian: **Ngày đặt hàng** (khách bấm mua) hay **Ngày thanh toán** (tiền về tài khoản).
+4. Xem bảng **“Quyết toán theo từng ngày”** — bấm một dòng để lọc đúng ngày đó (tiện chốt sổ cuối ngày).
+5. Bấm **Xuất Excel** để lấy file quyết toán của khoảng đang lọc.
+
+### Chi tiết kỹ thuật
+- Hàm thuần trong `public/app.js`: `localDateKey`, `orderFilterDateKey`, `filterOrdersByAdminDate`, `groupOrdersByDay`, `computeBookSummary`, `adminDateFilterState`.
+- Ngày được tính theo **giờ địa phương của máy** (`YYYY-MM-DD`), không lệch múi giờ khi đối soát.
+- Bộ lọc chạy **hoàn toàn ở client** trên dữ liệu `/api/admin/statistics` (không đổi API, không ảnh hưởng dữ liệu gốc).
+- Đơn **PENDING** không được tính vào doanh thu/quyết toán (chỉ tính đơn `PAID`); khi lọc theo *Ngày thanh toán*, đơn chưa trả tiền bị loại khỏi mọi danh sách.
+- Test tự động: `test/frontend.test.js` kiểm tra đủ 4 trường hợp (ngày đặt, ngày thanh toán, khoảng tùy chọn, khoảng rỗng) + bấm dòng để lọc/bỏ lọc.

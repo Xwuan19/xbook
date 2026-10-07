@@ -26,6 +26,12 @@ let activeClassFilter = '__ALL__';
 let adminClassFilterValue = '__ALL__';
 let currentAdminTab = 'orders';
 
+// Bộ lọc theo ngày trong bảng quản trị (quyết toán từng ngày)
+let adminDatePreset = 'all';      // all | today | yesterday | 7d | 30d | custom
+let adminDateFrom = '';           // YYYY-MM-DD
+let adminDateTo = '';             // YYYY-MM-DD
+let adminDateBasis = 'created';   // created = ngày đặt hàng | paid = ngày thanh toán
+
 const formatMoney = (n) => `${(Number(n) || 0).toLocaleString('vi-VN')} đ`;
 
 // Định dạng ngày "YYYY-MM-DD" → "08/10" (cùng năm) hoặc "08/10/2027"
@@ -69,6 +75,102 @@ function clearFieldError(id) {
 /** Chuẩn hóa số điện thoại Việt Nam: bỏ khoảng trắng/dấu chấm, +84 → 0 */
 function normalizePhoneNumber(value) {
   return String(value || '').replace(/[\s.\-()]/g, '').replace(/^\+?84/, '0');
+}
+
+// ============================ LỌC THEO NGÀY (QUYẾT TOÁN TỪNG NGÀY) ============================
+/** Khóa ngày theo giờ địa phương của máy: 'YYYY-MM-DD' */
+function localDateKey(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/** Ngày dùng để lọc: ngày đặt hàng (createdAt) hoặc ngày tiền về (paidAt) */
+function orderFilterDateKey(order, basis = adminDateBasis) {
+  if (basis === 'paid') return localDateKey(order.paidAt);
+  return localDateKey(order.createdAt);
+}
+
+function shiftDateKey(days) {
+  const d = new Date(Date.now() + days * 86400000);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+function formatDateKeyVN(key) {
+  if (!key) return '';
+  const [y, m, d] = key.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+/** Nhãn ngắn cho khoảng đang lọc (hiển thị ở dòng tóm tắt + file Excel) */
+function adminDateRangeLabel() {
+  const basisLabel = adminDateBasis === 'paid' ? 'ngày thanh toán' : 'ngày đặt hàng';
+  if (adminDatePreset === 'all') return `Tất cả thời gian (theo ${basisLabel})`;
+  if (adminDatePreset === 'today') return `Hôm nay ${formatDateKeyVN(adminDateFrom)} (theo ${basisLabel})`;
+  if (adminDatePreset === 'yesterday') return `Hôm qua ${formatDateKeyVN(adminDateFrom)} (theo ${basisLabel})`;
+  if (adminDateFrom === adminDateTo) return `Ngày ${formatDateKeyVN(adminDateFrom)} (theo ${basisLabel})`;
+  return `Từ ${formatDateKeyVN(adminDateFrom)} đến ${formatDateKeyVN(adminDateTo)} (theo ${basisLabel})`;
+}
+
+/** Trạng thái bộ lọc ngày (dùng cho kiểm thử & debug) */
+function adminDateFilterState() {
+  return { preset: adminDatePreset, from: adminDateFrom, to: adminDateTo, basis: adminDateBasis };
+}
+
+function isAdminDateFilterActive() {
+  return adminDatePreset !== 'all' && Boolean(adminDateFrom && adminDateTo);
+}
+
+/** Lọc danh sách đơn theo khoảng ngày đang chọn */
+function filterOrdersByAdminDate(orders) {
+  if (!isAdminDateFilterActive()) return orders;
+  return orders.filter(order => {
+    const key = orderFilterDateKey(order);
+    return key && key >= adminDateFrom && key <= adminDateTo;
+  });
+}
+
+/** Gộp đơn đã thanh toán theo từng ngày để quyết toán */
+function groupOrdersByDay(orders) {
+  const map = new Map();
+  orders.forEach(order => {
+    const key = orderFilterDateKey(order);
+    if (!key) return;
+    if (!map.has(key)) map.set(key, { date: key, orders: 0, books: 0, amount: 0 });
+    const day = map.get(key);
+    day.orders += 1;
+    day.books += orderBookCount(order);
+    day.amount += Number(order.amount) || 0;
+  });
+  return [...map.values()].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/** Tổng hợp số lượng từng cuốn từ danh sách đơn (theo khoảng ngày đang lọc) */
+function computeBookSummary(orders) {
+  const summary = {};
+  allBooks.forEach(b => {
+    summary[b.id] = { id: b.id, title: b.title, price: b.price, totalQuantity: 0, totalRevenue: 0 };
+  });
+  orders.forEach(order => {
+    const items = Array.isArray(order.items) && order.items.length > 0
+      ? order.items
+      : [{ bookId: order.bookId, bookTitle: order.bookTitle, quantity: order.quantity || 1, unitPrice: order.unitPrice || 0 }];
+    items.forEach(it => {
+      const key = it.bookId && summary[it.bookId] ? it.bookId : (it.bookId || it.bookTitle || 'khac');
+      if (!summary[key]) {
+        summary[key] = { id: it.bookId || key, title: it.bookTitle || 'Sách khác', price: it.unitPrice || 0, totalQuantity: 0, totalRevenue: 0 };
+      }
+      const qty = Number(it.quantity) || 1;
+      summary[key].totalQuantity += qty;
+      summary[key].totalRevenue += qty * (Number(it.unitPrice) || 0);
+    });
+  });
+  return Object.values(summary);
 }
 
 function escapeHtml(str) {
@@ -365,7 +467,8 @@ function maybeShowIosInstallHint() {
   const ua = window.navigator.userAgent || '';
   const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(ua);
-  const standalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  const standalone = window.navigator.standalone === true ||
+    (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches);
   const hint = document.getElementById('iosInstallHint');
   if (!hint || !isIOS || standalone || !isSafari) return;
   try {
@@ -1195,29 +1298,171 @@ async function refreshAdminData(opts = {}) {
     if (dateInput && document.activeElement !== dateInput) dateInput.value = stats.settings.deliveryDate || '';
     if (noteInput && document.activeElement !== noteInput) noteInput.value = stats.settings.deliveryNote || '';
 
-    const revEl = document.getElementById('adminTotalRevenue');
-    if (revEl) revEl.innerText = `Tổng tiền: ${formatMoney(stats.totalRevenue)}`;
-
-    const paidCountEl = document.getElementById('adminPaidCount');
-    if (paidCountEl) paidCountEl.innerText = `${stats.paidOrdersCount} đơn đã nộp (${stats.totalBooksPaid} cuốn)`;
-
+    // Dữ liệu gốc (chưa lọc) để bộ lọc ngày tính lại mọi thống kê
     const paidOrders = (stats.allOrders || []).filter(o => o.status === 'PAID');
     paidOrders.sort((a, b) => compareByLastName(a.customerName, b.customerName));
+    window.allAdminOrders = stats.allOrders || [];
     window.cachedPaidOrders = paidOrders;
 
-    // Render toàn bộ các tab
-    renderAdminBookSummary(stats);
-    populateAdminClassFilter(paidOrders);
-    renderAdminOrderList();
-    renderAdminCustomerTab(paidOrders);
-    renderAdminClassTab(paidOrders);
-    renderAdminDepartmentTab(stats);
+    // Bộ lọc ngày + toàn bộ các tab (bảng quyết toán, danh sách phát sách, theo tên/lớp/khoa)
+    renderAdminDateFilter();
+    renderAdminTabsWithFilter();
     renderAdminManageTab();
 
     lucide.createIcons();
   } catch (err) {
     console.error("Lỗi admin:", err);
   }
+}
+
+// ============================ BỘ LỌC NGÀY TRONG BẢNG QUẢN TRỊ ============================
+const ADMIN_DATE_PRESETS = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'today', label: 'Hôm nay' },
+  { value: 'yesterday', label: 'Hôm qua' },
+  { value: '7d', label: '7 ngày' },
+  { value: '30d', label: '30 ngày' }
+];
+
+function setAdminDatePreset(preset) {
+  adminDatePreset = preset;
+  const today = localDateKey(new Date());
+  if (preset === 'today') { adminDateFrom = today; adminDateTo = today; }
+  else if (preset === 'yesterday') { adminDateFrom = shiftDateKey(-1); adminDateTo = shiftDateKey(-1); }
+  else if (preset === '7d') { adminDateFrom = shiftDateKey(-6); adminDateTo = today; }
+  else if (preset === '30d') { adminDateFrom = shiftDateKey(-29); adminDateTo = today; }
+  else if (preset === 'all') { adminDateFrom = ''; adminDateTo = ''; }
+  renderAdminDateFilter();
+  renderAdminTabsWithFilter();
+}
+
+/** Bấm vào một ngày trong bảng quyết toán → lọc đúng ngày đó (bấm lại vào ngày đang lọc để bỏ lọc) */
+function setAdminDateSingleDay(dateKey) {
+  if (isAdminDateFilterActive() && adminDateFrom === dateKey && adminDateTo === dateKey) {
+    setAdminDatePreset('all');
+    return;
+  }
+  adminDatePreset = dateKey === localDateKey(new Date()) ? 'today'
+    : dateKey === shiftDateKey(-1) ? 'yesterday' : 'custom';
+  adminDateFrom = dateKey;
+  adminDateTo = dateKey;
+  renderAdminDateFilter();
+  renderAdminTabsWithFilter();
+}
+
+function handleAdminDateRangeInput() {
+  const fromEl = document.getElementById('adminDateFromInput');
+  const toEl = document.getElementById('adminDateToInput');
+  adminDateFrom = (fromEl?.value || '').trim();
+  adminDateTo = (toEl?.value || '').trim();
+  if (adminDateFrom && adminDateTo && adminDateFrom > adminDateTo) {
+    [adminDateFrom, adminDateTo] = [adminDateTo, adminDateFrom];
+  }
+  adminDatePreset = adminDateFrom || adminDateTo ? 'custom' : 'all';
+  if (!adminDateFrom || !adminDateTo) { adminDateFrom = adminDateFrom || adminDateTo; adminDateTo = adminDateTo || adminDateFrom; }
+  renderAdminDateFilter();
+  renderAdminTabsWithFilter();
+}
+
+function setAdminDateBasis(basis) {
+  adminDateBasis = basis === 'paid' ? 'paid' : 'created';
+  renderAdminDateFilter();
+  renderAdminTabsWithFilter();
+}
+
+/** Vẽ chips khoảng ngày, chips loại ngày, ô Từ/Đến, dòng tóm tắt & bảng quyết toán từng ngày */
+function renderAdminDateFilter() {
+  const presetWrap = document.getElementById('adminDatePresetChips');
+  if (presetWrap) {
+    presetWrap.innerHTML = ADMIN_DATE_PRESETS.map(p => {
+      const active = adminDatePreset === p.value;
+      return `<button type="button" onclick="setAdminDatePreset('${p.value}')"
+        class="flex-shrink-0 px-2.5 py-1.5 rounded-full text-[11px] font-extrabold border transition ${
+          active ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-600/30' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:text-emerald-700'
+        }">${p.label}</button>`;
+    }).join('');
+  }
+
+  const basisWrap = document.getElementById('adminDateBasisChips');
+  if (basisWrap) {
+    basisWrap.innerHTML = [
+      { value: 'created', label: 'Ngày đặt hàng' },
+      { value: 'paid', label: 'Ngày thanh toán' }
+    ].map(b => {
+      const active = adminDateBasis === b.value;
+      return `<button type="button" onclick="setAdminDateBasis('${b.value}')" title="Đổi cách tính ngày để lọc/quyết toán"
+        class="px-2.5 py-1.5 rounded-full text-[11px] font-extrabold border transition ${
+          active ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+        }">${b.label}</button>`;
+    }).join('');
+  }
+
+  const fromEl = document.getElementById('adminDateFromInput');
+  const toEl = document.getElementById('adminDateToInput');
+  if (fromEl && document.activeElement !== fromEl) fromEl.value = adminDateFrom;
+  if (toEl && document.activeElement !== toEl) toEl.value = adminDateTo;
+
+  // Bảng quyết toán từng ngày (chỉ tính đơn đã thanh toán)
+  const tbody = document.getElementById('adminDailyBreakdownBody');
+  if (tbody) {
+    const days = groupOrdersByDay(window.cachedPaidOrders || []);
+    tbody.innerHTML = days.length === 0
+      ? `<tr><td colspan="4" class="p-3 text-center text-slate-400">Chưa có đơn nào đã thanh toán</td></tr>`
+      : days.map(day => {
+          const active = isAdminDateFilterActive() && adminDateFrom === day.date && adminDateTo === day.date;
+          return `<tr class="cursor-pointer transition ${active ? 'bg-emerald-50' : 'hover:bg-slate-50'}" onclick="setAdminDateSingleDay('${day.date}')">
+            <td class="p-2 font-bold text-slate-700">
+              ${formatDateKeyVN(day.date)}
+              <span class="text-[10px] font-normal text-slate-400">${escapeHtml(weekdayLabel(day.date))}</span>
+              ${active ? '<span class="ml-1 text-[10px] font-black text-emerald-700">• đang lọc</span>' : ''}
+            </td>
+            <td class="p-2 text-center font-semibold text-slate-600">${day.orders}</td>
+            <td class="p-2 text-center font-semibold text-slate-600">${day.books}</td>
+            <td class="p-2 text-right font-black text-emerald-600 whitespace-nowrap">${formatMoney(day.amount)}</td>
+          </tr>`;
+        }).join('') + (days.length > 1 ? `<tr class="bg-slate-50 font-black">
+            <td class="p-2 text-slate-700">TỔNG CỘNG (${days.length} ngày)</td>
+            <td class="p-2 text-center text-slate-700">${days.reduce((s, d) => s + d.orders, 0)}</td>
+            <td class="p-2 text-center text-slate-700">${days.reduce((s, d) => s + d.books, 0)}</td>
+            <td class="p-2 text-right text-emerald-700 whitespace-nowrap">${formatMoney(days.reduce((s, d) => s + d.amount, 0))}</td>
+          </tr>` : '');
+  }
+
+  lucide.createIcons();
+}
+
+function weekdayLabel(dateKey) {
+  const d = new Date(`${dateKey}T00:00:00`);
+  if (isNaN(d.getTime())) return '';
+  return ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.getDay()];
+}
+
+/** Vẽ lại toàn bộ số liệu của bảng quản trị theo khoảng ngày đang lọc */
+function renderAdminTabsWithFilter() {
+  const allOrders = window.allAdminOrders || [];
+  const paidOrders = filterOrdersByAdminDate(allOrders.filter(o => o.status === 'PAID'));
+  window.filteredPaidOrders = paidOrders;
+
+  const totalBooks = paidOrders.reduce((sum, o) => sum + orderBookCount(o), 0);
+  const totalAmount = paidOrders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+
+  const revEl = document.getElementById('adminTotalRevenue');
+  if (revEl) revEl.innerText = `Tổng tiền: ${formatMoney(totalAmount)}`;
+
+  const paidCountEl = document.getElementById('adminPaidCount');
+  if (paidCountEl) paidCountEl.innerText = `${paidOrders.length} đơn đã nộp (${totalBooks} cuốn)`;
+
+  const summaryEl = document.getElementById('adminDateSummary');
+  if (summaryEl) {
+    summaryEl.innerHTML = `📅 <strong>${escapeHtml(adminDateRangeLabel())}</strong> — ${paidOrders.length} đơn đã nộp · ${totalBooks} cuốn · <span class="text-emerald-700 font-black">${formatMoney(totalAmount)}</span>`;
+  }
+
+  renderAdminBookSummary({ bookSummary: computeBookSummary(paidOrders) });
+  populateAdminClassFilter(paidOrders);
+  renderAdminOrderList();
+  renderAdminCustomerTab(paidOrders);
+  renderAdminClassTab(paidOrders);
+  renderAdminDepartmentTab({ allOrders: filterOrdersByAdminDate(allOrders) });
 }
 
 /** TAB ĐƠN HÀNG — tổng số lượng từng cuốn trong danh mục chung */
@@ -1257,7 +1502,7 @@ function setAdminClassFilter(value) {
 
 function getFilteredPaidOrders() {
   const keyword = (document.getElementById('adminSearchStudentInput')?.value || '').toLowerCase().trim();
-  return (window.cachedPaidOrders || []).filter(o => {
+  return (window.filteredPaidOrders || window.cachedPaidOrders || []).filter(o => {
     const okClass = adminClassFilterValue === '__ALL__' || orderClassLabel(o).trim() === adminClassFilterValue;
     const okSearch = !keyword ||
       (o.customerName || '').toLowerCase().includes(keyword) ||
@@ -1280,7 +1525,7 @@ function renderAdminOrderList() {
 
   if (tbody) {
     if (orders.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400">Không tìm thấy bạn nào</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-400">Không tìm thấy bạn nào</td></tr>`;
     } else {
       tbody.innerHTML = orders.map((o, index) => {
         const deliveredClass = o.isDelivered ? 'line-through text-slate-400' : 'text-slate-900';
@@ -1295,6 +1540,10 @@ function renderAdminOrderList() {
             <td class="p-2.5 font-medium text-xs max-w-xs">
               ${escapeHtml(orderItemsLabel(o))}
               ${orderDepartments(o).map(d => `<span class="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 align-middle">${escapeHtml(d)}</span>`).join('')}
+            </td>
+            <td class="p-2.5 text-[11px] font-bold text-slate-500 whitespace-nowrap">
+              ${escapeHtml(formatDateKeyVN(localDateKey(o.createdAt)))}
+              <div class="text-[9px] font-normal text-slate-400">${o.paidAt ? `TT: ${escapeHtml(formatDateKeyVN(localDateKey(o.paidAt)))}` : 'chưa TT'}</div>
             </td>
             <td class="p-2.5 font-black text-emerald-600 text-xs whitespace-nowrap">${formatMoney(o.amount)}</td>
             <td class="p-2.5 text-center print:hidden">
@@ -1335,6 +1584,9 @@ function renderAdminOrderList() {
                 <div class="font-extrabold text-sm ${nameClass} truncate">${escapeHtml(o.customerName)}<div class="text-[10px] text-emerald-700">Giao dự kiến: ${escapeHtml(formatDelivery(o.deliveryAt))}</div></div>
                 ${o.customerClass ? `<div class="text-[10px] font-bold text-sky-600 mt-0.5">${escapeHtml(orderClassLabel(o))}</div>` : ''}
                 <div class="text-[11px] text-slate-500 mt-0.5">${escapeHtml(orderItemsLabel(o))}</div>
+                <div class="text-[10px] font-bold text-slate-400 mt-0.5">
+                  Đặt: ${escapeHtml(formatDateKeyVN(localDateKey(o.createdAt)))}${o.paidAt ? ` · TT: ${escapeHtml(formatDateKeyVN(localDateKey(o.paidAt)))}` : ''}
+                </div>
                 <div class="text-xs font-black text-emerald-600 mt-0.5">${formatMoney(o.amount)}</div>
               </div>
             </div>
@@ -1515,7 +1767,8 @@ function renderAdminDepartmentTab(stats) {
   document.getElementById('adminDepartmentCount').innerText = `${departments.length} khoa`;
   container.innerHTML = departments.map(dept => {
     const classes = getClassesForDepartment(dept);
-    const orders = (stats.allOrders || []).filter(o => o.status === 'PAID' && o.customerDepartment === dept);
+    // stats.allOrders ở đây đã được lọc theo khoảng ngày đang chọn (xem renderAdminTabsWithFilter)
+  const orders = (stats.allOrders || []).filter(o => o.status === 'PAID' && o.customerDepartment === dept);
     const quantity = orders.reduce((sum, o) => sum + orderBookCount(o), 0);
     return `<section class="bg-white border rounded-2xl p-4 space-y-3">
       <h4 class="font-bold">${escapeHtml(dept)} <span class="text-xs text-emerald-700">Đã đặt: ${quantity} cuốn · ${formatMoney(orders.reduce((sum, o) => sum + o.amount, 0))}</span></h4>
@@ -2219,8 +2472,12 @@ async function exportToExcel() {
       window.currentAdminStats = stats;
     }
 
-    const paidOrders = (stats.allOrders || []).filter(o => o.status === 'PAID');
+    // Tôn trọng bộ lọc theo ngày đang chọn trên Bảng Quản Lý (quyết toán từng ngày)
+    const allOrdersInRange = filterOrdersByAdminDate(stats.allOrders || []);
+    const paidOrders = allOrdersInRange.filter(o => o.status === 'PAID');
     paidOrders.sort((a, b) => compareByLastName(a.customerName, b.customerName));
+    const rangeLabel = adminDateRangeLabel();
+    const rangeSuffixText = isAdminDateFilterActive() ? ` | Khoảng: ${rangeLabel}` : '';
 
     const wb = XLSX.utils.book_new();
     const exportTime = new Date().toLocaleString('vi-VN');
@@ -2228,12 +2485,12 @@ async function exportToExcel() {
     // ========== SHEET 1: DANH SÁCH PHÁT SÁCH (ĐÃ THANH TOÁN) ==========
     const sheet1Rows = [
       ["DANH SÁCH SINH VIÊN ĐĂNG KÝ VÀ ĐÃ THANH TOÁN MUA GIÁO TRÌNH"],
-      [`Thời gian xuất: ${exportTime} | Tổng số đơn: ${paidOrders.length} | Tổng tiền: ${formatMoney(stats.totalRevenue)}`],
+      [`Thời gian xuất: ${exportTime} | ${rangeLabel} | Tổng số đơn: ${paidOrders.length} | Tổng tiền: ${formatMoney(paidOrders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0))}`],
       [],
       [
         "STT", "Mã Đơn", "Họ và Tên", "Lớp", "Khoa (theo sách)", "Số Điện Thoại",
         "Giáo Trình Đã Mua", "Tổng Số Cuốn", "Thành Tiền (đ)",
-        "Tình Trạng Phát Sách", "Ngày Nộp Tiền", "Ghi Chú / Mã GD"
+        "Tình Trạng Phát Sách", "Ngày Đặt", "Ngày Nộp Tiền", "Ghi Chú / Mã GD"
       ]
     ];
 
@@ -2250,6 +2507,7 @@ async function exportToExcel() {
         orderBookCount(o),
         Number(o.amount) || 0,
         o.isDelivered ? "Đã nhận sách" : "Chưa nhận",
+        formatDateKeyVN(localDateKey(o.createdAt)),
         o.paidAt ? new Date(o.paidAt).toLocaleString('vi-VN') : '',
         o.bankReference || o.note || ''
       ]);
@@ -2258,28 +2516,28 @@ async function exportToExcel() {
     sheet1Rows.push([]);
     sheet1Rows.push([
       "TỔNG CỘNG", "", `${paidOrders.length} đơn`, "", "", "", "",
-      stats.totalBooksPaid || paidOrders.reduce((sum, o) => sum + orderBookCount(o), 0),
-      stats.totalRevenue || paidOrders.reduce((sum, o) => sum + o.amount, 0),
-      `${paidOrders.filter(o => o.isDelivered).length} đã nhận`, "", ""
+      paidOrders.reduce((sum, o) => sum + orderBookCount(o), 0),
+      paidOrders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0),
+      `${paidOrders.filter(o => o.isDelivered).length} đã nhận`, "", "", ""
     ]);
 
     const ws1 = XLSX.utils.aoa_to_sheet(sheet1Rows);
     ws1['!cols'] = [
       { wch: 6 }, { wch: 14 }, { wch: 25 }, { wch: 14 }, { wch: 22 }, { wch: 14 },
-      { wch: 45 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 20 }, { wch: 22 }
+      { wch: 45 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 13 }, { wch: 20 }, { wch: 22 }
     ];
-    if (paidOrders.length > 0) ws1['!autofilter'] = { ref: `A4:L${4 + paidOrders.length}` };
+    if (paidOrders.length > 0) ws1['!autofilter'] = { ref: `A4:M${4 + paidOrders.length}` };
     XLSX.utils.book_append_sheet(wb, ws1, "Danh Sách Phát Sách");
 
     // Global print totals: count each book once, regardless of how many classes use it.
     const sheet2Rows = [
       ["BẢNG TỔNG HỢP SỐ LƯỢNG SÁCH (BÁO IN)"],
-      [`Thời gian xuất: ${exportTime}`], [],
+      [`Thời gian xuất: ${exportTime}${rangeSuffixText}`], [],
       ["Tên Giáo Trình", "Đơn Giá (đ)", "Tổng Số Cuốn Cần In", "Tổng Doanh Thu (đ)"]
     ];
-    const summarySorted = (stats.bookSummary || []).slice().sort((a, b) => a.title.localeCompare(b.title, 'vi'));
+    const summarySorted = computeBookSummary(paidOrders).sort((a, b) => a.title.localeCompare(b.title, 'vi'));
     summarySorted.forEach(b => sheet2Rows.push([b.title, Number(b.price) || 0, Number(b.totalQuantity) || 0, Number(b.totalRevenue) || 0]));
-    sheet2Rows.push([], ["TỔNG CỘNG", "", stats.totalBooksPaid || 0, stats.totalRevenue || 0]);
+    sheet2Rows.push([], ["TỔNG CỘNG", "", paidOrders.reduce((s, o) => s + orderBookCount(o), 0), paidOrders.reduce((s, o) => s + (Number(o.amount) || 0), 0)]);
     const ws2 = XLSX.utils.aoa_to_sheet(sheet2Rows);
     ws2['!cols'] = [{ wch: 38 }, { wch: 15 }, { wch: 22 }, { wch: 20 }];
     if (summarySorted.length > 0) ws2['!autofilter'] = { ref: `A4:D${4 + summarySorted.length}` };
@@ -2289,7 +2547,7 @@ async function exportToExcel() {
     const customerGroups = groupOrdersByCustomer(paidOrders);
     const sheet3Rows = [
       ["THỐNG KÊ THEO TÊN NGƯỜI MUA (1 NGƯỜI MUA NHIỀU CUỐN KHÁC NHAU)"],
-      [`Thời gian xuất: ${exportTime} | Tổng số người mua: ${customerGroups.length}`],
+      [`Thời gian xuất: ${exportTime}${rangeSuffixText} | Tổng số người mua: ${customerGroups.length}`],
       [],
       ["STT", "Họ và Tên", "Lớp", "Số Điện Thoại", "Các Giáo Trình Đã Mua", "Tổng Số Cuốn", "Tổng Tiền (đ)", "Đã Nhận Đủ Sách"]
     ];
@@ -2314,16 +2572,16 @@ async function exportToExcel() {
     XLSX.utils.book_append_sheet(wb, ws3, "Theo Tên Người Mua");
 
     // ========== SHEET 4: TOÀN BỘ ĐƠN HÀNG (ĐỐI SOÁT) ==========
-    const allOrders = stats.allOrders || [];
+    const allOrders = allOrdersInRange;
     if (allOrders.length > 0) {
       const sheet4Rows = [
         ["DANH SÁCH TOÀN BỘ ĐƠN HÀNG (BAO GỒM CHỜ VÀ ĐÃ THANH TOÁN)"],
-        [`Thời gian xuất: ${exportTime} | Tổng số đơn: ${allOrders.length}`],
+        [`Thời gian xuất: ${exportTime}${rangeSuffixText} | Tổng số đơn: ${allOrders.length}`],
         [],
         [
           "STT", "Mã Đơn", "Họ và Tên", "Lớp", "Số Điện Thoại", "Giáo Trình & Số Lượng",
           "Tổng Số Cuốn", "Thành Tiền (đ)", "Trạng Thái", "Tình Trạng Phát",
-          "Thời Gian Tạo Đơn", "Thời Gian Thanh Toán"
+          "Ngày Đặt", "Thời Gian Tạo Đơn", "Thời Gian Thanh Toán"
         ]
       ];
 
@@ -2339,6 +2597,7 @@ async function exportToExcel() {
           Number(o.amount) || 0,
           o.status === 'PAID' ? 'Đã thanh toán' : 'Chờ thanh toán (PENDING)',
           o.isDelivered ? 'Đã phát' : 'Chưa phát',
+          formatDateKeyVN(localDateKey(o.createdAt)),
           o.createdAt ? new Date(o.createdAt).toLocaleString('vi-VN') : '',
           o.paidAt ? new Date(o.paidAt).toLocaleString('vi-VN') : ''
         ]);
@@ -2347,15 +2606,48 @@ async function exportToExcel() {
       const ws4 = XLSX.utils.aoa_to_sheet(sheet4Rows);
       ws4['!cols'] = [
         { wch: 6 }, { wch: 14 }, { wch: 25 }, { wch: 14 }, { wch: 14 }, { wch: 45 },
-        { wch: 12 }, { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 20 }, { wch: 20 }
+        { wch: 12 }, { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 13 }, { wch: 20 }, { wch: 20 }
       ];
-      ws4['!autofilter'] = { ref: `A4:L${4 + allOrders.length}` };
+      ws4['!autofilter'] = { ref: `A4:M${4 + allOrders.length}` };
       XLSX.utils.book_append_sheet(wb, ws4, "Toàn Bộ Đơn Hàng");
     }
 
+    // ========== SHEET 5: QUYẾT TOÁN THEO NGÀY (ĐỐI SOÁT TIỀN VỀ TỪNG NGÀY) ==========
+    const daily = groupOrdersByDay(paidOrders);
+    const sheet5Rows = [
+      ["BẢNG QUYẾT TOÁN THEO NGÀY (CHỈ TÍNH ĐƠN ĐÃ THANH TOÁN)"],
+      [`Thời gian xuất: ${exportTime} | ${rangeLabel} | Tính theo: ${adminDateBasis === 'paid' ? 'ngày tiền về' : 'ngày khách đặt'}`],
+      [],
+      ["Ngày", "Thứ", "Số Đơn Đã Nộp", "Số Cuốn", "Doanh Thu (đ)", "Trung bình / Đơn (đ)"]
+    ];
+    daily.forEach(d => {
+      sheet5Rows.push([
+        formatDateKeyVN(d.date),
+        weekdayLabel(d.date),
+        d.orders,
+        d.books,
+        d.amount,
+        d.orders ? Math.round(d.amount / d.orders) : 0
+      ]);
+    });
+    sheet5Rows.push([]);
+    sheet5Rows.push([
+      "TỔNG CỘNG",
+      `${daily.length} ngày`,
+      daily.reduce((s, d) => s + d.orders, 0),
+      daily.reduce((s, d) => s + d.books, 0),
+      daily.reduce((s, d) => s + d.amount, 0),
+      ''
+    ]);
+    const ws5 = XLSX.utils.aoa_to_sheet(sheet5Rows);
+    ws5['!cols'] = [{ wch: 14 }, { wch: 8 }, { wch: 16 }, { wch: 12 }, { wch: 16 }, { wch: 20 }];
+    if (daily.length > 0) ws5['!autofilter'] = { ref: `A4:F${4 + daily.length}` };
+    XLSX.utils.book_append_sheet(wb, ws5, "Quyết Toán Theo Ngày");
+
     const now = new Date();
     const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-    const filename = `Danh_Sach_Giao_Trinh_XBook_${dateStr}.xlsx`;
+    const rangeFilePart = isAdminDateFilterActive() ? `_${adminDateFrom.replaceAll('-', '')}${adminDateTo !== adminDateFrom ? '-' + adminDateTo.replaceAll('-', '') : ''}` : '';
+    const filename = `XBook_${isAdminDateFilterActive() ? 'QuyetToan' : 'DanhSach'}_${dateStr}${rangeFilePart}.xlsx`;
 
     XLSX.writeFile(wb, filename);
 

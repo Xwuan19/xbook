@@ -3,7 +3,18 @@
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này (v1.3.1)
+## Mục tiêu đợt này (v1.3.2)
+1. **Lọc đơn theo ngày đặt hàng / ngày thanh toán** để quyết toán trong từng ngày.
+2. **Bảng quyết toán theo ngày** (đơn · cuốn · doanh thu) + bấm một ngày để lọc; xuất Excel theo khoảng ngày.
+
+## Giai đoạn 8 (v1.3.2) — Lọc theo ngày & Quyết toán từng ngày
+- [x] T31. `public/app.js`: state `adminDatePreset/adminDateFrom/adminDateTo/adminDateBasis` + helper thuần (`localDateKey`, `orderFilterDateKey`, `filterOrdersByAdminDate`, `groupOrdersByDay`, `computeBookSummary`, `adminDateFilterState`).
+- [x] T32. `public/index.html`: khối “Lọc theo ngày” trong tab Đơn hàng (chips khoảng ngày, Từ/Đến, chips loại ngày, dòng tóm tắt, bảng quyết toán từng ngày) + cột **Ngày đặt** trong bảng phát sách.
+- [x] T33. Áp dụng bộ lọc cho toàn bộ tab (Đơn hàng, Theo tên, Theo lớp, Theo khoa, tổng tiền, số cuốn) qua `renderAdminTabsWithFilter()`.
+- [x] T34. Excel: bám khoảng đang lọc, thêm sheet **Quyết Toán Theo Ngày** + cột Ngày Đặt, tên file riêng khi đang lọc.
+- [x] T35. Kiểm thử (11 bài pass) + tài liệu (README mục 13, handover, TASKS) + version 1.3.2.
+
+## Mục tiêu đợt trước (v1.3.1)
 1. **Chọn lớp đồng bộ giao diện web**: bỏ toàn bộ list mặc định của trình duyệt (`<select>`), dùng dropdown tự vẽ cho mọi ô chọn khoa/lớp.
 2. **Bắt buộc Họ tên + Số điện thoại + Lớp học** khi mua sách (chặn ở cả form lẫn API).
 

@@ -1,12 +1,21 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.3.1 (Chọn lớp đồng bộ giao diện + Bắt buộc Tên / SĐT / Lớp)
+## Phiên bản hiện tại: v1.3.2 (Lọc theo ngày & Quyết toán từng ngày)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
 - **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
+
+## 0c. Điểm mới v1.3.2 (lọc theo ngày — quyết toán từng ngày)
+
+- Tab **Đơn hàng** có khối **“Lọc theo ngày”**: chips **Tất cả / Hôm nay / Hôm qua / 7 ngày / 30 ngày** + ô **Từ ngày → Đến ngày**; chips đổi mốc **Ngày đặt hàng ↔ Ngày thanh toán**.
+- Bảng **“Quyết toán theo từng ngày”** (chỉ đơn `PAID`): ngày · thứ · đơn · cuốn · doanh thu + dòng TỔNG CỘNG; **bấm một dòng để lọc đúng ngày đó**, bấm lại để bỏ lọc.
+- Bộ lọc áp dụng cho **tất cả** số liệu tab Đơn hàng/Theo tên/Theo lớp/Theo khoa (qua `renderAdminTabsWithFilter()`), gồm cả “Số lượng từng cuốn cần in” (`computeBookSummary` tính tại client).
+- **Excel**: tiêu đề ghi rõ khoảng ngày, sheet *Quyết Toán Theo Ngày* mới, cột *Ngày Đặt* ở sheet phát sách & toàn bộ đơn hàng, tên file `XBook_QuyetToan_...`.
+- Ngày tính theo **giờ địa phương** (`localDateKey`), lọc hoàn toàn ở client → không đổi API/DB.
+- Lưu ý dữ liệu demo: `data.json` (chỉ dùng khi chạy local không có Neon) có 3 đơn `PAID` mã `90000000x` để xem thử bảng quyết toán — xoá được trực tiếp trong file, không ảnh hưởng Neon production.
 
 ## 0b. Điểm mới v1.3.1 (chọn lớp đồng bộ + bắt buộc thông tin)
 
@@ -85,6 +94,10 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.3.2**:
+  - **Mục tiêu**: Lọc đơn theo **ngày đặt hàng** để dễ quyết toán trong từng ngày.
+  - **Giải pháp**: thêm state + helper lọc ngày ở client (`public/app.js`), khối UI “Lọc theo ngày” + bảng quyết toán từng ngày (`public/index.html`), `renderAdminTabsWithFilter()` vẽ lại toàn bộ tab theo khoảng lọc, Excel bám khoảng lọc + thêm sheet *Quyết Toán Theo Ngày*, cột *Ngày Đặt*.
+  - **Kết quả**: Mỗi ngày chốt được số đơn, số cuốn và tiền thực nhận; xuất Excel riêng cho ngày/khoảng cần đối soát.
 - **v1.3.1**:
   - **Mục tiêu**: (1) Ô chọn lớp đồng bộ giao diện web, bỏ list mặc định của trình duyệt; (2) Bắt buộc Họ tên + Số điện thoại + Lớp học khi mua sách.
   - **Giải pháp**:
