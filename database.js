@@ -11,7 +11,13 @@ const path = require('path');
 
 const DB_FILE = path.join(__dirname, 'data.json');
 
-// Danh mục sách mặc định (Chính xác 3 cuốn sách của lớp)
+// Khoa mặc định cho giáo trình chưa được phân loại
+const DEFAULT_DEPARTMENT = 'Đại cương';
+
+// Danh sách khoa khởi tạo sẵn (có thể thêm/sửa trong Bảng quản trị)
+const INITIAL_DEPARTMENTS = ['Đại cương', 'Khoa CNTT', 'Khoa Kế toán'];
+
+// Danh mục sách mặc định (mỗi cuốn gắn với 1 KHOA và danh sách LỚP cần mua)
 const INITIAL_BOOKS = [
   {
     id: "sach-01",
@@ -20,7 +26,9 @@ const INITIAL_BOOKS = [
     author: "Giáo trình ĐH",
     pages: 220,
     description: "Giáo trình và tuyển tập bài tập Vật lí đại cương phục vụ học phần và thi kết thúc môn.",
-    cover: "https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=600&auto=format&fit=crop&q=80"
+    cover: "https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=600&auto=format&fit=crop&q=80",
+    department: DEFAULT_DEPARTMENT,
+    classes: []
   },
   {
     id: "sach-02",
@@ -29,7 +37,9 @@ const INITIAL_BOOKS = [
     author: "Giáo trình ĐH",
     pages: 180,
     description: "Giáo trình lý thuyết và bài tập giải mẫu Đại số tuyến tính chuẩn chương trình.",
-    cover: "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80"
+    cover: "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80",
+    department: DEFAULT_DEPARTMENT,
+    classes: []
   },
   {
     id: "sach-03",
@@ -38,19 +48,68 @@ const INITIAL_BOOKS = [
     author: "Tài liệu học tập",
     pages: 140,
     description: "Tài liệu học tập & câu hỏi ôn tập môn Logic học đại cương cho lớp.",
-    cover: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=600&auto=format&fit=crop&q=80"
+    cover: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=600&auto=format&fit=crop&q=80",
+    department: DEFAULT_DEPARTMENT,
+    classes: []
+  },
+  {
+    id: "sach-04",
+    title: "Cấu trúc dữ liệu và giải thuật",
+    price: 35000,
+    author: "Giáo trình Khoa CNTT",
+    pages: 250,
+    description: "Giáo trình mẫu của Khoa CNTT: mảng, danh sách liên kết, cây, đồ thị và các giải thuật sắp xếp.",
+    cover: "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80",
+    department: "Khoa CNTT",
+    classes: []
+  },
+  {
+    id: "sach-05",
+    title: "Nguyên lý kế toán",
+    price: 42000,
+    author: "Giáo trình Khoa Kế toán",
+    pages: 230,
+    description: "Giáo trình mẫu của Khoa Kế toán: các nguyên lý kế toán cơ bản, định khoản và lập báo cáo.",
+    cover: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=600&auto=format&fit=crop&q=80",
+    department: "Khoa Kế toán",
+    classes: []
   }
 ];
 
+function parseJsonArray(raw, fallback = []) {
+  if (Array.isArray(raw)) return raw;
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
 function mapOrderFromDb(row) {
   if (!row) return null;
+  const quantity = Number(row.quantity) || 1;
+  const unitPrice = Number(row.unit_price) || 0;
+  let items = parseJsonArray(row.items_json, []);
+  if (items.length === 0) {
+    // Đơn hàng cũ (chưa có items): tự dựng lại từ trường legacy
+    items = [{
+      bookId: row.book_id || '',
+      bookTitle: row.book_title || '',
+      department: row.department || '',
+      quantity,
+      unitPrice
+    }];
+  }
   return {
     orderCode: Number(row.order_code),
     bookId: row.book_id,
     bookTitle: row.book_title,
-    quantity: Number(row.quantity) || 1,
-    unitPrice: Number(row.unit_price) || 0,
+    quantity,
+    unitPrice,
     amount: Number(row.amount) || 0,
+    items,
     customerName: row.customer_name || '',
     customerClass: row.customer_class || '',
     customerPhone: row.customer_phone || '',
@@ -76,16 +135,52 @@ function mapBookFromDb(row) {
     author: row.author || '',
     pages: Number(row.pages) || 0,
     description: row.description || '',
-    cover: row.cover || ''
+    cover: row.cover || '',
+    department: row.department || DEFAULT_DEPARTMENT,
+    classes: parseJsonArray(row.classes, [])
   };
 }
 
 function mapSettingsFromDb(row) {
-  if (!row) return { isRegistrationOpen: true, closeMessage: "" };
+  if (!row) return { isRegistrationOpen: true, closeMessage: "", departments: [...INITIAL_DEPARTMENTS], classes: [] };
   return {
     isRegistrationOpen: row.is_registration_open !== false,
-    closeMessage: row.close_message || ""
+    closeMessage: row.close_message || "",
+    departments: parseJsonArray(row.departments, [...INITIAL_DEPARTMENTS]),
+    classes: parseJsonArray(row.classes, [])
   };
+}
+
+/**
+ * Chuẩn hóa đơn hàng cũ: đảm bảo luôn có mảng items[]
+ * (1 người có thể mua nhiều cuốn khác nhau trong 1 đơn)
+ */
+function normalizeOrder(order) {
+  if (!order) return order;
+  if (!Array.isArray(order.items) || order.items.length === 0) {
+    order.items = [{
+      bookId: order.bookId || '',
+      bookTitle: order.bookTitle || '',
+      department: order.department || '',
+      quantity: Number(order.quantity) || 1,
+      unitPrice: Number(order.unitPrice) || 0
+    }];
+  }
+  order.items = order.items.map(it => ({
+    bookId: it.bookId || '',
+    bookTitle: it.bookTitle || '',
+    department: it.department || '',
+    quantity: Number(it.quantity) || 1,
+    unitPrice: Number(it.unitPrice) || 0
+  }));
+  return order;
+}
+
+function normalizeBook(book) {
+  if (!book) return book;
+  if (!book.department) book.department = DEFAULT_DEPARTMENT;
+  if (!Array.isArray(book.classes)) book.classes = parseJsonArray(book.classes, []);
+  return book;
 }
 
 class Database {
@@ -120,7 +215,9 @@ class Database {
       await this.sql.query(`CREATE TABLE IF NOT EXISTS settings (
         id VARCHAR(50) PRIMARY KEY,
         is_registration_open BOOLEAN DEFAULT true,
-        close_message TEXT
+        close_message TEXT,
+        departments TEXT DEFAULT '[]',
+        classes TEXT DEFAULT '[]'
       )`);
 
       await this.sql.query(`CREATE TABLE IF NOT EXISTS books (
@@ -130,7 +227,9 @@ class Database {
         author TEXT,
         pages INT,
         description TEXT,
-        cover TEXT
+        cover TEXT,
+        department TEXT DEFAULT '',
+        classes TEXT DEFAULT '[]'
       )`);
 
       await this.sql.query(`CREATE TABLE IF NOT EXISTS orders (
@@ -140,6 +239,7 @@ class Database {
         quantity INT DEFAULT 1,
         unit_price NUMERIC,
         amount NUMERIC,
+        items_json TEXT,
         customer_name TEXT,
         customer_class TEXT,
         customer_phone TEXT,
@@ -154,6 +254,22 @@ class Database {
         bank_reference TEXT,
         account_number TEXT
       )`);
+
+      // Di chuyển schema cho database đã tồn tại từ phiên bản trước (thêm cột mới nếu thiếu)
+      const migrations = [
+        `ALTER TABLE settings ADD COLUMN IF NOT EXISTS departments TEXT DEFAULT '[]'`,
+        `ALTER TABLE settings ADD COLUMN IF NOT EXISTS classes TEXT DEFAULT '[]'`,
+        `ALTER TABLE books ADD COLUMN IF NOT EXISTS department TEXT DEFAULT ''`,
+        `ALTER TABLE books ADD COLUMN IF NOT EXISTS classes TEXT DEFAULT '[]'`,
+        `ALTER TABLE orders ADD COLUMN IF NOT EXISTS items_json TEXT`
+      ];
+      for (const migration of migrations) {
+        try {
+          await this.sql.query(migration);
+        } catch (migErr) {
+          console.warn(" [Database] Bỏ qua migration (có thể đã tồn tại):", migErr.message);
+        }
+      }
 
       await this.sql.query(`CREATE TABLE IF NOT EXISTS transactions (
         id VARCHAR(100) PRIMARY KEY,
@@ -180,25 +296,20 @@ class Database {
       )`);
 
       for (const b of INITIAL_BOOKS) {
+        // Chỉ seed sách MỚI (ON CONFLICT DO NOTHING) để không ghi đè giáo trình đã chỉnh sửa qua trang quản trị
         await this.sql.query(
-          `INSERT INTO books (id, title, price, author, pages, description, cover)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (id) DO UPDATE SET
-             title = EXCLUDED.title,
-             price = EXCLUDED.price,
-             author = EXCLUDED.author,
-             pages = EXCLUDED.pages,
-             description = EXCLUDED.description,
-             cover = EXCLUDED.cover`,
-          [b.id, b.title, b.price, b.author, b.pages, b.description, b.cover]
+          `INSERT INTO books (id, title, price, author, pages, description, cover, department, classes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (id) DO NOTHING`,
+          [b.id, b.title, b.price, b.author, b.pages, b.description, b.cover, b.department || DEFAULT_DEPARTMENT, JSON.stringify(b.classes || [])]
         );
       }
 
       const settingsCount = await this.sql.query('SELECT COUNT(*) as count FROM settings WHERE id = $1', ['default']);
       if (Number(settingsCount[0]?.count || 0) === 0) {
         await this.sql.query(
-          'INSERT INTO settings (id, is_registration_open, close_message) VALUES ($1, $2, $3)',
-          ['default', true, 'Đã chốt danh sách mua sách đợt này để báo in. Tạm ngưng nhận đơn mới!']
+          'INSERT INTO settings (id, is_registration_open, close_message, departments, classes) VALUES ($1, $2, $3, $4, $5)',
+          ['default', true, 'Đã chốt danh sách mua sách đợt này để báo in. Tạm ngưng nhận đơn mới!', JSON.stringify(INITIAL_DEPARTMENTS), '[]']
         );
       }
     } catch (err) {
@@ -211,7 +322,9 @@ class Database {
       const defaultData = {
         settings: {
           isRegistrationOpen: true,
-          closeMessage: "Hiện đã chốt danh sách mua sách đợt này để gửi in. Tạm ngưng nhận đơn mới!"
+          closeMessage: "Hiện đã chốt danh sách mua sách đợt này để gửi in. Tạm ngưng nhận đơn mới!",
+          departments: [...INITIAL_DEPARTMENTS],
+          classes: []
         },
         books: INITIAL_BOOKS,
         orders: [],
@@ -223,29 +336,46 @@ class Database {
   }
 
   readFile() {
+    let data;
     try {
       const content = fs.readFileSync(DB_FILE, 'utf-8');
-      const data = JSON.parse(content);
-      if (!data.books && data.courses) {
-        data.books = data.courses;
-      }
-      if (!data.settings) {
-        data.settings = {
-          isRegistrationOpen: true,
-          closeMessage: "Đã chốt danh sách mua sách đợt này. Tạm ngưng nhận đơn mới!"
-        };
-      }
-      return data;
+      data = JSON.parse(content);
     } catch (e) {
       console.error("Lỗi khi đọc Database:", e);
-      return {
-        settings: { isRegistrationOpen: true, closeMessage: "" },
-        books: INITIAL_BOOKS,
-        orders: [],
-        transactions: [],
-        webhook_logs: []
+      data = {};
+    }
+
+    // Tương thích dữ liệu phiên bản cũ (courses → books)
+    if (!data.books && data.courses) {
+      data.books = data.courses;
+    }
+    if (!data.settings) {
+      data.settings = {
+        isRegistrationOpen: true,
+        closeMessage: "Đã chốt danh sách mua sách đợt này. Tạm ngưng nhận đơn mới!"
       };
     }
+
+    // Chuẩn hóa settings: luôn có danh sách khoa & lớp
+    data.settings = {
+      isRegistrationOpen: data.settings.isRegistrationOpen !== false,
+      closeMessage: data.settings.closeMessage || "",
+      departments: Array.isArray(data.settings.departments) && data.settings.departments.length > 0
+        ? data.settings.departments
+        : [...INITIAL_DEPARTMENTS],
+      classes: Array.isArray(data.settings.classes) ? data.settings.classes : []
+    };
+
+    // Chuẩn hóa sách: luôn có khoa & lớp
+    data.books = (Array.isArray(data.books) ? data.books : []).map(normalizeBook);
+
+    // Chuẩn hóa đơn hàng: luôn có items[] (1 người mua nhiều cuốn)
+    data.orders = (Array.isArray(data.orders) ? data.orders : []).map(normalizeOrder);
+
+    if (!Array.isArray(data.transactions)) data.transactions = [];
+    if (!Array.isArray(data.webhook_logs)) data.webhook_logs = [];
+
+    return data;
   }
 
   writeFile(data) {
@@ -258,7 +388,7 @@ class Database {
     }
   }
 
-  // --- SETTINGS (CHỐT SỔ ĐĂNG KÝ) ---
+  // --- SETTINGS (CHỐT SỔ ĐĂNG KÝ + DANH SÁCH KHOA / LỚP) ---
   async getSettings() {
     if (this.isNeon) {
       try {
@@ -266,23 +396,30 @@ class Database {
         if (rows && rows.length > 0) {
           return mapSettingsFromDb(rows[0]);
         }
-        return { isRegistrationOpen: true, closeMessage: "" };
+        return { isRegistrationOpen: true, closeMessage: "", departments: [...INITIAL_DEPARTMENTS], classes: [] };
       } catch (err) {
         console.error("Lỗi Neon getSettings:", err.message);
       }
     }
     const db = this.readFile();
-    return db.settings || { isRegistrationOpen: true, closeMessage: "" };
+    return db.settings || { isRegistrationOpen: true, closeMessage: "", departments: [...INITIAL_DEPARTMENTS], classes: [] };
   }
 
   async updateSettings(newSettings) {
     if (this.isNeon) {
       try {
         const current = await this.getSettings();
-        const isRegistrationOpen = newSettings.isRegistrationOpen !== undefined ? Boolean(newSettings.isRegistrationOpen) : current.isRegistrationOpen;
-        const closeMessage = newSettings.closeMessage !== undefined ? String(newSettings.closeMessage) : current.closeMessage;
-        await this.sql`UPDATE settings SET is_registration_open = ${isRegistrationOpen}, close_message = ${closeMessage} WHERE id = 'default'`;
-        return { isRegistrationOpen, closeMessage };
+        const merged = {
+          isRegistrationOpen: newSettings.isRegistrationOpen !== undefined ? Boolean(newSettings.isRegistrationOpen) : current.isRegistrationOpen,
+          closeMessage: newSettings.closeMessage !== undefined ? String(newSettings.closeMessage) : current.closeMessage,
+          departments: Array.isArray(newSettings.departments) ? newSettings.departments : current.departments,
+          classes: Array.isArray(newSettings.classes) ? newSettings.classes : current.classes
+        };
+        await this.sql.query(
+          `UPDATE settings SET is_registration_open = $1, close_message = $2, departments = $3, classes = $4 WHERE id = 'default'`,
+          [merged.isRegistrationOpen, merged.closeMessage, JSON.stringify(merged.departments), JSON.stringify(merged.classes)]
+        );
+        return merged;
       } catch (err) {
         console.error("Lỗi Neon updateSettings:", err.message);
       }
@@ -325,14 +462,37 @@ class Database {
     return db.books.find(b => b.id === bookId);
   }
 
-  // --- ĐƠN HÀNG ---
+  // --- ĐƠN HÀNG (HỖ TRỢ 1 NGƯỜI MUA NHIỀU CUỐN KHÁC NHAU TRONG 1 ĐƠN) ---
   async createOrder(orderData) {
     const orderCode = Number(orderData.orderCode);
-    const bookId = orderData.bookId || '';
-    const bookTitle = orderData.bookTitle || '';
-    const quantity = Number(orderData.quantity) || 1;
-    const unitPrice = Number(orderData.unitPrice) || 0;
-    const amount = Number(orderData.amount) || 0;
+
+    // items[]: danh sách nhiều cuốn khác nhau. Đơn cũ 1 cuốn vẫn tương thích.
+    let items = Array.isArray(orderData.items) ? orderData.items : [];
+    if (items.length === 0) {
+      items = [{
+        bookId: orderData.bookId || '',
+        bookTitle: orderData.bookTitle || '',
+        department: orderData.department || '',
+        quantity: Number(orderData.quantity) || 1,
+        unitPrice: Number(orderData.unitPrice) || 0
+      }];
+    }
+    items = items.map(it => ({
+      bookId: it.bookId || '',
+      bookTitle: it.bookTitle || '',
+      department: it.department || '',
+      quantity: Number(it.quantity) || 1,
+      unitPrice: Number(it.unitPrice) || 0
+    }));
+
+    const totalQuantity = items.reduce((sum, it) => sum + it.quantity, 0);
+    const itemsAmount = items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
+
+    const bookId = items[0].bookId;
+    const bookTitle = orderData.bookTitle || items.map(it => it.bookTitle).join(', ');
+    const quantity = Number(orderData.quantity) || totalQuantity;
+    const unitPrice = Number(orderData.unitPrice) || items[0].unitPrice;
+    const amount = orderData.amount !== undefined ? Number(orderData.amount) : itemsAmount;
     const customerName = orderData.customerName || 'Bạn cùng lớp';
     const customerClass = orderData.customerClass || '';
     const customerPhone = orderData.customerPhone || '';
@@ -347,11 +507,11 @@ class Database {
       try {
         await this.sql.query(
           `INSERT INTO orders (
-            order_code, book_id, book_title, quantity, unit_price, amount,
+            order_code, book_id, book_title, quantity, unit_price, amount, items_json,
             customer_name, customer_class, customer_phone, note, status,
             is_delivered, checkout_url, qr_code, created_at, updated_at, paid_at,
             bank_reference, account_number
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
           ON CONFLICT (order_code) DO UPDATE SET
             status = EXCLUDED.status,
             updated_at = EXCLUDED.updated_at,
@@ -359,7 +519,7 @@ class Database {
             bank_reference = COALESCE(EXCLUDED.bank_reference, orders.bank_reference),
             account_number = COALESCE(EXCLUDED.account_number, orders.account_number)`,
           [
-            orderCode, bookId, bookTitle, quantity, unitPrice, amount,
+            orderCode, bookId, bookTitle, quantity, unitPrice, amount, JSON.stringify(items),
             customerName, customerClass, customerPhone, note, status,
             isDelivered, checkoutUrl, qrCode, now, now, orderData.paidAt || null,
             orderData.bankReference || orderData.reference || null,
@@ -374,6 +534,7 @@ class Database {
           quantity,
           unitPrice,
           amount,
+          items,
           customerName,
           customerClass,
           customerPhone,
@@ -401,6 +562,7 @@ class Database {
       quantity,
       unitPrice,
       amount,
+      items,
       customerName,
       customerClass,
       customerPhone,
@@ -554,36 +716,50 @@ class Database {
     }
 
     const paidOrders = orders.filter(o => o.status === 'PAID');
-    
-    // Thống kê tổng số lượng từng loại sách đã thanh toán
+
+    // Thống kê tổng số lượng TỪNG CUỐN đã thanh toán (đếm theo items để hỗ trợ đơn đa cuốn)
     const bookSummary = {};
     books.forEach(b => {
       bookSummary[b.id] = {
         id: b.id,
         title: b.title,
         price: b.price,
+        department: b.department || DEFAULT_DEPARTMENT,
+        classes: Array.isArray(b.classes) ? b.classes : [],
         totalQuantity: 0,
         totalRevenue: 0
       };
     });
 
     paidOrders.forEach(o => {
-      if (bookSummary[o.bookId]) {
-        bookSummary[o.bookId].totalQuantity += (o.quantity || 1);
-        bookSummary[o.bookId].totalRevenue += o.amount;
-      } else {
-        bookSummary[o.bookId] = {
-          id: o.bookId,
-          title: o.bookTitle,
-          price: o.amount,
-          totalQuantity: (o.quantity || 1),
-          totalRevenue: o.amount
-        };
-      }
+      const items = Array.isArray(o.items) && o.items.length > 0
+        ? o.items
+        : [{ bookId: o.bookId, bookTitle: o.bookTitle, quantity: o.quantity || 1, unitPrice: o.unitPrice || 0 }];
+
+      items.forEach(it => {
+        const key = it.bookId && bookSummary[it.bookId] ? it.bookId : (it.bookId || it.bookTitle || 'khac');
+        if (!bookSummary[key]) {
+          bookSummary[key] = {
+            id: it.bookId || key,
+            title: it.bookTitle || 'Sách khác',
+            price: it.unitPrice || 0,
+            department: it.department || DEFAULT_DEPARTMENT,
+            classes: [],
+            totalQuantity: 0,
+            totalRevenue: 0
+          };
+        }
+        const qty = Number(it.quantity) || 1;
+        bookSummary[key].totalQuantity += qty;
+        bookSummary[key].totalRevenue += qty * (Number(it.unitPrice) || 0);
+      });
     });
 
     const totalRevenue = paidOrders.reduce((sum, o) => sum + o.amount, 0);
-    const totalBooks = paidOrders.reduce((sum, o) => sum + (o.quantity || 1), 0);
+    const totalBooks = paidOrders.reduce((sum, o) => {
+      const items = Array.isArray(o.items) && o.items.length > 0 ? o.items : [{ quantity: o.quantity || 1 }];
+      return sum + items.reduce((s, it) => s + (Number(it.quantity) || 1), 0);
+    }, 0);
 
     return {
       settings,
@@ -594,6 +770,112 @@ class Database {
       bookSummary: Object.values(bookSummary),
       allOrders: orders
     };
+  }
+
+  // --- QUẢN TRỊ GIÁO TRÌNH (THÊM / SỬA / XÓA - PHÂN LOẠI KHOA & LỚP) ---
+  async createBook(bookData) {
+    const id = bookData.id || ('sach-' + Date.now().toString(36));
+    const book = {
+      id,
+      title: bookData.title || 'Giáo trình mới',
+      price: Number(bookData.price) || 0,
+      author: bookData.author || 'Giáo trình ĐH',
+      pages: Number(bookData.pages) || 0,
+      description: bookData.description || '',
+      cover: bookData.cover || '',
+      department: bookData.department || DEFAULT_DEPARTMENT,
+      classes: Array.isArray(bookData.classes) ? bookData.classes : []
+    };
+
+    if (this.isNeon) {
+      try {
+        await this.sql.query(
+          `INSERT INTO books (id, title, price, author, pages, description, cover, department, classes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [book.id, book.title, book.price, book.author, book.pages, book.description, book.cover, book.department, JSON.stringify(book.classes)]
+        );
+        return book;
+      } catch (err) {
+        console.error("Lỗi Neon createBook:", err.message);
+        throw new Error("Không thể thêm giáo trình: " + err.message);
+      }
+    }
+
+    const db = this.readFile();
+    if (db.books.some(b => b.id === id)) {
+      throw new Error("Mã giáo trình đã tồn tại!");
+    }
+    db.books.push(book);
+    this.writeFile(db);
+    return book;
+  }
+
+  async updateBook(bookId, patch) {
+    if (this.isNeon) {
+      try {
+        const rows = await this.sql.query(
+          `UPDATE books SET
+            title = COALESCE($2, title),
+            price = COALESCE($3, price),
+            author = COALESCE($4, author),
+            pages = COALESCE($5, pages),
+            description = COALESCE($6, description),
+            cover = COALESCE($7, cover),
+            department = COALESCE($8, department),
+            classes = COALESCE($9, classes)
+          WHERE id = $1
+          RETURNING *`,
+          [
+            bookId,
+            patch.title !== undefined ? String(patch.title) : null,
+            patch.price !== undefined ? Number(patch.price) : null,
+            patch.author !== undefined ? String(patch.author) : null,
+            patch.pages !== undefined ? Number(patch.pages) : null,
+            patch.description !== undefined ? String(patch.description) : null,
+            patch.cover !== undefined ? String(patch.cover) : null,
+            patch.department !== undefined ? String(patch.department) : null,
+            Array.isArray(patch.classes) ? JSON.stringify(patch.classes) : null
+          ]
+        );
+        if (rows && rows.length > 0) return mapBookFromDb(rows[0]);
+        return null;
+      } catch (err) {
+        console.error("Lỗi Neon updateBook:", err.message);
+        throw new Error("Không thể cập nhật giáo trình: " + err.message);
+      }
+    }
+
+    const db = this.readFile();
+    const index = db.books.findIndex(b => b.id === bookId);
+    if (index === -1) return null;
+    const current = db.books[index];
+    const updated = normalizeBook({
+      ...current,
+      ...patch,
+      price: patch.price !== undefined ? Number(patch.price) : current.price,
+      pages: patch.pages !== undefined ? Number(patch.pages) : current.pages,
+      classes: Array.isArray(patch.classes) ? patch.classes : current.classes
+    });
+    db.books[index] = updated;
+    this.writeFile(db);
+    return updated;
+  }
+
+  async deleteBook(bookId) {
+    if (this.isNeon) {
+      try {
+        await this.sql.query('DELETE FROM books WHERE id = $1', [bookId]);
+        return true;
+      } catch (err) {
+        console.error("Lỗi Neon deleteBook:", err.message);
+        throw new Error("Không thể xóa giáo trình: " + err.message);
+      }
+    }
+    const db = this.readFile();
+    const before = db.books.length;
+    db.books = db.books.filter(b => b.id !== bookId);
+    this.writeFile(db);
+    return db.books.length < before;
   }
 
   // --- SAO KÊ & LOGS ---

@@ -1,7 +1,13 @@
 {
   "settings": {
     "isRegistrationOpen": true,
-    "closeMessage": "Đã chốt danh sách đăng ký mua sách đợt này để báo in. Tạm ngưng nhận đơn mới!"
+    "closeMessage": "Đã chốt danh sách đăng ký mua sách đợt này để báo in. Tạm ngưng nhận đơn mới!",
+    "departments": [
+      "Đại cương",
+      "Khoa CNTT",
+      "Khoa Kế toán"
+    ],
+    "classes": []
   },
   "books": [
     {
@@ -11,7 +17,9 @@
       "author": "Giáo trình ĐH",
       "pages": 220,
       "description": "Giáo trình và tuyển tập bài tập Vật lí đại cương phục vụ học phần và thi kết thúc môn.",
-      "cover": "https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=600&auto=format&fit=crop&q=80"
+      "cover": "https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=600&auto=format&fit=crop&q=80",
+      "department": "Đại cương",
+      "classes": []
     },
     {
       "id": "sach-02",
@@ -20,7 +28,9 @@
       "author": "Giáo trình ĐH",
       "pages": 180,
       "description": "Giáo trình lý thuyết và bài tập giải mẫu Đại số tuyến tính chuẩn chương trình.",
-      "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80"
+      "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80",
+      "department": "Đại cương",
+      "classes": []
     },
     {
       "id": "sach-03",
@@ -29,7 +39,31 @@
       "author": "Tài liệu học tập",
       "pages": 140,
       "description": "Tài liệu học tập & câu hỏi ôn tập môn Logic học đại cương cho lớp.",
-      "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=600&auto=format&fit=crop&q=80"
+      "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=600&auto=format&fit=crop&q=80",
+      "department": "Đại cương",
+      "classes": []
+    },
+    {
+      "id": "sach-04",
+      "title": "Cấu trúc dữ liệu và giải thuật",
+      "price": 35000,
+      "author": "Giáo trình Khoa CNTT",
+      "pages": 250,
+      "description": "Giáo trình mẫu của Khoa CNTT: mảng, danh sách liên kết, cây, đồ thị và các giải thuật sắp xếp.",
+      "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&auto=format&fit=crop&q=80",
+      "department": "Khoa CNTT",
+      "classes": []
+    },
+    {
+      "id": "sach-05",
+      "title": "Nguyên lý kế toán",
+      "price": 42000,
+      "author": "Giáo trình Khoa Kế toán",
+      "pages": 230,
+      "description": "Giáo trình mẫu của Khoa Kế toán: các nguyên lý kế toán cơ bản, định khoản và lập báo cáo.",
+      "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=600&auto=format&fit=crop&q=80",
+      "department": "Khoa Kế toán",
+      "classes": []
     }
   ],
   "orders": [
@@ -40,6 +74,15 @@
       "quantity": 1,
       "unitPrice": 45000,
       "amount": 45000,
+      "items": [
+        {
+          "bookId": "sach-01",
+          "bookTitle": "Sách Giáo trình Lý thuyết Môn học (Bản in màu)",
+          "department": "",
+          "quantity": 1,
+          "unitPrice": 45000
+        }
+      ],
       "customerName": "Nguyen Van Nam",
       "customerClass": "CNTT K15",
       "customerPhone": "",

@@ -59,7 +59,7 @@
         .then(res => res.json())
         .then(res => {
           if (res.success && res.data) {
-            document.getElementById('courseTitleDisplay').innerText = res.data.courseTitle;
+            document.getElementById('courseTitleDisplay').innerText = res.data.bookTitle || res.data.courseTitle || '';
             if (res.data.downloadUrl) {
               document.getElementById('downloadButton').href = res.data.downloadUrl;
             }

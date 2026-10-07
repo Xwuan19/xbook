@@ -131,7 +131,7 @@ app.get('/api/courses', async (req, res) => {
  */
 app.post('/api/orders/create-payment-link', async (req, res) => {
   try {
-    const { bookId, courseId, quantity, customerName, customerClass, customerPhone, note } = req.body;
+    const { bookId, courseId, quantity, items: rawItems, customerName, customerClass, customerPhone, note } = req.body;
     
     // Ràng buộc bắt buộc họ và tên đầy đủ (tối thiểu 2 từ)
     const nameWords = (customerName || '').trim().split(/\s+/).filter(w => w.length > 0);
@@ -151,14 +151,36 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
       });
     }
 
-    const selectedBookId = bookId || courseId;
-    const book = await db.getBookById(selectedBookId);
-    if (!book) {
-      return res.status(400).json({ success: false, message: "Không tìm thấy cuốn sách này!" });
+    // Hỗ trợ 2 định dạng:
+    //  - MỚI: items = [{ bookId, quantity }, ...] → 1 người mua nhiều cuốn khác nhau trong 1 đơn
+    //  - CŨ:  bookId + quantity (1 cuốn)
+    let requestedItems = Array.isArray(rawItems) ? rawItems : [];
+    if (requestedItems.length === 0) {
+      requestedItems = [{ bookId: bookId || courseId, quantity }];
     }
 
-    const qty = Math.max(1, parseInt(quantity) || 1);
-    const totalAmount = book.price * qty;
+    const items = [];
+    for (const raw of requestedItems) {
+      const book = await db.getBookById(raw.bookId);
+      if (!book) {
+        return res.status(400).json({ success: false, message: `Không tìm thấy giáo trình (mã: ${raw.bookId})!` });
+      }
+      const qty = Math.max(1, Math.min(50, parseInt(raw.quantity) || 1));
+      items.push({
+        bookId: book.id,
+        bookTitle: book.title,
+        department: book.department || '',
+        quantity: qty,
+        unitPrice: book.price
+      });
+    }
+    if (items.length === 0) {
+      return res.status(400).json({ success: false, message: "Giỏ hàng đang trống. Vui lòng chọn giáo trình!" });
+    }
+
+    const totalQuantity = items.reduce((sum, it) => sum + it.quantity, 0);
+    const totalAmount = items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
+    const bookTitleSummary = items.map(it => it.bookTitle).join(', ');
 
     // Sinh mã đơn hàng duy nhất cho PayOS (Số nguyên)
     const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(100 + Math.random() * 900));
@@ -168,13 +190,11 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
       orderCode: orderCode,
       amount: totalAmount,
       description: transferDescription,
-      items: [
-        {
-          name: `${book.title.substring(0, 35)} (x${qty})`,
-          quantity: qty,
-          price: book.price
-        }
-      ],
+      items: items.map(it => ({
+        name: `${it.bookTitle.substring(0, 40)} (x${it.quantity})`.substring(0, 60),
+        quantity: it.quantity,
+        price: it.unitPrice
+      })),
       returnUrl: `${BASE_URL}/success.html?orderCode=${orderCode}`,
       cancelUrl: `${BASE_URL}/cancel.html?orderCode=${orderCode}`
     };
@@ -184,10 +204,9 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
     // Lưu vào database
     const order = await db.createOrder({
       orderCode: orderCode,
-      bookId: book.id,
-      bookTitle: book.title,
-      quantity: qty,
-      unitPrice: book.price,
+      items: items,
+      bookTitle: bookTitleSummary,
+      quantity: totalQuantity,
       amount: totalAmount,
       customerName: customerName || 'Bạn cùng lớp',
       customerClass: customerClass || '',
@@ -197,15 +216,16 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
       qrCode: paymentResponse.qrCode
     });
 
-    console.log(`\n Đã tạo mã QR PayOS cho: ${customerName} (${customerClass}) - ${qty}x "${book.title}" - ${totalAmount.toLocaleString('vi-VN')} đ (Mã: ${transferDescription})`);
+    console.log(`\n Đã tạo mã QR PayOS cho: ${customerName} (${customerClass || 'chưa khai báo lớp'}) - ${totalQuantity} cuốn [${bookTitleSummary}] - ${totalAmount.toLocaleString('vi-VN')} đ (Mã: ${transferDescription})`);
 
     return res.json({
       success: true,
       data: {
         orderCode: order.orderCode,
         amount: order.amount,
-        quantity: qty,
-        bookTitle: book.title,
+        quantity: totalQuantity,
+        bookTitle: bookTitleSummary,
+        items: order.items,
         customerName: order.customerName,
         customerClass: order.customerClass,
         checkoutUrl: paymentResponse.checkoutUrl,
@@ -456,6 +476,90 @@ app.post('/api/admin/toggle-delivered', requireAdminAuth, async (req, res) => {
     const order = await db.toggleDeliveredStatus(orderCode);
     if (!order) return res.status(404).json({ success: false, message: "Không tìm thấy đơn" });
     res.json({ success: true, order });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * 9. QUẢN TRỊ GIÁO TRÌNH: THÊM / SỬA / XÓA (PHÂN LOẠI KHOA & LỚP)
+ */
+function normalizeBookPayload(body) {
+  const classes = Array.isArray(body.classes)
+    ? body.classes
+    : String(body.classes || '')
+        .split(/[,;\n]+/)
+        .map(s => s.trim())
+        .filter(Boolean);
+  return {
+    title: (body.title || '').trim(),
+    price: Number(body.price) || 0,
+    author: (body.author || '').trim(),
+    pages: Number(body.pages) || 0,
+    description: (body.description || '').trim(),
+    cover: (body.cover || '').trim(),
+    department: (body.department || '').trim() || 'Đại cương',
+    classes
+  };
+}
+
+app.post('/api/admin/books', requireAdminAuth, async (req, res) => {
+  try {
+    const payload = normalizeBookPayload(req.body || {});
+    if (!payload.title) {
+      return res.status(400).json({ success: false, message: "Vui lòng nhập tên giáo trình!" });
+    }
+    if (payload.price <= 0) {
+      return res.status(400).json({ success: false, message: "Vui lòng nhập giá giáo trình hợp lệ!" });
+    }
+    const book = await db.createBook(payload);
+    console.log(` [ADMIN] Đã thêm giáo trình: "${book.title}" (${book.department})`);
+    res.json({ success: true, book });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.put('/api/admin/books/:id', requireAdminAuth, async (req, res) => {
+  try {
+    const payload = normalizeBookPayload(req.body || {});
+    const book = await db.updateBook(req.params.id, payload);
+    if (!book) return res.status(404).json({ success: false, message: "Không tìm thấy giáo trình!" });
+    console.log(` [ADMIN] Đã cập nhật giáo trình: "${book.title}" (${book.department})`);
+    res.json({ success: true, book });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.delete('/api/admin/books/:id', requireAdminAuth, async (req, res) => {
+  try {
+    const deleted = await db.deleteBook(req.params.id);
+    if (!deleted) return res.status(404).json({ success: false, message: "Không tìm thấy giáo trình!" });
+    console.log(` [ADMIN] Đã xóa giáo trình mã: ${req.params.id}`);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * 10. QUẢN TRỊ: CẬP NHẬT SETTINGS (DANH SÁCH KHOA, DANH SÁCH LỚP, THÔNG BÁO CHỐT SỔ)
+ */
+app.put('/api/admin/settings', requireAdminAuth, async (req, res) => {
+  try {
+    const patch = {};
+    if (Array.isArray(req.body.departments)) {
+      patch.departments = req.body.departments.map(d => String(d).trim()).filter(Boolean);
+    }
+    if (Array.isArray(req.body.classes)) {
+      patch.classes = req.body.classes.map(c => String(c).trim()).filter(Boolean);
+    }
+    if (req.body.closeMessage !== undefined) {
+      patch.closeMessage = String(req.body.closeMessage);
+    }
+    const updated = await db.updateSettings(patch);
+    res.json({ success: true, settings: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
