@@ -67,33 +67,9 @@ function renderStorefrontCatalog() {
 }
 
 // ============================ PWA (CÀI LÊN MÀN HÌNH CHÍNH) ============================
-const IOS_INSTALL_DISMISS_KEY = 'xbook_ios_install_dismissed';
-
-/** iPhone/iPad: Safari không có nút "Cài đặt" → hướng dẫn "Thêm vào Màn hình chính" */
-function maybeShowIosInstallHint() {
-  const ua = window.navigator.userAgent || '';
-  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const isSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(ua);
-  const standalone = window.navigator.standalone === true ||
-    (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches);
-  const hint = document.getElementById('iosInstallHint');
-  if (!hint || !isIOS || standalone || !isSafari) return;
-  try {
-    if (localStorage.getItem(IOS_INSTALL_DISMISS_KEY) === '1') return;
-  } catch (e) { /* chế độ riêng tư: vẫn hiện gợi ý */ }
-  hint.classList.remove('hidden');
-  lucide.createIcons();
-}
-
-function dismissIosInstallHint() {
-  const hint = document.getElementById('iosInstallHint');
-  if (hint) hint.classList.add('hidden');
-  try { localStorage.setItem(IOS_INSTALL_DISMISS_KEY, '1'); } catch (e) { /* bỏ qua */ }
-}
-
+// ============================ PWA (CÀI LÊN MÀN HÌNH CHÍNH) ============================
 function initPwa() {
-  maybeShowIosInstallHint();
-  // Android/Chrome: hiện nút cài khi trình duyệt cho phép
+  // Android/Chrome: lưu sự kiện cài đặt nếu trình duyệt phát ra
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
     window.xbookInstallPrompt = event;

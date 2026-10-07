@@ -117,7 +117,7 @@ test('home page filters the catalog by curriculum and keeps no admin UI at all',
   assert.ok(window.document.querySelector('link[rel="manifest"]').getAttribute('href').includes('manifest.webmanifest'));
   assert.equal(window.document.querySelector('meta[name="apple-mobile-web-app-capable"]').getAttribute('content'), 'yes');
   assert.ok(window.document.querySelector('link[rel="apple-touch-icon"]'));
-  assert.ok(window.document.getElementById('iosInstallHint'));
+  assert.equal(window.document.getElementById('iosInstallHint'), null);
   dom.window.close();
 });
 
