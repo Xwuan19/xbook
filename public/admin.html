@@ -84,6 +84,15 @@
       body * { visibility: hidden; }
       #printArea, #printArea * { visibility: visible; }
       #printArea { position: absolute; left: 0; top: 0; width: 100%; max-height: none !important; }
+      #printArea[data-print-combine="1"] #adminTabDelivery,
+      #printArea[data-print-combine="1"] #adminTabPrint,
+      body[data-print-combine="1"] #adminTabDelivery,
+      body[data-print-combine="1"] #adminTabPrint,
+      .print-combine #adminTabDelivery,
+      .print-combine #adminTabPrint {
+        display: block !important;
+        visibility: visible !important;
+      }
     }
   </style>
 </head>
@@ -255,22 +264,27 @@
 
         <!-- HÀNG 3: THANH TAB PHÂN LOẠI -->
         <div class="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pb-3 print:hidden" id="adminTabBar">
-          <button onclick="switchAdminTab('orders')" data-tab="orders" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-emerald-600 text-white shadow-sm">
-            <i data-lucide="package-check" class="w-3.5 h-3.5"></i><span>Đơn hàng</span>
+          <button data-tab="delivery" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-emerald-600 text-white shadow-sm">
+            <i data-lucide="truck" class="w-3.5 h-3.5"></i><span>Phát sách</span>
+            <span id="adminTabDeliveryBadge" class="admin-tab-badge ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-white">0</span>
           </button>
-          <button onclick="switchAdminTab('customer')" data-tab="customer" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
+          <button data-tab="print" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
+            <i data-lucide="printer" class="w-3.5 h-3.5"></i><span>Cần in</span>
+            <span id="adminTabPrintBadge" class="admin-tab-badge ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700">0 đầu · 0 cuốn</span>
+          </button>
+          <button data-tab="customer" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
             <i data-lucide="user" class="w-3.5 h-3.5"></i><span>Theo tên</span>
           </button>
-          <button onclick="switchAdminTab('class')" data-tab="class" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
+          <button data-tab="class" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
             <i data-lucide="users" class="w-3.5 h-3.5"></i><span>Theo lớp</span>
           </button>
-          <button onclick="switchAdminTab('department')" data-tab="department" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
+          <button data-tab="department" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
             <i data-lucide="graduation-cap" class="w-3.5 h-3.5"></i><span>Theo khoa</span>
           </button>
-          <button onclick="switchAdminTab('settlement')" data-tab="settlement" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
+          <button data-tab="settlement" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
             <i data-lucide="calculator" class="w-3.5 h-3.5"></i><span>Quyết toán</span>
           </button>
-          <button onclick="switchAdminTab('manage')" data-tab="manage" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
+          <button data-tab="manage" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
             <i data-lucide="book-open" class="w-3.5 h-3.5"></i><span>Quản lý sách</span>
           </button>
         </div>
@@ -279,24 +293,8 @@
       <!-- NỘI DUNG CUỘN CỦA CÁC TAB -->
       <div class="p-4 sm:p-5 overflow-y-auto flex-1">
 
-        <!-- ============ TAB 1: ĐƠN HÀNG & TỔNG HỢP ============ -->
-        <div id="adminTabOrders" class="admin-tab-panel">
-
-          <!-- 1. TỔNG HỢP SỐ LƯỢNG SÁCH CẦN NHẬP / IN (DANH MỤC CHUNG) -->
-          <div class="mb-4">
-            <div class="flex items-center justify-between mb-2">
-              <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
-                <i data-lucide="boxes" class="w-4 h-4 text-emerald-600"></i>
-                <span>Số Lượng Từng Cuốn Cần In:</span>
-              </h4>
-              <span class="text-xs font-bold text-emerald-700" id="adminTotalRevenue">Tổng tiền: 0 đ</span>
-            </div>
-            <div id="adminBookSummaryCards" class="space-y-3">
-              <!-- Render động: tổng số từng cuốn -->
-            </div>
-          </div>
-
-          <!-- 2. DANH SÁCH PHÁT SÁCH: TÌM TÊN + LỌC THEO LỚP -->
+        <!-- ============ TAB 1: PHÁT SÁCH (MẶC ĐỊNH MỞ) ============ -->
+        <div id="adminTabDelivery" class="admin-tab-panel">
           <div class="mb-1">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <div class="flex items-center justify-between sm:justify-start sm:space-x-3 w-full sm:w-auto">
@@ -347,6 +345,22 @@
               <div id="adminOrderMobileList" class="sm:hidden p-2 space-y-2">
                 <div class="p-4 text-center text-slate-400 text-xs">Chưa có ai đóng tiền</div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ TAB 2: CẦN IN (MẶC ĐỊNH ẨN) ============ -->
+        <div id="adminTabPrint" class="admin-tab-panel hidden">
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+                <i data-lucide="boxes" class="w-4 h-4 text-emerald-600"></i>
+                <span>Số Lượng Từng Cuốn Cần In:</span>
+              </h4>
+              <span class="text-xs font-bold text-emerald-700" id="adminTotalRevenue">Tổng tiền: 0 đ</span>
+            </div>
+            <div id="adminBookSummaryCards" class="space-y-3">
+              <!-- Render động: tổng số từng cuốn -->
             </div>
           </div>
         </div>

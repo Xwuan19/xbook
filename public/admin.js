@@ -15,7 +15,7 @@
 // ============================ TRẠNG THÁI TRANG QUẢN TRỊ ============================
 // Bộ lọc bảng quản trị
 let adminClassFilterValue = '__ALL__';
-let currentAdminTab = 'orders';
+let currentAdminTab = 'delivery';
 
 // Bộ lọc theo ngày trong bảng quản trị (theo dõi ngày nhận sách & quyết toán)
 let adminDatePreset = 'all';      // all | today | tomorrow | yesterday | 7d | 30d | custom
@@ -241,9 +241,24 @@ function handleAdminLogout() {
   alert("🔒 Đã khóa lại Bảng Quản Trị!\nLần sau mở trang quản trị sẽ cần nhập lại mật khẩu.");
 }
 
+/** Cờ in gộp: đang ở tab Phát sách hoặc Cần in thì CSS in cả hai (như bảng cũ) */
+function updatePrintCombineFlag(tabName) {
+  const isCombine = tabName === 'delivery' || tabName === 'print';
+  const printArea = document.getElementById('printArea');
+  if (printArea) {
+    printArea.dataset.printCombine = isCombine ? '1' : '0';
+    printArea.classList.toggle('print-combine', isCombine);
+  }
+  if (document.body) {
+    document.body.dataset.printCombine = isCombine ? '1' : '0';
+    document.body.classList.toggle('print-combine', isCombine);
+  }
+}
+
 /** Chuyển tab trong bảng quản trị */
 function switchAdminTab(tabName) {
   currentAdminTab = tabName;
+  updatePrintCombineFlag(tabName);
   document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.add('hidden'));
   const panel = document.getElementById('adminTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
   if (panel) panel.classList.remove('hidden');
@@ -253,6 +268,12 @@ function switchAdminTab(tabName) {
     btn.className = `admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 ${
       active ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
     }`;
+    const badge = btn.querySelector('.admin-tab-badge');
+    if (badge) {
+      badge.className = `admin-tab-badge ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+        active ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+      }`;
+    }
   });
   lucide.createIcons();
 }
@@ -333,6 +354,9 @@ function initAdminDelegatedEvents() {
   panel.addEventListener('click', (event) => {
     const target = event.target && typeof event.target.closest === 'function' ? event.target : null;
     if (!target) return;
+
+    const tabBtn = target.closest('[data-tab]');
+    if (tabBtn) { switchAdminTab(tabBtn.dataset.tab); return; }
 
     const presetChip = target.closest('[data-date-preset]');
     if (presetChip) { setAdminDatePreset(presetChip.dataset.datePreset); return; }
@@ -562,7 +586,7 @@ function filterBySoldBook(bookTitle) {
   input.value = input.value.trim() === bookTitle ? '' : bookTitle;
   renderAdminOrderList();
   renderAdminDateFilter();
-  switchAdminTab('orders');
+  switchAdminTab('delivery');
 }
 
 function weekdayLabel(dateKey) {
@@ -591,7 +615,16 @@ function renderAdminTabsWithFilter() {
     summaryEl.innerHTML = `📅 <strong>${escapeHtml(adminDateRangeLabel())}</strong> — ${paidOrders.length} đơn đã nộp · ${totalBooks} cuốn · <span class="text-emerald-700 font-black">${formatMoney(totalAmount)}</span>`;
   }
 
-  renderAdminBookSummary({ bookSummary: computeBookSummary(paidOrders) });
+  const bookSummary = computeBookSummary(paidOrders);
+  const soldBooks = bookSummary.filter(b => Number(b.totalQuantity) > 0);
+  const deliveryBadge = document.getElementById('adminTabDeliveryBadge');
+  if (deliveryBadge) deliveryBadge.innerText = `${paidOrders.length}`;
+  const printBadge = document.getElementById('adminTabPrintBadge');
+  if (printBadge) printBadge.innerText = `${soldBooks.length} đầu · ${totalBooks} cuốn`;
+
+  updatePrintCombineFlag(currentAdminTab);
+
+  renderAdminBookSummary({ bookSummary });
   populateAdminClassFilter(paidOrders);
   renderAdminOrderList();
   renderAdminCustomerTab(paidOrders);

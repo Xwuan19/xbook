@@ -409,16 +409,42 @@ test('admin filters orders by order date / payment date and settles per day', as
   assert.equal(window.document.getElementById('settlementBooks').innerText, '5');
   assert.equal(window.document.getElementById('settlementAmount').innerText, '300.000 đ');
 
-  // 1b. Thanh lọc ngày nằm NGOÀI các tab (hiện ở mọi tab) + có tab "Quyết toán" riêng
-  const filterBar = window.document.getElementById('adminDatePresetChips');
-  assert.equal(window.document.querySelector('#adminTabOrders #adminDatePresetChips'), null);
-  assert.equal(window.document.getElementById('adminTabOrders').contains(filterBar), false);
-  assert.ok(window.document.querySelector('[data-tab="settlement"]'));
-  assert.ok(window.document.getElementById('adminTabSettlement').contains(window.document.getElementById('adminDailyBreakdownBody')));
-  window.switchAdminTab('settlement');
+  // 1b. Tách 2 tab: Phát sách (#adminTabDelivery) & Cần in (#adminTabPrint), bỏ tab #adminTabOrders
+  assert.equal(window.document.getElementById('adminTabOrders'), null);
+  const deliveryTab = window.document.getElementById('adminTabDelivery');
+  const printTab = window.document.getElementById('adminTabPrint');
+  assert.ok(deliveryTab, 'có tab Phát sách');
+  assert.ok(printTab, 'có tab Cần in');
+  assert.equal(deliveryTab.classList.contains('hidden'), false, 'mặc định mở Phát sách');
+  assert.equal(printTab.classList.contains('hidden'), true, 'mặc định ẩn Cần in');
+
+  // Mỗi khối nằm đúng tab của nó (không lẫn)
+  assert.ok(deliveryTab.contains(window.document.getElementById('adminOrderTableBody')), 'danh sách phát sách nằm ở tab Phát sách');
+  assert.ok(printTab.contains(window.document.getElementById('adminBookSummaryCards')), 'số lượng cần in nằm ở tab Cần in');
+
+  // Badge bám đúng khoảng ngày đang lọc: Phát sách hiện 3, Cần in hiện 2 đầu · 5 cuốn
+  assert.equal(window.document.getElementById('adminTabDeliveryBadge').innerText, '3');
+  assert.equal(window.document.getElementById('adminTabPrintBadge').innerText, '2 đầu · 5 cuốn');
+
+  // Cờ in gộp bật khi ở tab Phát sách hoặc Cần in
+  assert.equal(window.document.getElementById('printArea').dataset.printCombine, '1');
+
+  // Bấm thật nút tab [data-tab="print"] mới hiện số
+  window.document.querySelector('[data-tab="print"]').click();
+  assert.equal(printTab.classList.contains('hidden'), false);
+  assert.equal(deliveryTab.classList.contains('hidden'), true);
+  assert.equal(window.document.getElementById('printArea').dataset.printCombine, '1');
+
+  // Chuyển sang tab Quyết toán: cờ in gộp tắt (chỉ in tab đó)
+  window.document.querySelector('[data-tab="settlement"]').click();
   assert.equal(window.document.getElementById('adminTabSettlement').classList.contains('hidden'), false);
-  assert.equal(window.document.getElementById('adminTabOrders').classList.contains('hidden'), true);
-  window.switchAdminTab('orders');
+  assert.equal(printTab.classList.contains('hidden'), true);
+  assert.equal(window.document.getElementById('printArea').dataset.printCombine, '0');
+
+  // Quay lại tab Phát sách
+  window.document.querySelector('[data-tab="delivery"]').click();
+  assert.equal(deliveryTab.classList.contains('hidden'), false);
+  assert.equal(window.document.getElementById('printArea').dataset.printCombine, '1');
 
   // 2. Bảng quyết toán từng ngày: gộp đúng theo ngày đặt, có thanh tỷ trọng + dòng TỔNG CỘNG
   let rows = [...window.document.querySelectorAll('#adminDailyBreakdownBody tr')];
@@ -446,10 +472,10 @@ test('admin filters orders by order date / payment date and settles per day', as
   assert.equal(window.document.getElementById('settlementBookTitles').innerText, '2 đầu sách · 5 cuốn · 300.000 đ');
   assert.ok(soldRows[0].querySelector('.bg-emerald-500'), 'có thanh tỷ trọng theo đầu sách');
 
-  // 2c. Bấm một đầu sách → nhảy sang tab Đơn hàng và lọc đúng người mua cuốn đó (bấm lại để bỏ)
+  // 2c. Bấm một đầu sách → nhảy sang tab Phát sách và lọc đúng người mua cuốn đó (bấm lại để bỏ)
   soldRows[1].click();
-  // Bấm đầu sách → tự chuyển sang tab Đơn hàng và điền sẵn tên sách vào ô tìm kiếm
-  assert.equal(window.document.getElementById('adminTabOrders').classList.contains('hidden'), false);
+  // Bấm đầu sách → tự chuyển sang tab Phát sách và điền sẵn tên sách vào ô tìm kiếm
+  assert.equal(window.document.getElementById('adminTabDelivery').classList.contains('hidden'), false);
   assert.equal(window.document.getElementById('adminTabSettlement').classList.contains('hidden'), true);
   assert.equal(window.document.getElementById('adminSearchStudentInput').value, 'Shared');
   assert.deepEqual(window.getFilteredPaidOrders().map(o => o.orderCode).sort(), [1, 2]);
