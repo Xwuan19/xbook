@@ -156,11 +156,12 @@
       </div>
     </div>
 
-    <!-- DANH SÁCH CARD SÁCH: 2 CỘT MOBILE & TABLET → 3 CỘT DESKTOP
-         `items-stretch` + card `flex flex-col` → 2 card cùng hàng luôn cao bằng nhau;
-         card có `min-w-0 overflow-hidden` → tiêu đề / tên lớp dài không đẩy tràn cột (trôi lưới). -->
-    <div id="bookGrid" class="grid grid-cols-2 items-stretch gap-2.5 sm:gap-3 lg:grid-cols-3 lg:gap-4">
-      <!-- Loading Skeleton: dựng đúng hình dạng card thật (bìa 3:4 + 2 dòng chữ + nút) -->
+    <!-- DANH SÁCH CARD SÁCH: 2 cột mobile → 3 tablet → 4 desktop → 5 màn hình rộng.
+         Card dạng dọc (bìa 3:4) nên số cột phải tăng dần theo chiều ngang màn hình:
+         giữ 3 cột trên desktop sẽ khiến mỗi bìa rộng ~350px → cao ~470px, card khổng lồ.
+         `items-stretch` + card `flex flex-col` → các card cùng hàng luôn cao bằng nhau;
+         card có `min-w-0 overflow-hidden` → tiêu đề dài không đẩy tràn cột (trôi lưới). -->
+    <div id="bookGrid" class="grid grid-cols-2 items-stretch gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 lg:gap-4 xl:grid-cols-5">
       <div class="animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <div class="aspect-[3/4] w-full bg-slate-200"></div>
         <div class="space-y-2 p-2.5 sm:p-3.5">
@@ -177,7 +178,7 @@
           <div class="h-[2.375rem] w-full rounded-xl bg-slate-200"></div>
         </div>
       </div>
-      <div class="hidden animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white sm:block">
+      <div class="hidden sm:block animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <div class="aspect-[3/4] w-full bg-slate-200"></div>
         <div class="space-y-2 p-2.5 sm:p-3.5">
           <div class="h-3.5 w-full rounded bg-slate-200"></div>
@@ -185,7 +186,23 @@
           <div class="h-[2.375rem] w-full rounded-xl bg-slate-200"></div>
         </div>
       </div>
-      <div class="hidden animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white sm:block">
+      <div class="hidden sm:block animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <div class="aspect-[3/4] w-full bg-slate-200"></div>
+        <div class="space-y-2 p-2.5 sm:p-3.5">
+          <div class="h-3.5 w-full rounded bg-slate-200"></div>
+          <div class="h-3.5 w-2/3 rounded bg-slate-200"></div>
+          <div class="h-[2.375rem] w-full rounded-xl bg-slate-200"></div>
+        </div>
+      </div>
+      <div class="hidden lg:block animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <div class="aspect-[3/4] w-full bg-slate-200"></div>
+        <div class="space-y-2 p-2.5 sm:p-3.5">
+          <div class="h-3.5 w-full rounded bg-slate-200"></div>
+          <div class="h-3.5 w-2/3 rounded bg-slate-200"></div>
+          <div class="h-[2.375rem] w-full rounded-xl bg-slate-200"></div>
+        </div>
+      </div>
+      <div class="hidden lg:block animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <div class="aspect-[3/4] w-full bg-slate-200"></div>
         <div class="space-y-2 p-2.5 sm:p-3.5">
           <div class="h-3.5 w-full rounded bg-slate-200"></div>

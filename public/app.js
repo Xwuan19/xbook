@@ -230,7 +230,7 @@ function renderCheckoutClassPicker() {
 
 /**
  * 5. RENDER DANH SÁCH GIÁO TRÌNH (ĐÃ LỌC THEO KHOA + LỚP)
- * Tỷ lệ: 2 cột mobile → 2 cột tablet → 3 cột desktop.
+ * Tỷ lệ: 2 cột mobile → 3 tablet → 4 desktop → 5 màn hình rộng (khai báo ở #bookGrid).
  * Card thiết kế theo dạng "bìa sách ở trên, thông tin ở dưới" (dọc) vì trên mobile mỗi cột
  * chỉ còn ~150–170px: mọi phần tử đều `min-w-0` + `truncate`/`line-clamp` để chữ dài
  * (tên sách, tên lớp) không phá vỡ khung lưới, chiều cao 2 card cùng hàng luôn bằng nhau.
@@ -353,8 +353,8 @@ function bookCardHtml(book) {
       <div class="flex min-w-0 flex-1 flex-col p-2.5 sm:p-3.5">
         <h3 class="line-clamp-2 break-words text-[13px] font-extrabold leading-snug text-slate-900 sm:text-sm">${escapeHtml(book.title)}</h3>
         ${meta ? `<p class="mt-0.5 line-clamp-1 text-[10px] font-medium text-slate-400 sm:text-[11px]">${escapeHtml(meta)}</p>` : ''}
-        <!-- Mô tả chỉ hiện từ tablet trở lên: cột mobile ~150px đọc không nổi, nhường chỗ cho giá + nút -->
-        ${book.description ? `<div class="mt-1 hidden min-w-0 sm:block"><p class="line-clamp-2 text-[11px] leading-relaxed text-slate-500">${escapeHtml(book.description)}</p></div>` : ''}
+        <!-- Mô tả chỉ hiện khi cột đủ rộng (≥lg, ~230px/cột); cột hẹp nhường chỗ cho giá + nút -->
+        ${book.description ? `<div class="mt-1 hidden min-w-0 lg:block"><p class="line-clamp-2 text-[11px] leading-relaxed text-slate-500">${escapeHtml(book.description)}</p></div>` : ''}
 
         <div class="mt-auto min-w-0 border-t border-slate-100 pt-2 sm:pt-2.5">
           <div class="flex min-w-0 items-baseline justify-between gap-1.5">

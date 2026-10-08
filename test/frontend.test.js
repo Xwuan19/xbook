@@ -549,10 +549,12 @@ test('home book grid shows 2 columns on mobile with a compact vertical card', as
   await window.fetchBooksAndSettings();
   const grid = window.document.getElementById('bookGrid');
 
-  // 1. Mobile giữ đúng 2 cột (không tụt về 1 cột), desktop vẫn 3 cột
+  // 1. Mobile giữ đúng 2 cột (không tụt về 1 cột), màn hình càng rộng càng nhiều cột
   assert.match(grid.className, /(^|\s)grid-cols-2(\s|$)/);
   assert.doesNotMatch(grid.className, /grid-cols-1/);
-  assert.match(grid.className, /lg:grid-cols-3/);
+  assert.match(grid.className, /sm:grid-cols-3/);
+  assert.match(grid.className, /lg:grid-cols-4/);
+  assert.match(grid.className, /xl:grid-cols-5/);
 
   // 2. Card dạng dọc cho cột hẹp: khung bìa 3:4 + min-w-0/overflow-hidden chống tràn,
   //    tên sách kẹp 2 dòng, luôn có nút mua full chiều ngang

@@ -14,7 +14,7 @@
  * ============================================================================
  */
 
-const CACHE_NAME = 'xbook-static-v7';
+const CACHE_NAME = 'xbook-static-v8';
 const CORE_ASSETS = [
   '/',
   '/index.html',
