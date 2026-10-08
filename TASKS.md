@@ -3,11 +3,16 @@
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này (v1.4.1)
-1. **Tối ưu hiển thị trên mobile** để khách đặt sách dễ bằng điện thoại: form đặt mua dạng sheet trượt từ đáy, nút gửi luôn hiện, ô nhập không làm iPhone phóng to trang.
-2. **Màn hình thanh toán hợp với điện thoại**: không bắt khách quét QR trên chính màn hình đó — mở app ngân hàng / mở ảnh QR / chép nội dung.
+## Mục tiêu đợt này (v1.4.6)
+1. **Rút gọn nút chốt sổ cạnh "Bảng Quản Lý Sách"**: hiển thị icon + 2 chữ (`🔒 ĐÓNG SỔ` / `🔓 MỞ SỔ`), chuyển câu dài vào tooltip `title`.
+2. **Duy nhất 1 nút Xuất Excel ở chân trang**: dọn dẹp giao diện header.
 
-## Giai đoạn 12 (v1.4.1) — Tối ưu trải nghiệm đặt sách trên mobile
+## Giai đoạn 17 (v1.4.6) — Rút gọn nút chốt sổ thành icon + 2 chữ (ĐÓNG SỔ / MỞ SỔ)
+- [x] T65. `public/admin.js`: `btnToggleRegistration` rút gọn thành icon + 2 chữ (`🔒 ĐÓNG SỔ` khi mở, `🔓 MỞ SỔ` khi đóng), câu dài chuyển vào tooltip `title`.
+- [x] T66. `test/frontend.test.js`: test 1f khẳng định nhãn render thật từ `refreshAdminData()` chứa "ĐÓNG SỔ" — 15/15 pass.
+- [x] T67. `package.json` v1.4.6, `public/sw.js` cache v16, cập nhật tài liệu (README, handover, TASKS).
+
+## Mục tiêu đợt trước (v1.4.1)
 - [x] T51. `public/index.html`: 3 modal trang chủ (`checkoutModal`, `bookPreviewModal`, `qrPaymentModal`) thành **sheet trượt từ đáy trên mobile / hộp thoại giữa trên desktop**; form đặt mua tách **header – thân cuộn (`[data-sheet-body]`) – chân dính** (tổng tiền + nút *Tạo mã QR*), thêm `#toastHost`, `#formCustomerDeliveryDateError`, safe-area (`xb-safe-bottom`) + `dvh` (`xb-sheet-max`), bỏ `user-scalable=no`, CSS ô nhập 16px + `touch-action: manipulation`.
 - [x] T52. `public/core.js`: `openModal/closeModal` **khóa cuộn nền** + đóng bằng **nền tối / Esc** (đếm sheet đang mở), `showToast()` + `hapticTap()`, `initSheetKeyboardFix()` (VisualViewport → `--xb-keyboard`), `XBookSelect` tăng kích thước chạm (`min-h-[40/44/48px]`, dòng lựa chọn `py-2.5`, panel `max-h-[45vh]`, không auto-focus ô tìm trên mobile), `copyToClipboard()` có nhánh dự phòng khi không có `navigator.clipboard`.
 - [x] T53. `public/app.js`: card sách giữ `aspect-square` nhưng **nút xem minh họa thành icon góc phải** + nút mua `min-h-[44px]`; toast + rung khi thêm/bớt sách và đổi số lượng; `focusFieldError()` (hiện lỗi → cuộn tới → focus); màn hình QR gắn **Mở app ngân hàng** (`checkoutUrl`) + **Mở ảnh QR** + đổi sang nút *Hoàn tất* khi tiền về; `#filterBar` sticky dưới header.

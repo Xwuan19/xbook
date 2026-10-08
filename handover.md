@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.4.1 (Tối ưu hiển thị mobile để khách dễ đặt sách)
+## Phiên bản hiện tại: v1.4.6 (Rút gọn nút chốt sổ thành icon + 2 chữ trên header)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -8,6 +8,16 @@
 - **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
+
+## 0l. Điểm mới v1.4.6 (rút gọn nút chốt sổ thành icon + 2 chữ: ĐÓNG SỔ / MỞ SỔ)
+
+- **Nút chốt sổ cạnh "Bảng Quản Lý Sách"**:
+  - Đang mở đăng ký → 🔒 **ĐÓNG SỔ** (nền đỏ nhạt `bg-rose-50 text-rose-700 border-rose-300`).
+  - Đang đóng đăng ký → 🔓 **MỞ SỔ** (nền xanh `bg-emerald-600 text-white`).
+  - Đã bỏ câu dài ở cả mobile lẫn desktop; tooltip đầy đủ nằm trong `title` khi chạm/giữ.
+  - Bỏ nút "Xuất Excel" ở header, chỉ giữ 1 nút ở chân trang (+ nút xuất theo khoảng ngày trong tab Quyết toán).
+- **Kiểm thử**: `npm test` 15/15 bài pass (test 1f kiểm tra nhãn "ĐÓNG SỔ").
+- **Cache**: Bump version 1.4.6, SW cache `xbook-static-v16`.
 
 ## 0g. Điểm mới v1.4.1 (tối ưu hiển thị mobile — khách dễ đặt sách trên điện thoại)
 

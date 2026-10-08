@@ -469,7 +469,7 @@ test('admin filters orders by order date / payment date and settles per day', as
   assert.ok(btnToggleHeader, 'có nút chốt sổ');
   assert.ok(headerArea.contains(btnToggleHeader), 'nút chốt sổ nằm ở header');
   assert.equal(headerArea.querySelector('button[onclick*="exportToExcel"]'), null, 'header không còn nút Xuất Excel');
-  assert.match(btnToggleHeader.textContent, /CHỐT SỔ/);
+  assert.match(btnToggleHeader.textContent, /ĐÓNG SỔ/);
 
   // Cờ in gộp bật khi ở tab Phát sách hoặc Cần in
   assert.equal(window.document.getElementById('printArea').dataset.printCombine, '1');

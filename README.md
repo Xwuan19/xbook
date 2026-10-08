@@ -2,7 +2,15 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## ✨ Điểm mới (v1.4.1) — Tối ưu trải nghiệm đặt sách trên điện thoại
+## ✨ Điểm mới (v1.4.6) — Rút gọn nút chốt sổ thành icon + 2 chữ (ĐÓNG SỔ / MỞ SỔ)
+
+| Tính năng | Mô tả |
+|---|---|
+| 🔒 **Nút Đóng/Mở sổ gọn gàng trên header** | Nút chốt sổ nằm cạnh tiêu đề "Bảng Quản Lý Sách", hiển thị icon + 2 chữ: 🔒 **ĐÓNG SỔ** (nền đỏ nhạt khi đang mở) / 🔓 **MỞ SỔ** (nền xanh khi đang đóng). Bỏ câu dài ở cả mobile và desktop, chuyển vào tooltip `title`. |
+| 📊 **Duy nhất 1 nút Xuất Excel chân trang** | Bỏ nút Excel ở header, toàn trang chỉ còn 1 nút Xuất Excel ở footer (và nút xuất theo khoảng ngày trong tab Quyết toán). |
+| 🧪 **Test & PWA Cache** | `test/frontend.test.js` kiểm tra nhãn "ĐÓNG SỔ", 15/15 test pass. Bump version **1.4.6**, SW cache **xbook-static-v16**. |
+
+## ✨ Điểm cũ (v1.4.1) — Tối ưu trải nghiệm đặt sách trên điện thoại
 
 | Tính năng | Mô tả |
 |---|---|
