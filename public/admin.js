@@ -315,12 +315,15 @@ async function refreshAdminData(opts = {}) {
     // Nút bật/tắt chốt sổ
     const btnToggle = document.getElementById('btnToggleRegistration');
     if (btnToggle) {
-      if (stats.settings.isRegistrationOpen) {
-        btnToggle.className = 'w-full py-2.5 px-4 rounded-xl text-xs font-black transition flex items-center justify-center space-x-2 shadow-sm bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300';
-        btnToggle.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i><span>Bấm để ĐÓNG / CHỐT SỔ ĐĂNG KÝ</span>`;
+      const isOpen = (stats && stats.settings && typeof stats.settings.isRegistrationOpen === 'boolean')
+        ? stats.settings.isRegistrationOpen
+        : (currentSettings && currentSettings.isRegistrationOpen !== false);
+      if (isOpen) {
+        btnToggle.className = 'px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center space-x-1.5 shadow-sm flex-shrink-0 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300';
+        btnToggle.innerHTML = `<i data-lucide="lock" class="w-3.5 h-3.5"></i><span class="sm:hidden">CHỐT SỔ</span><span class="hidden sm:inline">Bấm để ĐÓNG / CHỐT SỔ ĐĂNG KÝ</span>`;
       } else {
-        btnToggle.className = 'w-full py-2.5 px-4 rounded-xl text-xs font-black transition flex items-center justify-center space-x-2 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white';
-        btnToggle.innerHTML = `<i data-lucide="unlock" class="w-4 h-4"></i><span>Bấm để MỞ LẠI ĐĂNG KÝ MUA SÁCH</span>`;
+        btnToggle.className = 'px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center space-x-1.5 shadow-sm flex-shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white';
+        btnToggle.innerHTML = `<i data-lucide="unlock" class="w-3.5 h-3.5"></i><span class="sm:hidden">MỞ ĐĂNG KÝ</span><span class="hidden sm:inline">Bấm để MỞ LẠI ĐĂNG KÝ MUA SÁCH</span>`;
       }
     }
 

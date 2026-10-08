@@ -461,6 +461,16 @@ test('admin filters orders by order date / payment date and settles per day', as
   window.closeDeliveryDetail();
   assert.equal(detailSheet.classList.contains('hidden'), true, 'sheet chi tiết ẩn lại');
 
+  // 1f. Nút Chốt Sổ nằm ở header (thay thế nút Excel trên đầu, không còn hàng chốt sổ riêng)
+  await window.refreshAdminData();
+  const headerArea = window.document.querySelector('#adminPanel .border-b');
+  assert.ok(headerArea, 'có header admin panel');
+  const btnToggleHeader = window.document.getElementById('btnToggleRegistration');
+  assert.ok(btnToggleHeader, 'có nút chốt sổ');
+  assert.ok(headerArea.contains(btnToggleHeader), 'nút chốt sổ nằm ở header');
+  assert.equal(headerArea.querySelector('button[onclick*="exportToExcel"]'), null, 'header không còn nút Xuất Excel');
+  assert.match(btnToggleHeader.textContent, /CHỐT SỔ/);
+
   // Cờ in gộp bật khi ở tab Phát sách hoặc Cần in
   assert.equal(window.document.getElementById('printArea').dataset.printCombine, '1');
 
