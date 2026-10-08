@@ -2,7 +2,14 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## ✨ Điểm mới (v1.4.7) — Tối giản logo: bỏ chữ "xbook" trong ảnh logo web
+## ✨ Điểm mới (v1.4.8) — Đồng bộ logo mới cho trang Admin & cache buster
+
+| Tính năng | Mô tả |
+|---|---|
+| 🔄 **Cache buster cho logo** | Gắn query buster `logo.png?v=18` trên cả trang chủ và trang admin để đảm bảo mọi trình duyệt tải ngay logo cuốn sách mới không có chữ, không bị vướng cache cũ. |
+| 🚀 **PWA Service Worker v18** | Bump version **1.4.8**, SW cache **xbook-static-v18**. |
+
+## ✨ Điểm cũ (v1.4.7) — Tối giản logo: bỏ chữ "xbook" trong ảnh logo web
 
 | Tính năng | Mô tả |
 |---|---|

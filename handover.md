@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.4.7 (Tối giản logo web: bỏ chữ "xbook" trong ảnh logo)
+## Phiên bản hiện tại: v1.4.8 (Đồng bộ logo mới cho trang Admin & cache buster)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -8,6 +8,11 @@
 - **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
+
+## 0n. Điểm mới v1.4.8 (đồng bộ logo mới cho trang Admin & cache buster)
+
+- Gắn query buster `src="/logo.png?v=18"` trên cả `public/admin.html` và `public/index.html` để buộc trình duyệt bỏ cache cũ, hiển thị ngay logo mới (biểu tượng cuốn sách không có chữ bên trong).
+- Bump SW cache `xbook-static-v18`, bump version `1.4.8`.
 
 ## 0m. Điểm mới v1.4.7 (tối giản logo web: bỏ chữ "xbook" trong ảnh logo)
 

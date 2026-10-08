@@ -3,14 +3,14 @@
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này (v1.4.7)
-1. **Tối giản logo web**: bỏ chữ "xbook" nhỏ xíu bên dưới biểu tượng trong `public/logo.png`, căn giữa biểu tượng cuốn sách.
-2. **Đồng bộ icon PWA**: cập nhật các icon 192, 512, maskable và file trong Downloads.
+## Mục tiêu đợt này (v1.4.8)
+1. **Đồng bộ logo mới cho trang Admin**: gắn query cache buster `logo.png?v=18` để vượt qua bộ nhớ đệm trình duyệt.
 
-## Giai đoạn 18 (v1.4.7) — Bỏ chữ xbook trong ảnh logo web
-- [x] T68. `public/logo.png`: loại bỏ chữ "xbook" dưới biểu tượng, căn giữa biểu tượng sách với tỷ lệ 70% canvas.
-- [x] T69. Đồng bộ `public/icons/icon-192.png`, `icon-512.png`, `icon-maskable-512.png` và file trong Downloads.
-- [x] T70. `package.json` v1.4.7, `public/sw.js` cache v17, cập nhật tài liệu (README, handover, TASKS).
+## Giai đoạn 19 (v1.4.8) — Đồng bộ logo mới cho trang Admin & cache buster
+- [x] T71. `public/admin.html` & `public/index.html`: đổi src ảnh logo thành `/logo.png?v=18`.
+- [x] T72. `package.json` v1.4.8, `public/sw.js` cache v18, cập nhật tài liệu (README, handover, TASKS).
+
+## Mục tiêu đợt trước (v1.4.7)
 
 ## Mục tiêu đợt trước (v1.4.6)
 
