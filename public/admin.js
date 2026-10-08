@@ -341,6 +341,16 @@ async function refreshAdminData(opts = {}) {
   }
 }
 
+/** Bật/tắt khung điều khiển lọc ngày trên mobile (accordion) */
+function toggleAdminDateFilter() {
+  const controls = document.getElementById('adminDateFilterControls');
+  const btn = document.querySelector('[data-toggle-date-filter]');
+  const panel = document.getElementById('adminDateFilterPanel');
+  if (controls) controls.classList.toggle('xb-open');
+  if (btn) btn.classList.toggle('xb-open');
+  if (panel) panel.classList.toggle('xb-open');
+}
+
 /**
  * Bắt sự kiện cho thanh lọc ngày & bảng quyết toán bằng DELEGATION (gắn 1 lần vào
  * khối Bảng Quản Lý của trang /admin.html, không dùng onclick inline)
@@ -357,6 +367,9 @@ function initAdminDelegatedEvents() {
 
     const tabBtn = target.closest('[data-tab]');
     if (tabBtn) { switchAdminTab(tabBtn.dataset.tab); return; }
+
+    const toggleDateBtn = target.closest('[data-toggle-date-filter]');
+    if (toggleDateBtn) { toggleAdminDateFilter(); return; }
 
     const presetChip = target.closest('[data-date-preset]');
     if (presetChip) { setAdminDatePreset(presetChip.dataset.datePreset); return; }
@@ -620,7 +633,10 @@ function renderAdminTabsWithFilter() {
   const deliveryBadge = document.getElementById('adminTabDeliveryBadge');
   if (deliveryBadge) deliveryBadge.innerText = `${paidOrders.length}`;
   const printBadge = document.getElementById('adminTabPrintBadge');
-  if (printBadge) printBadge.innerText = `${soldBooks.length} đầu · ${totalBooks} cuốn`;
+  if (printBadge) {
+    printBadge.innerText = `${totalBooks}`;
+    printBadge.title = `${soldBooks.length} đầu sách · ${totalBooks} cuốn`;
+  }
 
   updatePrintCombineFlag(currentAdminTab);
 
@@ -773,7 +789,7 @@ function renderAdminOrderList() {
             </div>
             <div class="flex items-center gap-1.5 flex-shrink-0">
               <button onclick="toggleDelivered(${o.orderCode})"
-                class="px-2.5 py-1.5 rounded-xl text-xs border transition flex items-center space-x-1 ${btnClass}">
+                class="min-h-[38px] px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center space-x-1 ${btnClass}">
                 <span>${isDelivered ? '✓ Đã phát' : 'Chưa phát'}</span>
               </button>
               <button type="button" onclick="handleDeleteOrder(${o.orderCode}, '${escapeHtml(o.customerName)}')" title="Xóa đơn hàng này"

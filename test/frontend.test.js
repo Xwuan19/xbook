@@ -422,9 +422,23 @@ test('admin filters orders by order date / payment date and settles per day', as
   assert.ok(deliveryTab.contains(window.document.getElementById('adminOrderTableBody')), 'danh sách phát sách nằm ở tab Phát sách');
   assert.ok(printTab.contains(window.document.getElementById('adminBookSummaryCards')), 'số lượng cần in nằm ở tab Cần in');
 
-  // Badge bám đúng khoảng ngày đang lọc: Phát sách hiện 3, Cần in hiện 2 đầu · 5 cuốn
+  // Badge bám đúng khoảng ngày đang lọc: Phát sách hiện 3, Cần in hiện 5 (title: 2 đầu sách · 5 cuốn)
   assert.equal(window.document.getElementById('adminTabDeliveryBadge').innerText, '3');
-  assert.equal(window.document.getElementById('adminTabPrintBadge').innerText, '2 đầu · 5 cuốn');
+  assert.equal(window.document.getElementById('adminTabPrintBadge').innerText, '5');
+  assert.match(window.document.getElementById('adminTabPrintBadge').title, /2 đầu sách · 5 cuốn/);
+
+  // 1d. Khối lọc ngày trên mobile: có nút thu gọn, mặc định đóng, tóm tắt vẫn hiện, bấm mở/đóng đúng
+  const toggleDateBtn = window.document.querySelector('[data-toggle-date-filter]');
+  assert.ok(toggleDateBtn, 'có nút thu gọn bộ lọc ngày');
+  const dateControls = window.document.getElementById('adminDateFilterControls');
+  assert.ok(dateControls, 'có khung controls bộ lọc ngày');
+  assert.equal(dateControls.classList.contains('xb-open'), false, 'mặc định đóng trên mobile');
+  assert.match(window.document.getElementById('adminDateSummary').textContent, /Tất cả thời gian/);
+
+  toggleDateBtn.click();
+  assert.equal(dateControls.classList.contains('xb-open'), true, 'bấm mở bộ lọc ngày');
+  toggleDateBtn.click();
+  assert.equal(dateControls.classList.contains('xb-open'), false, 'bấm đóng bộ lọc ngày');
 
   // Cờ in gộp bật khi ở tab Phát sách hoặc Cần in
   assert.equal(window.document.getElementById('printArea').dataset.printCombine, '1');

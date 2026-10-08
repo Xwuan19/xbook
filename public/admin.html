@@ -94,6 +94,15 @@
         visibility: visible !important;
       }
     }
+    @media (max-width: 639px) {
+      #adminDateFilterControls:not(.xb-open) {
+        display: none !important;
+      }
+      .xb-open .xb-chevron,
+      [data-toggle-date-filter].xb-open .xb-chevron {
+        transform: rotate(180deg);
+      }
+    }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
@@ -226,39 +235,50 @@
         </div>
 
         <!-- LỌC THEO NGÀY NHẬN SÁCH / NGÀY ĐẶT HÀNG — HIỆN Ở MỌI TAB ĐỂ THEO DÕI VÀ PHÁT SÁCH TỪNG NGÀY -->
-        <div class="print:hidden mb-3 bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2.5">
-          <div class="flex flex-wrap items-center gap-1.5">
-            <span class="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1 flex-shrink-0">
-              <i data-lucide="calendar-range" class="w-3.5 h-3.5 text-emerald-600"></i> Lọc theo ngày
-            </span>
-            <div id="adminDatePresetChips" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              <!-- Render động: Tất cả · Hôm nay · Ngày mai · Hôm qua · 7 ngày · 30 ngày -->
-            </div>
-          </div>
-
-          <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-            <div class="flex items-center gap-2 flex-1 min-w-0">
-              <label class="flex items-center gap-1.5 flex-1 min-w-0">
-                <span class="text-[11px] font-bold text-slate-500 flex-shrink-0">Từ</span>
-                <input type="date" id="adminDateFromInput" onchange="handleAdminDateRangeInput()"
-                  class="flex-1 min-w-0 px-2 py-1.5 text-[11px] bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
-              </label>
-              <label class="flex items-center gap-1.5 flex-1 min-w-0">
-                <span class="text-[11px] font-bold text-slate-500 flex-shrink-0">Đến</span>
-                <input type="date" id="adminDateToInput" onchange="handleAdminDateRangeInput()"
-                  class="flex-1 min-w-0 px-2 py-1.5 text-[11px] bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
-              </label>
-            </div>
-            <div id="adminDateBasisChips" class="flex items-center gap-1.5 flex-shrink-0">
-              <!-- Render động: theo Ngày nhận sách / Ngày đặt hàng -->
-            </div>
-          </div>
-
+        <div id="adminDateFilterPanel" class="print:hidden mb-3 bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2.5">
+          <!-- HÀNG TÓM TẮT & NÚT THU GỌN / XỔ RA TRÊN MOBILE -->
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <p id="adminDateSummary" class="text-[11px] font-bold text-emerald-800"></p>
-            <button type="button" data-goto-settlement class="text-[11px] font-bold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-xl px-2.5 py-1.5 transition flex items-center gap-1 flex-shrink-0">
-              <i data-lucide="calculator" class="w-3.5 h-3.5"></i> Xem quyết toán từng ngày
+            <div class="flex items-center gap-2 flex-1 min-w-0">
+              <button type="button" data-toggle-date-filter class="sm:hidden text-[11px] font-black text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl px-2.5 py-1.5 transition flex items-center gap-1 flex-shrink-0 shadow-sm">
+                <i data-lucide="calendar-range" class="w-3.5 h-3.5 text-emerald-600"></i>
+                <span>Lọc ngày</span>
+                <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400 xb-chevron transition-transform duration-200"></i>
+              </button>
+              <p id="adminDateSummary" class="text-[11px] font-bold text-emerald-800 truncate"></p>
+            </div>
+            <button type="button" data-goto-settlement class="text-[11px] font-bold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-xl px-2.5 py-1.5 transition flex items-center gap-1 flex-shrink-0 shadow-sm">
+              <i data-lucide="calculator" class="w-3.5 h-3.5"></i> <span>Xem quyết toán</span>
             </button>
+          </div>
+
+          <!-- KHUNG ĐIỀU KHIỂN CHI TIẾT (CHIPS + Ô TỪ/ĐẾN): MẶC ĐỊNH ẨN TRÊN MOBILE, BẤM NÚT MỚI XỔ RA; DESKTOP LUÔN HIỆN -->
+          <div id="adminDateFilterControls" class="space-y-2.5 pt-2 border-t border-slate-200/80 sm:border-0 sm:pt-0">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="text-[11px] font-black uppercase tracking-wider text-slate-500 hidden sm:flex items-center gap-1 flex-shrink-0">
+                <i data-lucide="calendar-range" class="w-3.5 h-3.5 text-emerald-600"></i> Lọc theo ngày
+              </span>
+              <div id="adminDatePresetChips" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                <!-- Render động: Tất cả · Hôm nay · Ngày mai · Hôm qua · 7 ngày · 30 ngày -->
+              </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+              <div class="flex items-center gap-2 flex-1 min-w-0">
+                <label class="flex items-center gap-1.5 flex-1 min-w-0">
+                  <span class="text-[11px] font-bold text-slate-500 flex-shrink-0">Từ</span>
+                  <input type="date" id="adminDateFromInput" onchange="handleAdminDateRangeInput()"
+                    class="flex-1 min-w-0 px-2 py-1.5 text-[11px] bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
+                </label>
+                <label class="flex items-center gap-1.5 flex-1 min-w-0">
+                  <span class="text-[11px] font-bold text-slate-500 flex-shrink-0">Đến</span>
+                  <input type="date" id="adminDateToInput" onchange="handleAdminDateRangeInput()"
+                    class="flex-1 min-w-0 px-2 py-1.5 text-[11px] bg-white border border-slate-300 rounded-xl focus:border-brand-500 focus:outline-none" />
+                </label>
+              </div>
+              <div id="adminDateBasisChips" class="flex items-center gap-1.5 flex-shrink-0">
+                <!-- Render động: theo Ngày nhận sách / Ngày đặt hàng -->
+              </div>
+            </div>
           </div>
         </div>
 
@@ -270,7 +290,7 @@
           </button>
           <button data-tab="print" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
             <i data-lucide="printer" class="w-3.5 h-3.5"></i><span>Cần in</span>
-            <span id="adminTabPrintBadge" class="admin-tab-badge ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700">0 đầu · 0 cuốn</span>
+            <span id="adminTabPrintBadge" class="admin-tab-badge ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700" title="0 đầu sách · 0 cuốn">0</span>
           </button>
           <button data-tab="customer" class="admin-tab-btn flex-shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center space-x-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
             <i data-lucide="user" class="w-3.5 h-3.5"></i><span>Theo tên</span>
@@ -608,21 +628,21 @@
       </div>
 
       <!-- FOOTER ADMIN: NÚT TIỆN ÍCH -->
-      <div class="border-t border-slate-100 p-3 sm:p-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
+      <div class="border-t border-slate-100 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 print:hidden">
         <div class="text-[11px] text-slate-400">
           💡 Tích "Đã phát" khi giao sách cho từng bạn trên lớp.
         </div>
-        <div class="flex items-center space-x-2">
-          <button onclick="exportToExcel()" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm shadow-emerald-600/20">
-            <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i>
-            <span>Xuất Excel (.xlsx)</span>
+        <div class="grid grid-cols-3 gap-2 w-full sm:w-auto sm:flex sm:items-center sm:space-x-2">
+          <button onclick="exportToExcel()" class="w-full sm:w-auto px-2.5 sm:px-3.5 py-2.5 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1 sm:space-x-1.5 shadow-sm shadow-emerald-600/20">
+            <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 flex-shrink-0"></i>
+            <span>Xuất Excel<span class="hidden md:inline"> (.xlsx)</span></span>
           </button>
-          <button onclick="window.print()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center space-x-1">
-            <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+          <button onclick="window.print()" class="w-full sm:w-auto px-2.5 sm:px-3 py-2.5 sm:py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1">
+            <i data-lucide="printer" class="w-3.5 h-3.5 flex-shrink-0"></i>
             <span>In danh sách</span>
           </button>
-          <button onclick="refreshAdminData()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center space-x-1">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+          <button onclick="refreshAdminData()" class="w-full sm:w-auto px-2.5 sm:px-3 py-2.5 sm:py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 flex-shrink-0"></i>
             <span>Làm mới</span>
           </button>
         </div>
