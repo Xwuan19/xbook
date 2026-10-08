@@ -17,24 +17,27 @@
 let adminClassFilterValue = '__ALL__';
 let currentAdminTab = 'orders';
 
-// Bộ lọc theo ngày trong bảng quản trị (quyết toán từng ngày)
-let adminDatePreset = 'all';      // all | today | yesterday | 7d | 30d | custom
+// Bộ lọc theo ngày trong bảng quản trị (theo dõi ngày nhận sách & quyết toán)
+let adminDatePreset = 'all';      // all | today | tomorrow | yesterday | 7d | 30d | custom
 let adminDateFrom = '';           // YYYY-MM-DD
 let adminDateTo = '';             // YYYY-MM-DD
-let adminDateBasis = 'created';   // created = ngày đặt hàng | paid = ngày thanh toán
+let adminDateBasis = 'delivery';  // delivery = ngày nhận sách | created = ngày đặt hàng | paid = ngày thanh toán
 
-// ============================ LỌC THEO NGÀY (QUYẾT TOÁN TỪNG NGÀY) ============================
-/** Ngày dùng để lọc: ngày đặt hàng (createdAt) hoặc ngày tiền về (paidAt) */
+// ============================ LỌC THEO NGÀY (THEO DÕI & QUYẾT TOÁN) ============================
+/** Ngày dùng để lọc: ngày nhận sách (deliveryAt), ngày đặt hàng (createdAt) hoặc ngày tiền về (paidAt) */
 function orderFilterDateKey(order, basis = adminDateBasis) {
-  if (basis === 'paid') return localDateKey(order.paidAt);
+  if (basis === 'delivery') return localDateKey(order.deliveryAt) || localDateKey(order.createdAt);
+  if (basis === 'paid') return localDateKey(order.paidAt) || localDateKey(order.createdAt);
   return localDateKey(order.createdAt);
 }
 
 /** Nhãn ngắn cho khoảng đang lọc (hiển thị ở dòng tóm tắt + file Excel) */
 function adminDateRangeLabel() {
-  const basisLabel = adminDateBasis === 'paid' ? 'ngày thanh toán' : 'ngày đặt hàng';
+  const basisLabel = adminDateBasis === 'delivery' ? 'ngày nhận sách'
+    : (adminDateBasis === 'paid' ? 'ngày thanh toán' : 'ngày đặt hàng');
   if (adminDatePreset === 'all') return `Tất cả thời gian (theo ${basisLabel})`;
   if (adminDatePreset === 'today') return `Hôm nay ${formatDateKeyVN(adminDateFrom)} (theo ${basisLabel})`;
+  if (adminDatePreset === 'tomorrow') return `Ngày mai ${formatDateKeyVN(adminDateFrom)} (theo ${basisLabel})`;
   if (adminDatePreset === 'yesterday') return `Hôm qua ${formatDateKeyVN(adminDateFrom)} (theo ${basisLabel})`;
   if (adminDateFrom === adminDateTo) return `Ngày ${formatDateKeyVN(adminDateFrom)} (theo ${basisLabel})`;
   return `Từ ${formatDateKeyVN(adminDateFrom)} đến ${formatDateKeyVN(adminDateTo)} (theo ${basisLabel})`;
@@ -352,6 +355,7 @@ function initAdminDelegatedEvents() {
 const ADMIN_DATE_PRESETS = [
   { value: 'all', label: 'Tất cả' },
   { value: 'today', label: 'Hôm nay' },
+  { value: 'tomorrow', label: 'Ngày mai' },
   { value: 'yesterday', label: 'Hôm qua' },
   { value: '7d', label: '7 ngày' },
   { value: '30d', label: '30 ngày' }
@@ -361,8 +365,17 @@ function setAdminDatePreset(preset) {
   adminDatePreset = preset;
   const today = localDateKey(new Date());
   if (preset === 'today') { adminDateFrom = today; adminDateTo = today; }
+  else if (preset === 'tomorrow') { adminDateFrom = shiftDateKey(1); adminDateTo = shiftDateKey(1); }
   else if (preset === 'yesterday') { adminDateFrom = shiftDateKey(-1); adminDateTo = shiftDateKey(-1); }
-  else if (preset === '7d') { adminDateFrom = shiftDateKey(-6); adminDateTo = today; }
+  else if (preset === '7d') {
+    if (adminDateBasis === 'delivery') {
+      adminDateFrom = today;
+      adminDateTo = shiftDateKey(7);
+    } else {
+      adminDateFrom = shiftDateKey(-6);
+      adminDateTo = today;
+    }
+  }
   else if (preset === '30d') { adminDateFrom = shiftDateKey(-29); adminDateTo = today; }
   else if (preset === 'all') { adminDateFrom = ''; adminDateTo = ''; }
   renderAdminDateFilter();
@@ -375,7 +388,9 @@ function setAdminDateSingleDay(dateKey) {
     setAdminDatePreset('all');
     return;
   }
-  adminDatePreset = dateKey === localDateKey(new Date()) ? 'today'
+  const today = localDateKey(new Date());
+  adminDatePreset = dateKey === today ? 'today'
+    : dateKey === shiftDateKey(1) ? 'tomorrow'
     : dateKey === shiftDateKey(-1) ? 'yesterday' : 'custom';
   adminDateFrom = dateKey;
   adminDateTo = dateKey;
@@ -398,7 +413,7 @@ function handleAdminDateRangeInput() {
 }
 
 function setAdminDateBasis(basis) {
-  adminDateBasis = basis === 'paid' ? 'paid' : 'created';
+  adminDateBasis = basis === 'created' ? 'created' : (basis === 'paid' ? 'paid' : 'delivery');
   renderAdminDateFilter();
   renderAdminTabsWithFilter();
 }
@@ -419,8 +434,8 @@ function renderAdminDateFilter() {
   const basisWrap = document.getElementById('adminDateBasisChips');
   if (basisWrap) {
     basisWrap.innerHTML = [
-      { value: 'created', label: 'Ngày đặt hàng' },
-      { value: 'paid', label: 'Ngày thanh toán' }
+      { value: 'delivery', label: 'Ngày nhận sách' },
+      { value: 'created', label: 'Ngày đặt hàng' }
     ].map(b => {
       const active = adminDateBasis === b.value;
       return `<button type="button" data-date-basis="${b.value}" title="Đổi cách tính ngày để lọc/quyết toán"
@@ -1705,7 +1720,7 @@ async function exportToExcel() {
     const daily = groupOrdersByDay(paidOrders);
     const sheet5Rows = [
       ["BẢNG QUYẾT TOÁN THEO NGÀY (CHỈ TÍNH ĐƠN ĐÃ THANH TOÁN)"],
-      [`Thời gian xuất: ${exportTime} | ${rangeLabel} | Tính theo: ${adminDateBasis === 'paid' ? 'ngày tiền về' : 'ngày khách đặt'}`],
+      [`Thời gian xuất: ${exportTime} | ${rangeLabel} | Tính theo: ${adminDateBasis === 'delivery' ? 'ngày nhận sách' : (adminDateBasis === 'paid' ? 'ngày tiền về' : 'ngày khách đặt')}`],
       [],
       ["Ngày", "Thứ", "Số Đơn Đã Nộp", "Số Cuốn", "Doanh Thu (đ)", "Trung bình / Đơn (đ)"]
     ];

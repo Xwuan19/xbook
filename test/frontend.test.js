@@ -492,6 +492,14 @@ test('admin filters orders by order date / payment date and settles per day', as
   window.setAdminDateSingleDay(dayKey(-1));
   assert.equal(window.isAdminDateFilterActive(), false);
 
+  // 4b. Lọc theo NGÀY NHẬN SÁCH: gán deliveryAt cho đơn và lọc theo ngày nhận
+  window.cachedPaidOrders[0].deliveryAt = at(1); // đơn 1 nhận ngày mai
+  window.cachedPaidOrders[1].deliveryAt = at(2); // đơn 2 nhận ngày kia
+  window.setAdminDateBasis('delivery');
+  window.setAdminDatePreset('tomorrow');
+  assert.deepEqual(window.filteredPaidOrders.map(o => o.orderCode), [1]);
+  assert.match(window.adminDateRangeLabel(), /ngày nhận sách/);
+
   // 5. Đổi sang NGÀY THANH TOÁN: hôm nay = 2 đơn (1 + 2), hôm qua = 1 đơn
   window.setAdminDateBasis('paid');
   window.setAdminDatePreset('today');
