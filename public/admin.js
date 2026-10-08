@@ -685,13 +685,19 @@ function renderAdminOrderList() {
             </td>
             <td class="p-2.5 font-black text-emerald-600 text-xs whitespace-nowrap">${formatMoney(o.amount)}</td>
             <td class="p-2.5 text-center print:hidden">
-              <label class="inline-flex items-center space-x-1.5 cursor-pointer bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg">
-                <input type="checkbox" ${o.isDelivered ? 'checked' : ''} onchange="toggleDelivered(${o.orderCode})"
-                  class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer" />
-                <span class="text-[11px] font-bold ${o.isDelivered ? 'text-emerald-700' : 'text-slate-600'}">
-                  ${o.isDelivered ? '✓ Đã phát' : 'Chưa'}
-                </span>
-              </label>
+              <div class="inline-flex items-center gap-1 justify-center">
+                <label class="inline-flex items-center space-x-1.5 cursor-pointer bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg">
+                  <input type="checkbox" ${o.isDelivered ? 'checked' : ''} onchange="toggleDelivered(${o.orderCode})"
+                    class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer" />
+                  <span class="text-[11px] font-bold ${o.isDelivered ? 'text-emerald-700' : 'text-slate-600'}">
+                    ${o.isDelivered ? '✓ Đã phát' : 'Chưa'}
+                  </span>
+                </label>
+                <button type="button" onclick="handleDeleteOrder(${o.orderCode}, '${escapeHtml(o.customerName)}')" title="Xóa đơn hàng này"
+                  class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
             </td>
           </tr>
         `;
@@ -732,10 +738,16 @@ function renderAdminOrderList() {
                 <div class="text-xs font-black text-emerald-600 mt-0.5">${formatMoney(o.amount)}</div>
               </div>
             </div>
-            <button onclick="toggleDelivered(${o.orderCode})"
-              class="flex-shrink-0 px-3 py-1.5 rounded-xl text-xs border transition flex items-center space-x-1 ${btnClass}">
-              <span>${isDelivered ? '✓ Đã phát' : 'Chưa phát'}</span>
-            </button>
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+              <button onclick="toggleDelivered(${o.orderCode})"
+                class="px-2.5 py-1.5 rounded-xl text-xs border transition flex items-center space-x-1 ${btnClass}">
+                <span>${isDelivered ? '✓ Đã phát' : 'Chưa phát'}</span>
+              </button>
+              <button type="button" onclick="handleDeleteOrder(${o.orderCode}, '${escapeHtml(o.customerName)}')" title="Xóa đơn hàng này"
+                class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
           </div>
         `;
       }).join('');
@@ -1532,6 +1544,25 @@ async function toggleDelivered(orderCode) {
     await refreshAdminData();
   } catch (e) {
     console.error("Lỗi toggle phát sách:", e);
+  }
+}
+
+async function handleDeleteOrder(orderCode, name) {
+  const confirmed = confirm(`Bạn có chắc chắn muốn xóa đơn hàng của "${name || 'khách này'}" không?\nThao tác này sẽ xóa vĩnh viễn đơn khỏi cơ sở dữ liệu.`);
+  if (!confirmed) return;
+
+  try {
+    const res = await adminFetch(`/api/admin/orders/${orderCode}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      alert("Lỗi: " + (data.message || "Không thể xóa đơn hàng!"));
+      return;
+    }
+    await refreshAdminData();
+  } catch (err) {
+    alert("Lỗi khi xóa đơn: " + err.message);
   }
 }
 

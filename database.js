@@ -687,6 +687,32 @@ class Database {
     return null;
   }
 
+  async deleteOrder(orderCode) {
+    const code = Number(orderCode);
+    if (this.isNeon) {
+      try {
+        const rows = await this.sql`
+          DELETE FROM orders 
+          WHERE order_code = ${code} 
+          RETURNING order_code
+        `;
+        return rows && rows.length > 0;
+      } catch (err) {
+        console.error("Lỗi Neon deleteOrder:", err.message);
+        return false;
+      }
+    }
+
+    const db = this.readFile();
+    const initialLen = db.orders.length;
+    db.orders = db.orders.filter(o => o.orderCode !== code);
+    if (db.orders.length !== initialLen) {
+      this.writeFile(db);
+      return true;
+    }
+    return false;
+  }
+
   // --- THỐNG KÊ ĐỂ BÁO SỐ LƯỢNG CHO CHÚ & PHÁT SÁCH ---
   async getStatistics() {
     let settings = null;

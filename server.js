@@ -696,6 +696,21 @@ app.post('/api/admin/toggle-delivered', requireAdminAuth, async (req, res) => {
 });
 
 /**
+ * 8b. QUẢN TRỊ: XÓA ĐƠN HÀNG (YÊU CẦU MẬT KHẨU)
+ */
+app.delete('/api/admin/orders/:orderCode', requireAdminAuth, async (req, res) => {
+  try {
+    const { orderCode } = req.params;
+    const deleted = await db.deleteOrder(orderCode);
+    if (!deleted) return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng để xóa!" });
+    console.log(` [ADMIN] Đã xóa đơn hàng mã: ${orderCode}`);
+    res.json({ success: true, message: "Đã xóa đơn hàng thành công!" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * 9. QUẢN TRỊ GIÁO TRÌNH: THÊM / SỬA / XÓA (PHÂN LOẠI KHOA & LỚP)
  */
 function normalizeBookPayload(body) {
