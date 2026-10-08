@@ -2,7 +2,25 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## ✨ Điểm mới (v1.4.0) — Trang quản trị riêng `/admin.html` (route `/admin`)
+## ✨ Điểm mới (v1.4.1) — Tối ưu trải nghiệm đặt sách trên điện thoại
+
+| Tính năng | Mô tả |
+|---|---|
+| 📱 **Form đặt mua thành sheet trượt từ đáy** | Trên mobile, `#checkoutModal` (và modal ảnh minh họa, modal mã QR) **trượt từ đáy lên**, bo góc trên, có "tay nắm". Desktop giữ nguyên hộp thoại giữa màn hình (`sm:items-center`) |
+| 📌 **Nút "Tạo mã QR" luôn trong tầm ngón cái** | Header + **tổng tiền + nút gửi dính cố định** ở đáy sheet, thân form cuộn riêng (`[data-sheet-body]`) → không phải cuộn tìm nút, bàn phím bật lên cũng không che mất nút |
+| ⌨️ **Bàn phím không che form** | `initSheetKeyboardFix()` đo chiều cao bàn phím qua **VisualViewport** → đẩy sheet lên đúng bằng đó (`--xb-keyboard`), đồng thời thu nhỏ `max-height` của sheet |
+| 🔍 **iPhone không còn tự phóng to trang** | Mọi ô nhập (tên, SĐT, ngày, ô tìm lớp) **16px trên mobile**; bỏ `user-scalable=no` để khách pinch-zoom xem giá & mã QR |
+| 👆 **Nút chạm chuẩn 44px** | Nút *Chọn mua* 44px, *Mua & Quét QR* 48px, nút gửi đơn 52px, +/- số lượng 40px, chip khoa 38px, ô chọn lớp 44px, nút đóng 36px |
+| 🧾 **Màn hình QR hợp với điện thoại** | QR tự co theo bề ngang (`min(13rem,60vw)`), thêm nút **Mở app ngân hàng** (`checkoutUrl` PayOS — mở thẳng app banking) + **Mở ảnh QR** + **Chép nội dung**, kèm mẹo chụp màn hình để quét. Trên điện thoại không thể quét QR trên chính màn hình đó |
+| ✅ **Báo lỗi đúng chỗ** | Thiếu tên/SĐT/lớp/ngày nhận → hiện lỗi tại chỗ (ngày nhận sách có ô lỗi riêng `#formCustomerDeliveryDateError`) **và tự cuộn + focus** vào ô cần sửa |
+| 🛒 **Phản hồi khi chọn sách** | Thêm/bớt sách có **toast** ở đáy màn hình + **rung nhẹ** (`navigator.vibrate`) — mobile không có hover nên phải báo rõ đã bấm được |
+| 🚫 **Khóa cuộn nền khi mở sheet** | `body.xb-modal-open` + `overscroll-contain`; **bấm nền tối hoặc Esc** để đóng; mở nhiều sheet chỉ nhả khóa khi đóng hết |
+| 📎 **Bộ lọc dính dưới header** | `#filterBar` sticky (`top-14 sm:top-16`) — lướt qua 30 đầu sách vẫn đổi khoa/lớp được ngay |
+| 🍏 **Né tai thỏ / thanh home iPhone** | `viewport-fit=cover` + `env(safe-area-inset-bottom)` cho thanh giỏ hàng và chân các sheet; chiều cao dùng `dvh` (trừ thanh địa chỉ trình duyệt) |
+| 📋 **Chép nội dung CK chạy cả trên http://** | `copyToClipboard()` có đường dự phòng `execCommand('copy')` khi vào bằng mạng LAN (không có `navigator.clipboard`) + báo lại bằng toast |
+| 🧪 **Test** | **15/15 bài pass** — thêm test *mobile storefront* (sheet + khóa cuộn + đóng bằng nền tối/Esc + toast + kích thước nút chạm + lỗi focus + nút QR). Bump SW cache **v10 → v11** |
+
+## ✨ Điểm cũ (v1.4.0) — Trang quản trị riêng `/admin.html` (route `/admin`)
 
 | Tính năng | Mô tả |
 |---|---|
@@ -404,3 +422,50 @@ Nằm trong **trang quản trị `/admin` → Bảng Quản Lý → tab Quyết 
 4. Mọi số liệu **bám đúng khoảng ngày + mốc thời gian** đang chọn ở thanh *“Lọc theo ngày”* (VD chọn *Hôm nay* → chỉ tính sách bán hôm nay).
 5. **Excel**: sheet **“Sách Đã Bán”** có STT · Tên sách · SL bán · Tỷ trọng (%) · Doanh thu · Đơn giá TB + dòng TỔNG CỘNG.
 6. Nguồn dữ liệu: `computeBookSummary()` (tính tại client từ `items[]` của đơn **PAID**) → tương thích cả đơn 1 cuốn đời cũ và đơn nhiều cuốn.
+
+---
+
+## 📱 15. Tối Ưu Trải Nghiệm Đặt Sách Trên Điện Thoại
+
+Khách của XBook chủ yếu đặt sách **bằng điện thoại**, nên toàn bộ luồng *chọn sách → điền thông tin → quét QR* được dựng mobile-first:
+
+### 15.1. Sheet trượt từ đáy thay cho hộp thoại giữa màn hình
+```
+<div id="checkoutModal" class="fixed inset-0 z-50 hidden …">
+  <div data-modal-backdrop="checkoutModal" class="absolute inset-0"></div>   ← bấm để đóng
+  <div class="xb-sheet-lift … items-end justify-center sm:items-center sm:p-4">
+    <form id="orderForm" class="xb-sheet xb-sheet-max flex flex-col …">
+      <div class="flex-shrink-0 …">header + nút đóng</div>                    ← dính trên
+      <div data-sheet-body class="flex-1 overflow-y-auto …">các ô nhập</div>  ← cuộn riêng
+      <div class="flex-shrink-0 … xb-safe-bottom">tổng tiền + nút gửi</div>   ← dính dưới
+    </form>
+```
+- `items-end` (mobile) / `sm:items-center` (desktop) → **cùng một markup**, hai cách hiển thị.
+- `xb-sheet-max` = `92dvh` (đã trừ thanh địa chỉ), `xb-sheet-lift` = đẩy lên bằng chiều cao bàn phím.
+- `openModal()/closeModal()` (core.js) tự **khóa cuộn nền**, hỗ trợ **nền tối + Esc**, và nhả khóa khi đóng sheet cuối cùng.
+
+### 15.2. Bàn phím ảo không che mất nút gửi
+`initSheetKeyboardFix()` (core.js) nghe `visualViewport.resize/scroll` rồi ghi chiều cao phần bị che vào biến CSS `--xb-keyboard`; `.xb-sheet-lift` dùng biến đó làm `padding-bottom` và `.xb-sheet-max` trừ nó khỏi `max-height`. iPhone không thu nhỏ layout viewport khi mở bàn phím nên bắt buộc phải làm vậy.
+
+### 15.3. Kích thước nút chạm (khuyến nghị ≥ 44px)
+| Vị trí | Mobile | Desktop |
+|---|---|---|
+| Nút *Chọn mua* trên card sách | 44px | 36px |
+| *Mua & Quét QR* (thanh giỏ hàng) | 48px | auto |
+| *Tạo mã QR chuyển khoản* | 52px | 52px |
+| +/- số lượng trong giỏ | 40px | 40px |
+| Chip khoa | 38px | auto |
+| Ô chọn lớp (dropdown tự vẽ) | 40–48px theo size | auto |
+
+### 15.4. Màn hình thanh toán trên điện thoại
+Điện thoại **không tự quét được mã QR đang hiện trên chính nó**, nên modal QR có 3 lối ra:
+1. **Mở app ngân hàng để chuyển khoản** — dùng `checkoutUrl` PayOS trả về (deep-link sang app banking, tiền & nội dung điền sẵn).
+2. **Mở ảnh QR** — mở `img.vietqr.io` ở tab mới để lưu/chụp, rồi quét bằng máy khác hoặc quét từ thư viện ảnh.
+3. **Chép nội dung** — chuyển khoản tay; chạy được cả khi truy cập bằng `http://` (không có `navigator.clipboard`).
+
+### 15.5. Những chi tiết nhỏ nhưng quyết định
+- Ô nhập **16px trên mobile** → iOS không phóng to trang khi chạm vào ô nhập.
+- `touch-action: manipulation` → bỏ trễ 300ms và chặn double-tap-zoom khi bấm liên tục.
+- `env(safe-area-inset-bottom)` → thanh giỏ hàng không bị thanh home iPhone đè lên.
+- Bộ lọc khoa/lớp **dính dưới header** → đổi lớp không cần cuộn về đầu trang.
+- Toast + rung nhẹ khi thêm/bớt sách; báo lỗi **cuộn tới và focus** đúng ô cần sửa.

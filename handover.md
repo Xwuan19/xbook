@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.4.0 (Tách giao diện quản lý sang trang riêng /admin.html)
+## Phiên bản hiện tại: v1.4.1 (Tối ưu hiển thị mobile để khách dễ đặt sách)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -8,6 +8,27 @@
 - **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
+
+## 0g. Điểm mới v1.4.1 (tối ưu hiển thị mobile — khách dễ đặt sách trên điện thoại)
+
+- **Mục tiêu**: khách của XBook đặt sách chủ yếu bằng điện thoại, nhưng luồng đặt hàng vẫn dựng theo kiểu desktop (modal giữa màn hình, nút nhỏ, ô nhập 14px bị iOS phóng to, bàn phím che mất nút gửi).
+- **3 modal trang chủ chuyển thành SHEET trượt từ đáy trên mobile** (`#checkoutModal`, `#bookPreviewModal`, `#qrPaymentModal`):
+  - Cùng 1 markup cho 2 kiểu hiển thị: wrapper `items-end` (mobile) + `sm:items-center sm:p-4` (desktop), panel `xb-sheet xb-sheet-max flex flex-col rounded-t-[28px] sm:rounded-3xl sm:max-w-lg`.
+  - **Sheet đặt mua là chính `<form id="orderForm">`** để nút `type="submit"` ở chân sheet vẫn submit được form: header `flex-shrink-0` → thân `[data-sheet-body] flex-1 overflow-y-auto overscroll-contain` → chân `flex-shrink-0 … xb-safe-bottom` chứa **tổng tiền + nút "Tạo mã QR"**. Nút gửi luôn trong tầm ngón cái, không phải cuộn tìm.
+  - `openCheckoutModal()` đặt lại `scrollTop = 0` của `[data-sheet-body]` mỗi lần mở.
+- **Bàn phím ảo không che form** — `initSheetKeyboardFix()` (core.js): iPhone không thu nhỏ layout viewport khi mở bàn phím nên nút dính đáy bị che. Hàm này đo `window.innerHeight - visualViewport.offsetTop - visualViewport.height` → ghi vào biến CSS `--xb-keyboard`; `.xb-sheet-lift` dùng làm `padding-bottom`, `.xb-sheet-max` trừ khỏi `max-height`. Không có `visualViewport` (jsdom/trình duyệt cũ) thì bỏ qua.
+- **`openModal()/closeModal()` (core.js) nâng cấp cho mobile**: khóa cuộn nền bằng `body.xb-modal-open` (nhả khi đóng sheet cuối cùng, trả lại `window.scrollTo`), **bấm nền tối** (`[data-modal-backdrop]`) hoặc **phím Esc** để đóng. Nhiều sheet chồng nhau được đếm bằng `xbOpenModals`.
+- **iPhone không tự phóng to trang**: `@media (max-width: 640px) { input, textarea, select { font-size: 16px !important; } }`; viewport bỏ `maximum-scale=1.0, user-scalable=no` (khách pinch-zoom xem giá/QR được), giữ `viewport-fit=cover`.
+- **Nút chạm đủ lớn**: *Chọn mua* `min-h-[44px]`, *Mua & Quét QR* `min-h-[48px]`, nút gửi đơn `min-h-[52px]`, +/- số lượng `h-10 w-10`, chip khoa `min-h-[38px]`, trigger `XBookSelect` `min-h-[40px]/[44px]/[48px]` theo size (desktop giữ nguyên kích thước cũ qua `sm:min-h-0`), nút đóng sheet `h-9 w-9`, cộng `touch-action: manipulation` + bỏ `-webkit-tap-highlight-color`.
+- **Card sách vẫn `aspect-square` 2 cột** nhưng dồn lại cho vừa: ảnh minh họa đổi từ **nút chữ 1 dòng** thành **nút icon góc phải** (`h-8 w-8`, có `aria-label`) để không tốn thêm ~28px chiều dọc, padding `p-2.5 sm:p-4`; nhờ vậy nút mua 44px vẫn nằm gọn trong khối vuông ở màn 320–360px.
+- **Màn hình QR cho điện thoại** (không thể quét QR trên chính màn hình đó): QR co theo bề ngang `w-[min(13rem,60vw)] sm:w-60`; chân sheet có **Mở app ngân hàng** (`#qrOpenBankButton` ← `checkoutUrl` PayOS, ẩn nếu không có), **Mở ảnh QR** (`#qrSaveImageLink` ← link `img.vietqr.io`), **Chép nội dung**; tiền về thì `handlePaymentSuccess()` ẩn `#qrPendingActions` và hiện `#qrDoneButton`. `handleCreatePayment()` nay truyền thêm `checkoutUrl` vào `showQRPaymentModal()`.
+- **Báo lỗi đúng chỗ**: `focusFieldError()` = hiện lỗi + `scrollIntoView({block:'center'})` + `focus({preventScroll:true})`; ngày nhận sách có ô lỗi riêng **`#formCustomerDeliveryDateError`** (trước đây báo bằng `alert`).
+- **Phản hồi chạm**: `showToast()` (host `#toastHost`, giữ tối đa 2 toast) + `hapticTap()` (`navigator.vibrate`) khi thêm/bớt sách, đổi số lượng, tiền về, chép nội dung thành công.
+- **`copyToClipboard()` chạy được trên `http://`**: khi vào bằng IP mạng LAN thì `navigator.clipboard` **không tồn tại** (chỉ có ở secure context) → code cũ ném `TypeError`. Nay có nhánh dự phòng `textarea + document.execCommand('copy')` và báo kết quả bằng toast/alert.
+- **Khác**: `#filterBar` sticky `top-14 sm:top-16` (đổi khoa/lớp không cần cuộn lên đầu), header gọn `h-14 sm:h-16`, `px-3 sm:px-6`, `main` thêm `pb-32 sm:pb-28` để thanh giỏ hàng không đè card cuối, `env(safe-area-inset-bottom)` cho thanh giỏ hàng + chân sheet, chiều cao dùng `dvh`.
+- ⚠️ **Không đổi**: `server.js`, `domain.js`, `admin.js`/`admin.html` (giao diện quản trị vẫn như v1.4.0), cấu trúc dữ liệu đơn hàng và API.
+- **`public/sw.js` bump cache v10 → v11** để máy đã cài PWA nhận giao diện mobile mới.
+- **Kiểm thử 15/15 pass**: thêm test *mobile storefront* trong `test/frontend.test.js` — mở/đóng sheet (khóa cuộn nền, đóng bằng nền tối, đóng bằng Esc, 2 sheet chồng nhau), toast khi thêm sách, kích thước nút chạm, bộ lọc sticky, thiếu tên/thiếu ngày → ô lỗi hiện **và `document.activeElement` đúng ô đó**, nút QR (`checkoutUrl`, link ảnh, đổi sang *Hoàn tất* khi tiền về), `copyToClipboard` không ném lỗi khi không có `navigator.clipboard`.
 
 ## 0f. Điểm mới v1.4.0 (trang quản trị riêng /admin.html — gỡ modal khỏi trang chủ)
 
@@ -135,6 +156,10 @@
 ---
 
 ## 3. Lịch Sử Thay Đổi
+- **v1.4.1**:
+  - **Mục tiêu**: Tối ưu **hiển thị trên mobile** để khách dễ đặt sách bằng điện thoại (luồng chọn sách → điền thông tin → quét QR).
+  - **Giải pháp**: 3 modal trang chủ thành **sheet trượt từ đáy** (form đặt mua có header/thân/chân riêng, nút tạo QR dính đáy), thêm `initSheetKeyboardFix()` chống bàn phím che nút, `openModal/closeModal` khóa cuộn nền + đóng bằng nền tối/Esc, ô nhập 16px trên mobile + cho phép pinch-zoom, nút chạm ≥44px, toast + rung khi chọn sách, màn hình QR thêm nút *Mở app ngân hàng*/*Mở ảnh QR*, báo lỗi cuộn tới + focus đúng ô, safe-area + `dvh`, `copyToClipboard` có nhánh dự phòng cho `http://`, bump SW cache v11.
+  - **Kết quả**: Đặt sách trên điện thoại bằng 1 tay: không bị phóng to trang, không phải cuộn tìm nút gửi, không bị bàn phím che; 15/15 test pass.
 - **v1.4.0**:
   - **Mục tiêu**: Tách **toàn bộ giao diện quản lý** ra khỏi trang chủ thành **trang riêng `/admin.html`** (kèm route chuyển hướng `/admin`), gỡ modal quản trị khỏi trang chủ để trang sinh viên nhẹ và sạch.
   - **Giải pháp**: dựng `public/admin.html` (form đăng nhập + Bảng Quản Lý + form sách, giữ nguyên `#printArea`/CSS in), tách `public/app.js` thành `core.js` (dùng chung) + `app.js` (trang chủ) + `admin.js` (quản trị), thêm route `/admin` → 302 `/admin.html` ở `server.js` + `redirects` trong `vercel.json`, bump SW cache v6 và cache offline riêng từng trang, viết thêm `test/routes.test.js` + tách `test/frontend.test.js` theo trang.

@@ -3,7 +3,18 @@
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này (v1.4.0)
+## Mục tiêu đợt này (v1.4.1)
+1. **Tối ưu hiển thị trên mobile** để khách đặt sách dễ bằng điện thoại: form đặt mua dạng sheet trượt từ đáy, nút gửi luôn hiện, ô nhập không làm iPhone phóng to trang.
+2. **Màn hình thanh toán hợp với điện thoại**: không bắt khách quét QR trên chính màn hình đó — mở app ngân hàng / mở ảnh QR / chép nội dung.
+
+## Giai đoạn 12 (v1.4.1) — Tối ưu trải nghiệm đặt sách trên mobile
+- [x] T51. `public/index.html`: 3 modal trang chủ (`checkoutModal`, `bookPreviewModal`, `qrPaymentModal`) thành **sheet trượt từ đáy trên mobile / hộp thoại giữa trên desktop**; form đặt mua tách **header – thân cuộn (`[data-sheet-body]`) – chân dính** (tổng tiền + nút *Tạo mã QR*), thêm `#toastHost`, `#formCustomerDeliveryDateError`, safe-area (`xb-safe-bottom`) + `dvh` (`xb-sheet-max`), bỏ `user-scalable=no`, CSS ô nhập 16px + `touch-action: manipulation`.
+- [x] T52. `public/core.js`: `openModal/closeModal` **khóa cuộn nền** + đóng bằng **nền tối / Esc** (đếm sheet đang mở), `showToast()` + `hapticTap()`, `initSheetKeyboardFix()` (VisualViewport → `--xb-keyboard`), `XBookSelect` tăng kích thước chạm (`min-h-[40/44/48px]`, dòng lựa chọn `py-2.5`, panel `max-h-[45vh]`, không auto-focus ô tìm trên mobile), `copyToClipboard()` có nhánh dự phòng khi không có `navigator.clipboard`.
+- [x] T53. `public/app.js`: card sách giữ `aspect-square` nhưng **nút xem minh họa thành icon góc phải** + nút mua `min-h-[44px]`; toast + rung khi thêm/bớt sách và đổi số lượng; `focusFieldError()` (hiện lỗi → cuộn tới → focus); màn hình QR gắn **Mở app ngân hàng** (`checkoutUrl`) + **Mở ảnh QR** + đổi sang nút *Hoàn tất* khi tiền về; `#filterBar` sticky dưới header.
+- [x] T54. `public/sw.js`: bump cache **v10 → v11** để máy đã cài PWA nhận giao diện mobile mới.
+- [x] T55. Kiểm thử: thêm test **mobile storefront** trong `test/frontend.test.js` (sheet + khóa cuộn + đóng bằng nền tối/Esc + toast + kích thước nút chạm + lỗi focus + nút QR + copy fallback) — **15/15 pass**; cập nhật README (mục 15) / handover / TASKS / version 1.4.1.
+
+## Mục tiêu đợt trước (v1.4.0)
 1. **Tách toàn bộ giao diện quản lý** từ trang chủ sang **trang riêng `/admin.html`** (kèm route chuyển hướng **`/admin`**).
 2. **Gỡ modal quản lý khỏi trang chủ** — trang chủ chỉ còn phần dành cho sinh viên; code frontend tách rõ phần dùng chung / trang chủ / quản trị.
 
