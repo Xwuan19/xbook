@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.4.6 (Rút gọn nút chốt sổ thành icon + 2 chữ trên header)
+## Phiên bản hiện tại: v1.4.7 (Tối giản logo web: bỏ chữ "xbook" trong ảnh logo)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -8,6 +8,15 @@
 - **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
+
+## 0m. Điểm mới v1.4.7 (tối giản logo web: bỏ chữ "xbook" trong ảnh logo)
+
+- **Ảnh logo chính (`public/logo.png`)**:
+  - Đã loại bỏ dòng chữ "xbook" nhỏ xíu bên dưới biểu tượng, căn giữa biểu tượng cuốn sách xanh với tỷ lệ chuẩn ~70% chiều ngang canvas (tương đồng `apple-touch-icon.png`).
+  - Khi hiển thị trong khung `w-9 h-9 / w-10 h-10` trên header, biểu tượng to rõ, sắc nét, không còn lặp lại với chữ "xbook" đậm bên cạnh.
+  - Đồng bộ xuất ra thư mục `Downloads` (`logo.png`, `xbook-logo.png`).
+  - Đồng bộ các icon PWA: `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`.
+- **Cache**: Bump version 1.4.7, SW cache `xbook-static-v17`.
 
 ## 0l. Điểm mới v1.4.6 (rút gọn nút chốt sổ thành icon + 2 chữ: ĐÓNG SỔ / MỞ SỔ)
 

@@ -2,7 +2,14 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## ✨ Điểm mới (v1.4.6) — Rút gọn nút chốt sổ thành icon + 2 chữ (ĐÓNG SỔ / MỞ SỔ)
+## ✨ Điểm mới (v1.4.7) — Tối giản logo: bỏ chữ "xbook" trong ảnh logo web
+
+| Tính năng | Mô tả |
+|---|---|
+| 📖 **Logo tinh gọn & sắc nét** | Bỏ dòng chữ "xbook" nhỏ xíu bên dưới biểu tượng trong `public/logo.png`, căn giữa biểu tượng cuốn sách xanh; không còn lặp lại với chữ "xbook" to bên cạnh trên header. |
+| 📱 **Đồng bộ icon PWA** | Cập nhật `icon-192.png`, `icon-512.png`, `icon-maskable-512.png` theo logo mới; bump version **1.4.7**, SW cache **xbook-static-v17**. |
+
+## ✨ Điểm cũ (v1.4.6) — Rút gọn nút chốt sổ thành icon + 2 chữ (ĐÓNG SỔ / MỞ SỔ)
 
 | Tính năng | Mô tả |
 |---|---|
