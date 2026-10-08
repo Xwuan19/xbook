@@ -715,7 +715,7 @@ function renderAdminOrderList() {
         return `
           <tr class="hover:bg-slate-50 transition border-b border-slate-100">
             <td class="p-2.5 text-center font-bold text-slate-400 text-xs">${index + 1}</td>
-            <td class="p-2.5 font-extrabold text-sm ${deliveredClass}">
+            <td class="p-2.5 font-extrabold text-sm ${deliveredClass} cursor-pointer hover:text-emerald-700" onclick="openDeliveryDetail(${o.orderCode})" title="Bấm xem chi tiết sách">
               <div>${escapeHtml(o.customerName)}</div>
               <div class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-0.5 mt-1">
                 <i data-lucide="calendar" class="w-3.5 h-3.5 text-emerald-600"></i>
@@ -768,21 +768,21 @@ function renderAdminOrderList() {
         const btnClass = isDelivered
           ? 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold'
           : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 font-semibold';
+        const bookCount = orderBookCount(o);
+        const deliveryText = o.deliveryAt ? `nhận ${formatDelivery(o.deliveryAt)}` : '';
+        const metaSub = [
+          orderClassLabel(o) ? escapeHtml(orderClassLabel(o)) : '',
+          `${bookCount} cuốn${deliveryText ? ' · ' + escapeHtml(deliveryText) : ''}`
+        ].filter(Boolean).join(' · ');
 
         return `
-          <div class="p-3 rounded-2xl border ${cardBg} transition flex items-center justify-between gap-2.5">
-            <div class="flex items-start space-x-2.5 min-w-0">
-              <span class="w-6 h-6 rounded-full bg-slate-200/90 text-slate-700 font-extrabold text-[11px] flex items-center justify-center flex-shrink-0 mt-0.5">${index + 1}</span>
-              <div class="min-w-0">
+          <div class="p-2.5 sm:p-3 rounded-2xl border ${cardBg} transition flex items-center justify-between gap-2.5">
+            <div class="flex items-center space-x-2.5 min-w-0 flex-1 cursor-pointer" onclick="openDeliveryDetail(${o.orderCode})" title="Bấm xem sách bạn này đặt">
+              <span class="w-6 h-6 rounded-full bg-slate-200/90 text-slate-700 font-extrabold text-[11px] flex items-center justify-center flex-shrink-0">${index + 1}</span>
+              <div class="min-w-0 flex-1">
                 <div class="font-extrabold text-sm ${nameClass} truncate">${escapeHtml(o.customerName)}</div>
-                <div class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-1.5 py-0.5 mt-0.5">
-                  <i data-lucide="calendar" class="w-3 h-3 text-emerald-600"></i>
-                  Nhận sách: ${escapeHtml(formatDelivery(o.deliveryAt))}
-                </div>
-                ${o.customerClass ? `<div class="text-[10px] font-bold text-sky-600 mt-0.5">${escapeHtml(orderClassLabel(o))}</div>` : ''}
-                <div class="text-[11px] text-slate-700 font-medium mt-0.5">Sách: ${escapeHtml(orderItemsLabel(o))}</div>
-                <div class="text-[10px] font-bold text-slate-400 mt-0.5">
-                  Đặt: ${escapeHtml(formatDateKeyVN(localDateKey(o.createdAt)))}${o.paidAt ? ` · TT: ${escapeHtml(formatDateKeyVN(localDateKey(o.paidAt)))}` : ''}
+                <div class="text-[10px] text-slate-500 font-semibold truncate mt-0.5">
+                  ${metaSub}
                 </div>
                 <div class="text-xs font-black text-emerald-600 mt-0.5">${formatMoney(o.amount)}</div>
               </div>
@@ -791,6 +791,9 @@ function renderAdminOrderList() {
               <button onclick="toggleDelivered(${o.orderCode})"
                 class="min-h-[38px] px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center space-x-1 ${btnClass}">
                 <span>${isDelivered ? '✓ Đã phát' : 'Chưa phát'}</span>
+              </button>
+              <button onclick="openDeliveryDetail(${o.orderCode})" class="p-2 text-slate-400 hover:text-slate-700 transition" title="Xem chi tiết sách">
+                <i data-lucide="chevron-right" class="w-4 h-4"></i>
               </button>
               <button type="button" onclick="handleDeleteOrder(${o.orderCode}, '${escapeHtml(o.customerName)}')" title="Xóa đơn hàng này"
                 class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition">
@@ -803,6 +806,112 @@ function renderAdminOrderList() {
     }
   }
   lucide.createIcons();
+}
+
+/**
+ * ============================================================================
+ * LUỒNG PHÁT SÁCH 2 LỚP: MASTER (DANH SÁCH TÊN) -> DETAIL (SHEET TỪNG CUỐN)
+ * ============================================================================
+ */
+function getOrderForDeliveryDetail(orderCode) {
+  const code = Number(orderCode);
+  const pool = window.allAdminOrders || window.cachedPaidOrders || [];
+  return pool.find(o => Number(o.orderCode) === code) || null;
+}
+
+function openDeliveryDetail(orderCode) {
+  const o = getOrderForDeliveryDetail(orderCode);
+  if (!o) return;
+
+  const sheet = document.getElementById('deliveryDetailSheet');
+  if (!sheet) return;
+
+  const nameEl = document.getElementById('deliveryDetailName');
+  if (nameEl) nameEl.innerText = o.customerName || 'Người mua';
+
+  const metaEl = document.getElementById('deliveryDetailMeta');
+  if (metaEl) {
+    const metaParts = [
+      orderClassLabel(o) ? `Lớp: ${orderClassLabel(o)}` : '',
+      o.customerPhone ? `SĐT: ${o.customerPhone}` : '',
+      o.deliveryAt ? `Nhận: ${formatDelivery(o.deliveryAt)}` : ''
+    ].filter(Boolean);
+    metaEl.innerText = metaParts.join(' · ') || 'Đơn hàng XBook';
+  }
+
+  const badgeEl = document.getElementById('deliveryDetailStatusBadge');
+  if (badgeEl) {
+    badgeEl.className = `text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${
+      o.isDelivered ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
+    }`;
+    badgeEl.innerText = o.isDelivered ? '✓ Đã phát' : 'Chưa phát';
+  }
+
+  const bodyEl = document.getElementById('deliveryDetailBody');
+  if (bodyEl) {
+    const items = Array.isArray(o.items) && o.items.length > 0 ? o.items : [{
+      bookTitle: o.bookTitle || 'Sách',
+      quantity: o.quantity || 1,
+      unitPrice: o.unitPrice || o.amount
+    }];
+    const totalQty = items.reduce((sum, it) => sum + (Number(it.quantity) || 1), 0);
+
+    bodyEl.innerHTML = `
+      <div class="space-y-2.5">
+        ${items.map(it => {
+          const qty = Number(it.quantity) || 1;
+          const price = Number(it.unitPrice) || 0;
+          return `
+            <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div class="font-extrabold text-sm text-slate-900">${escapeHtml(it.bookTitle)}</div>
+                <div class="text-xs text-slate-500 font-semibold mt-0.5">
+                  Số lượng: <span class="text-emerald-700 font-bold">${qty}</span> cuốn${price ? ` · ${formatMoney(price)}/cuốn` : ''}
+                </div>
+              </div>
+              <div class="text-sm font-black text-emerald-600 whitespace-nowrap flex-shrink-0">
+                ${formatMoney(qty * price || o.amount)}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <div class="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-2 mt-3">
+        <div class="font-extrabold text-xs text-emerald-950">
+          Tổng cộng ${totalQty} cuốn
+        </div>
+        <div class="text-base font-black text-emerald-700">
+          ${formatMoney(o.amount)}
+        </div>
+      </div>
+    `;
+  }
+
+  const actionBtn = document.getElementById('deliveryDetailActionButton');
+  if (actionBtn) {
+    if (o.isDelivered) {
+      actionBtn.className = 'w-full min-h-[52px] py-3 px-4 rounded-2xl font-black text-sm transition flex items-center justify-center space-x-2 shadow-sm bg-slate-200 hover:bg-slate-300 text-slate-700';
+      actionBtn.innerHTML = `<i data-lucide="undo" class="w-5 h-5"></i><span>Đã phát — bấm để bỏ đánh dấu</span>`;
+    } else {
+      actionBtn.className = 'w-full min-h-[52px] py-3 px-4 rounded-2xl font-black text-sm transition flex items-center justify-center space-x-2 shadow-md bg-emerald-600 hover:bg-emerald-700 text-white';
+      actionBtn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5"></i><span>ĐÃ PHÁT SÁCH CHO BẠN NÀY</span>`;
+    }
+    actionBtn.onclick = () => markDeliveredAndBack(o.orderCode);
+  }
+
+  sheet.classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function closeDeliveryDetail() {
+  const sheet = document.getElementById('deliveryDetailSheet');
+  if (sheet) sheet.classList.add('hidden');
+}
+
+async function markDeliveredAndBack(orderCode) {
+  closeDeliveryDetail();
+  await toggleDelivered(orderCode);
 }
 
 /** TAB THEO TÊN — gộp các đơn của cùng 1 người (1 người mua nhiều cuốn khác nhau) */

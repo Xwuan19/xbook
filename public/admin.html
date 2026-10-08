@@ -342,7 +342,7 @@
               </div>
             </div>
 
-            <div class="max-h-64 sm:max-h-80 overflow-y-auto border border-slate-200 rounded-2xl shadow-inner bg-slate-50/50">
+            <div class="sm:max-h-80 sm:overflow-y-auto border border-slate-200 rounded-2xl shadow-inner bg-slate-50/50">
               <!-- DESKTOP: TABLE -->
               <table class="w-full text-left text-xs hidden sm:table">
                 <thead class="bg-slate-100 text-slate-700 sticky top-0 border-b border-slate-200 z-10">
@@ -774,6 +774,39 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- SHEET CHI TIẾT ĐƠN PHÁT SÁCH (MASTER -> DETAIL TRÊN MOBILE & DESKTOP) -->
+  <!-- ========================================================================= -->
+  <div id="deliveryDetailSheet" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4">
+    <div class="bg-white w-full sm:max-w-md h-full sm:h-auto sm:max-h-[90vh] sm:rounded-3xl flex flex-col shadow-2xl overflow-hidden">
+      <!-- HEADER DÍNH: NÚT QUAY LẠI + TÊN + TRẠNG THÁI -->
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-3 bg-white sticky top-0 z-10">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <button type="button" onclick="closeDeliveryDetail()" class="p-2 -ml-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition flex-shrink-0" title="Quay lại danh sách">
+            <i data-lucide="arrow-left" class="w-5 h-5"></i>
+          </button>
+          <div class="min-w-0">
+            <h3 id="deliveryDetailName" class="text-base font-extrabold text-slate-900 truncate">Họ và tên</h3>
+            <p id="deliveryDetailMeta" class="text-xs text-slate-500 truncate">Lớp · SĐT</p>
+          </div>
+        </div>
+        <span id="deliveryDetailStatusBadge" class="text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0"></span>
+      </div>
+
+      <!-- BODY CUỘN: TỪNG CUỐN SÁCH NGƯỜI ĐÓ ĐẶT + TỔNG CỘNG -->
+      <div id="deliveryDetailBody" class="p-4 space-y-3 overflow-y-auto flex-1">
+        <!-- Render động từ JS -->
+      </div>
+
+      <!-- FOOTER DÍNH: NÚT ĐÃ PHÁT SÁCH TO CHO DỄ CHẠM -->
+      <div class="p-4 border-t border-slate-100 bg-slate-50 sticky bottom-0 z-10">
+        <button id="deliveryDetailActionButton" type="button" class="w-full min-h-[52px] py-3 px-4 rounded-2xl font-black text-sm transition flex items-center justify-center space-x-2 shadow-md">
+          <!-- Render động từ JS: ĐÃ PHÁT SÁCH CHO BẠN NÀY -->
+        </button>
+      </div>
     </div>
   </div>
 

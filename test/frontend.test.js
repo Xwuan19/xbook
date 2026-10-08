@@ -440,6 +440,27 @@ test('admin filters orders by order date / payment date and settles per day', as
   toggleDateBtn.click();
   assert.equal(dateControls.classList.contains('xb-open'), false, 'bấm đóng bộ lọc ngày');
 
+  // 1e. Luồng 2 lớp: danh sách master gọn (không nhồi "Sách:"), bấm tên mở sheet chi tiết từng cuốn
+  const mobileCards = window.document.querySelectorAll('#adminOrderMobileList > div');
+  assert.ok(mobileCards.length > 0, 'có danh sách master mobile');
+  assert.equal(window.document.getElementById('adminOrderMobileList').textContent.includes('Sách:'), false, 'master không còn nhồi dòng Sách:');
+  assert.match(mobileCards[0].innerHTML, /openDeliveryDetail\(/, 'hàng master có onclick="openDeliveryDetail(N)"');
+
+  // Mở chi tiết đơn hàng số 2
+  window.openDeliveryDetail(2);
+  const detailSheet = window.document.getElementById('deliveryDetailSheet');
+  assert.ok(detailSheet);
+  assert.equal(detailSheet.classList.contains('hidden'), false, 'sheet chi tiết mở');
+  assert.equal(window.document.getElementById('deliveryDetailName').innerText, 'Bạn 2');
+  assert.match(window.document.getElementById('deliveryDetailBody').textContent, /Shared/);
+  assert.match(window.document.getElementById('deliveryDetailBody').textContent, /Other/);
+  assert.match(window.document.getElementById('deliveryDetailBody').textContent, /Tổng cộng 3 cuốn/);
+  assert.match(window.document.getElementById('deliveryDetailActionButton').textContent, /ĐÃ PHÁT/);
+
+  // Đóng sheet chi tiết
+  window.closeDeliveryDetail();
+  assert.equal(detailSheet.classList.contains('hidden'), true, 'sheet chi tiết ẩn lại');
+
   // Cờ in gộp bật khi ở tab Phát sách hoặc Cần in
   assert.equal(window.document.getElementById('printArea').dataset.printCombine, '1');
 
