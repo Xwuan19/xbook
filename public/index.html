@@ -156,58 +156,73 @@
       </div>
     </div>
 
-    <!-- DANH SÁCH CARD SÁCH: 2 cột mobile → 3 tablet → 4 desktop → 5 màn hình rộng.
-         Card dạng dọc (bìa 3:4) nên số cột phải tăng dần theo chiều ngang màn hình:
-         giữ 3 cột trên desktop sẽ khiến mỗi bìa rộng ~350px → cao ~470px, card khổng lồ.
-         `items-stretch` + card `flex flex-col` → các card cùng hàng luôn cao bằng nhau;
-         card có `min-w-0 overflow-hidden` → tiêu đề dài không đẩy tràn cột (trôi lưới). -->
+    <!-- DANH SÁCH CARD SÁCH: Khối hình vuông bo tròn (aspect-square rounded-2xl / sm:rounded-3xl).
+         Bỏ ảnh bìa trên card để trang gọn gàng, khách vuốt nhanh; có nút xem ảnh minh họa riêng cho cả desktop và mobile. -->
     <div id="bookGrid" class="grid grid-cols-2 items-stretch gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 lg:gap-4 xl:grid-cols-5">
-      <div class="animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div class="aspect-[3/4] w-full bg-slate-200"></div>
-        <div class="space-y-2 p-2.5 sm:p-3.5">
+      <div class="animate-pulse aspect-square overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-3 sm:p-4 flex flex-col justify-between">
+        <div class="space-y-2">
           <div class="h-3.5 w-full rounded bg-slate-200"></div>
           <div class="h-3.5 w-2/3 rounded bg-slate-200"></div>
-          <div class="h-[2.375rem] w-full rounded-xl bg-slate-200"></div>
+          <div class="h-2.5 w-1/2 rounded bg-slate-200"></div>
+        </div>
+        <div class="space-y-2 pt-2 border-t border-slate-100">
+          <div class="h-3 w-1/3 rounded bg-slate-200"></div>
+          <div class="h-8 w-full rounded-xl bg-slate-200"></div>
         </div>
       </div>
-      <div class="animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div class="aspect-[3/4] w-full bg-slate-200"></div>
-        <div class="space-y-2 p-2.5 sm:p-3.5">
+      <div class="animate-pulse aspect-square overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-3 sm:p-4 flex flex-col justify-between">
+        <div class="space-y-2">
           <div class="h-3.5 w-full rounded bg-slate-200"></div>
           <div class="h-3.5 w-2/3 rounded bg-slate-200"></div>
-          <div class="h-[2.375rem] w-full rounded-xl bg-slate-200"></div>
+          <div class="h-2.5 w-1/2 rounded bg-slate-200"></div>
+        </div>
+        <div class="space-y-2 pt-2 border-t border-slate-100">
+          <div class="h-3 w-1/3 rounded bg-slate-200"></div>
+          <div class="h-8 w-full rounded-xl bg-slate-200"></div>
         </div>
       </div>
-      <div class="hidden sm:block animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div class="aspect-[3/4] w-full bg-slate-200"></div>
-        <div class="space-y-2 p-2.5 sm:p-3.5">
+      <div class="hidden sm:flex animate-pulse aspect-square overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-3 sm:p-4 flex-col justify-between">
+        <div class="space-y-2">
           <div class="h-3.5 w-full rounded bg-slate-200"></div>
           <div class="h-3.5 w-2/3 rounded bg-slate-200"></div>
-          <div class="h-[2.375rem] w-full rounded-xl bg-slate-200"></div>
+          <div class="h-2.5 w-1/2 rounded bg-slate-200"></div>
+        </div>
+        <div class="space-y-2 pt-2 border-t border-slate-100">
+          <div class="h-3 w-1/3 rounded bg-slate-200"></div>
+          <div class="h-8 w-full rounded-xl bg-slate-200"></div>
         </div>
       </div>
-      <div class="hidden sm:block animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div class="aspect-[3/4] w-full bg-slate-200"></div>
-        <div class="space-y-2 p-2.5 sm:p-3.5">
+      <div class="hidden sm:flex animate-pulse aspect-square overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-3 sm:p-4 flex-col justify-between">
+        <div class="space-y-2">
           <div class="h-3.5 w-full rounded bg-slate-200"></div>
           <div class="h-3.5 w-2/3 rounded bg-slate-200"></div>
-          <div class="h-[2.375rem] w-full rounded-xl bg-slate-200"></div>
+          <div class="h-2.5 w-1/2 rounded bg-slate-200"></div>
+        </div>
+        <div class="space-y-2 pt-2 border-t border-slate-100">
+          <div class="h-3 w-1/3 rounded bg-slate-200"></div>
+          <div class="h-8 w-full rounded-xl bg-slate-200"></div>
         </div>
       </div>
-      <div class="hidden lg:block animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div class="aspect-[3/4] w-full bg-slate-200"></div>
-        <div class="space-y-2 p-2.5 sm:p-3.5">
+      <div class="hidden lg:flex animate-pulse aspect-square overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-3 sm:p-4 flex-col justify-between">
+        <div class="space-y-2">
           <div class="h-3.5 w-full rounded bg-slate-200"></div>
           <div class="h-3.5 w-2/3 rounded bg-slate-200"></div>
-          <div class="h-[2.375rem] w-full rounded-xl bg-slate-200"></div>
+          <div class="h-2.5 w-1/2 rounded bg-slate-200"></div>
+        </div>
+        <div class="space-y-2 pt-2 border-t border-slate-100">
+          <div class="h-3 w-1/3 rounded bg-slate-200"></div>
+          <div class="h-8 w-full rounded-xl bg-slate-200"></div>
         </div>
       </div>
-      <div class="hidden lg:block animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div class="aspect-[3/4] w-full bg-slate-200"></div>
-        <div class="space-y-2 p-2.5 sm:p-3.5">
+      <div class="hidden lg:flex animate-pulse aspect-square overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-3 sm:p-4 flex-col justify-between">
+        <div class="space-y-2">
           <div class="h-3.5 w-full rounded bg-slate-200"></div>
           <div class="h-3.5 w-2/3 rounded bg-slate-200"></div>
-          <div class="h-[2.375rem] w-full rounded-xl bg-slate-200"></div>
+          <div class="h-2.5 w-1/2 rounded bg-slate-200"></div>
+        </div>
+        <div class="space-y-2 pt-2 border-t border-slate-100">
+          <div class="h-3 w-1/3 rounded bg-slate-200"></div>
+          <div class="h-8 w-full rounded-xl bg-slate-200"></div>
         </div>
       </div>
     </div>
@@ -246,6 +261,36 @@
   <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400">
     <p>© XBook — QuyenLe</p>
   </footer>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: XEM ẢNH MINH HỌA GIÁO TRÌNH (DESKTOP & MOBILE) -->
+  <!-- ========================================================================= -->
+  <div id="bookPreviewModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-sm sm:max-w-md w-full p-4 sm:p-5 shadow-2xl relative border border-slate-100 my-auto max-h-[92vh] overflow-y-auto">
+      <button onclick="closeModal('bookPreviewModal')" class="absolute top-3.5 right-3.5 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full p-2 transition z-10">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+
+      <div class="text-center mb-3 pr-6">
+        <span class="inline-block text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-0.5 rounded-full mb-1">Ảnh minh họa giáo trình</span>
+        <h3 id="bookPreviewTitle" class="font-extrabold text-sm sm:text-base text-slate-900 leading-snug"></h3>
+        <p id="bookPreviewMeta" class="text-xs text-slate-400 mt-0.5"></p>
+      </div>
+
+      <div class="relative bg-slate-50 rounded-2xl overflow-hidden mb-3 border border-slate-200 flex items-center justify-center min-h-[12rem]">
+        <img id="bookPreviewImage" src="" alt="Ảnh bìa giáo trình" class="max-h-64 sm:max-h-80 w-auto object-contain mx-auto transition-transform" />
+      </div>
+
+      <div id="bookPreviewDescription" class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100 mb-3 leading-relaxed"></div>
+
+      <div class="flex items-center justify-between pt-2 border-t border-slate-100 mb-3">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Đơn giá</span>
+        <span id="bookPreviewPrice" class="text-base sm:text-lg font-black text-emerald-600"></span>
+      </div>
+
+      <div id="bookPreviewAction"></div>
+    </div>
+  </div>
 
   <!-- ========================================================================= -->
   <!-- MODAL 1: GIỎ HÀNG & ĐIỀN THÔNG TIN ĐẶT MUA (NHIỀU CUỐN TRONG 1 ĐƠN) -->

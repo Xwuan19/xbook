@@ -556,21 +556,29 @@ test('home book grid shows 2 columns on mobile with a compact vertical card', as
   assert.match(grid.className, /lg:grid-cols-4/);
   assert.match(grid.className, /xl:grid-cols-5/);
 
-  // 2. Card dạng dọc cho cột hẹp: khung bìa 3:4 + min-w-0/overflow-hidden chống tràn,
-  //    tên sách kẹp 2 dòng, luôn có nút mua full chiều ngang
+  // 2. Card dạng khối vuông bo tròn (aspect-square rounded-2xl / sm:rounded-3xl),
+  //    bỏ ảnh trực tiếp trên card để tinh gọn, tên sách kẹp 2 dòng, nút mua full chiều ngang
   const cards = [...grid.querySelectorAll('article[data-book-id]')];
   assert.equal(cards.length, 3);
   for (const card of cards) {
     assert.ok(card.classList.contains('min-w-0') && card.classList.contains('overflow-hidden'));
-    const cover = [...card.children].find((el) => /aspect-\[3\/4\]/.test(el.className));
-    assert.ok(cover, 'card có khung ảnh bìa tỉ lệ 3:4');
+    assert.ok(card.classList.contains('aspect-square'), 'card là hình vuông bo tròn (aspect-square)');
+    assert.doesNotMatch(card.className, /aspect-\[3\/4\]/);
+    assert.equal(card.querySelector('img'), null, 'bỏ ảnh trực tiếp trên card');
     assert.match(card.querySelector('h3').className, /line-clamp-2/);
-    const button = card.querySelector('button');
-    assert.ok(button && button.classList.contains('w-full'));
+    const buyButton = card.querySelector('button:last-of-type');
+    assert.ok(buyButton && buyButton.classList.contains('w-full'));
     // Sách không "thuộc" khoa/lớp nào: card KHÔNG dán nhãn khoa/lớp (bộ lọc ở đầu trang mới dẫn đường)
     assert.doesNotMatch(card.innerHTML, /IT \/ A|Business \/ A|IT \/ B/, 'card không dán nhãn khoa/lớp');
-    assert.equal(card.querySelector('.backdrop-blur-sm'), null);
   }
+
+  // 2.1 Tính năng xem ảnh minh họa (mở modal ảnh) cho desktop & mobile
+  assert.ok(typeof window.openBookPreview === 'function', 'có hàm openBookPreview');
+  window.openBookPreview('shared');
+  assert.equal(window.document.getElementById('bookPreviewModal').classList.contains('hidden'), false);
+  assert.equal(window.document.getElementById('bookPreviewTitle').innerText, 'Shared');
+  window.closeModal('bookPreviewModal');
+  assert.equal(window.document.getElementById('bookPreviewModal').classList.contains('hidden'), true);
 
   // 3. Đổi giỏ hàng chỉ vẽ lại ĐÚNG card đó: card khác giữ nguyên node (ảnh bìa không nạp lại)
   const untouched = grid.querySelector('article[data-book-id="it"]');

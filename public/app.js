@@ -293,79 +293,107 @@ function refreshBookCard(bookId) {
 }
 
 /**
- * HTML của MỘT card sách (dùng chung cho cả lưới lẫn vẽ lại 1 card).
- * Dạng dọc: bìa tỷ lệ 3:4 chiếm trọn chiều ngang → tên sách → thông tin phụ → giá → nút.
+ * HTML của MỘT card sách:
+ * Khối hình vuông bo tròn (aspect-square rounded-2xl sm:rounded-3xl), không có ảnh bìa trực tiếp
+ * để card tinh gọn, không chiếm chiều dọc màn hình. Có nút "Xem minh họa" nếu có ảnh.
  */
 function bookCardHtml(book) {
   const isClosed = !currentSettings.isRegistrationOpen;
   const inCart = cart.find(c => c.bookId === book.id);
-
-  // Sách KHÔNG "thuộc" khoa/lớp nào — bộ lọc Khoa/Lớp ở đầu trang mới là thứ dẫn khách
-  // tới giáo trình của lớp mình học, nên card không dán nhãn khoa/lớp nữa.
-  // Đã có trong giỏ: huy hiệu số lượng ở góc phải ảnh bìa (nền xanh nổi bật trên ảnh)
-  const selectedChip = inCart ? `
-        <span class="pointer-events-none absolute right-1.5 top-1.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center gap-0.5 rounded-full bg-emerald-600 px-1.5 text-[10px] font-black text-white shadow-md">
-          <i data-lucide="check" class="h-3 w-3 flex-shrink-0 stroke-[3]"></i>${inCart.quantity > 1 ? `<span>x${inCart.quantity}</span>` : ''}
-        </span>` : '';
-
-  // Ảnh bìa chiếm trọn chiều ngang card, tỷ lệ 3:4 (chuẩn bìa sách) nên 2 cột đều tăm tắp.
-  // Không có ảnh (hoặc ảnh lỗi) thì tự đổi sang khối placeholder có tên sách.
-  const coverHtml = book.cover
-    ? `<img src="${escapeHtml(book.cover)}" alt="Ảnh bìa ${escapeHtml(book.title)}" loading="lazy" decoding="async"
-           onerror="this.style.display='none';this.nextElementSibling.classList.remove('hidden')"
-           class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />`
-    : '';
-
-  const coverFallback = `
-        <div class="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-gradient-to-br from-slate-100 to-slate-200 p-3 text-center ${book.cover ? 'hidden' : ''}">
-          <i data-lucide="book-open" class="h-7 w-7 flex-shrink-0 text-slate-300"></i>
-          <span class="line-clamp-2 text-[10px] font-bold leading-snug text-slate-400">${escapeHtml(book.title)}</span>
-        </div>`;
-
   const meta = bookMetaLine(book);
 
-  // Nút luôn full chiều ngang card: ở cột hẹp, nút nhỏ đặt cạnh giá sẽ bị chen chữ / tràn khung.
-  // min-h 38px để ngón tay cái bấm trúng trên mobile (chuẩn tap target).
-  const buttonBase = 'mt-2 flex min-h-[2.375rem] w-full items-center justify-center rounded-xl px-2 text-[11px] font-bold transition active:scale-[0.98] sm:mt-2.5 sm:text-xs';
+  // Huy hiệu đã chọn: góc trên bên phải
+  const selectedBadge = inCart ? `
+    <span class="inline-flex h-5 items-center gap-0.5 rounded-full bg-emerald-600 px-1.5 text-[10px] font-black text-white shadow-sm flex-shrink-0">
+      <i data-lucide="check" class="h-3 w-3 stroke-[3]"></i>${inCart.quantity > 1 ? `<span>x${inCart.quantity}</span>` : ''}
+    </span>` : '';
+
+  // Nút xem minh họa: nếu sách có ảnh
+  const previewBtn = book.cover ? `
+    <button type="button" onclick="openBookPreview('${escapeHtml(book.id)}')" title="Xem ảnh minh họa sách"
+      class="mt-1 inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-sky-600 hover:text-sky-700 active:scale-95 transition bg-sky-50 hover:bg-sky-100 px-2 py-0.5 rounded-lg border border-sky-200">
+      <i data-lucide="image" class="h-3 w-3 flex-shrink-0"></i>
+      <span>Xem minh họa</span>
+    </button>` : '';
+
+  // Nút mua: full chiều ngang đáy card
+  const buttonBase = 'mt-1.5 sm:mt-2 flex min-h-[2rem] sm:min-h-[2.25rem] w-full items-center justify-center rounded-xl px-2 text-[11px] sm:text-xs font-bold transition active:scale-[0.98]';
   const buttonInner = (icon, label) => `
-      <span class="flex items-center justify-center gap-1">
-        <i data-lucide="${icon}" class="h-3.5 w-3.5 flex-shrink-0"></i>
-        <span class="truncate">${label}</span>
-      </span>`;
+    <span class="flex items-center justify-center gap-1">
+      <i data-lucide="${icon}" class="h-3.5 w-3.5 flex-shrink-0"></i>
+      <span class="truncate">${label}</span>
+    </span>`;
 
   const actionButton = isClosed ? `
-      <button disabled class="${buttonBase} cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400">${buttonInner('lock', 'Đã chốt sổ')}</button>`
+    <button disabled class="${buttonBase} cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400">${buttonInner('lock', 'Đã chốt sổ')}</button>`
     : inCart ? `
-      <button onclick="toggleCartBook('${escapeHtml(book.id)}')" title="Bấm để bỏ khỏi giỏ"
-        class="${buttonBase} border border-emerald-300 bg-emerald-100 text-emerald-700 hover:bg-rose-50 hover:text-rose-600">${buttonInner('check', `Đã chọn · x${inCart.quantity}`)}</button>`
+    <button onclick="toggleCartBook('${escapeHtml(book.id)}')" title="Bấm để bỏ khỏi giỏ"
+      class="${buttonBase} border border-emerald-300 bg-emerald-100 text-emerald-700 hover:bg-rose-50 hover:text-rose-600">${buttonInner('check', `Đã chọn · x${inCart.quantity}`)}</button>`
     : `
-      <button onclick="toggleCartBook('${escapeHtml(book.id)}')"
-        class="${buttonBase} bg-brand-600 text-white shadow-sm shadow-brand-500/25 hover:bg-brand-700">${buttonInner('plus', 'Chọn mua')}</button>`;
+    <button onclick="toggleCartBook('${escapeHtml(book.id)}')"
+      class="${buttonBase} bg-brand-600 text-white shadow-sm shadow-brand-500/25 hover:bg-brand-700">${buttonInner('plus', 'Chọn mua')}</button>`;
 
   return `
-    <article data-book-id="${escapeHtml(book.id)}" class="group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-white transition-all hover:shadow-md ${inCart ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-slate-200'}">
-      <div class="relative aspect-[3/4] w-full flex-shrink-0 overflow-hidden bg-slate-100">
-        ${coverHtml}
-        ${coverFallback}
-        ${selectedChip}
+    <article data-book-id="${escapeHtml(book.id)}" class="group relative flex min-w-0 aspect-square flex-col justify-between overflow-hidden rounded-2xl sm:rounded-3xl border bg-white p-3 sm:p-4 shadow-sm hover:shadow-md transition-all ${inCart ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-slate-200'}">
+      <div class="min-w-0">
+        <div class="flex items-start justify-between gap-1.5 mb-0.5">
+          <h3 class="line-clamp-2 break-words text-xs sm:text-sm font-extrabold leading-snug text-slate-900 flex-1">${escapeHtml(book.title)}</h3>
+          ${selectedBadge}
+        </div>
+        ${meta ? `<p class="line-clamp-1 text-[10px] font-medium text-slate-400 sm:text-[11px] mb-1">${escapeHtml(meta)}</p>` : ''}
+        ${previewBtn}
       </div>
 
-      <div class="flex min-w-0 flex-1 flex-col p-2.5 sm:p-3.5">
-        <h3 class="line-clamp-2 break-words text-[13px] font-extrabold leading-snug text-slate-900 sm:text-sm">${escapeHtml(book.title)}</h3>
-        ${meta ? `<p class="mt-0.5 line-clamp-1 text-[10px] font-medium text-slate-400 sm:text-[11px]">${escapeHtml(meta)}</p>` : ''}
-        <!-- Mô tả chỉ hiện khi cột đủ rộng (≥lg, ~230px/cột); cột hẹp nhường chỗ cho giá + nút -->
-        ${book.description ? `<div class="mt-1 hidden min-w-0 lg:block"><p class="line-clamp-2 text-[11px] leading-relaxed text-slate-500">${escapeHtml(book.description)}</p></div>` : ''}
-
-        <div class="mt-auto min-w-0 border-t border-slate-100 pt-2 sm:pt-2.5">
-          <div class="flex min-w-0 items-baseline justify-between gap-1.5">
-            <span class="hidden flex-shrink-0 text-[9px] font-bold uppercase tracking-wider text-slate-400 sm:block">Đơn giá</span>
-            <span class="min-w-0 truncate text-sm font-black leading-none text-emerald-600 sm:text-lg">${formatMoney(book.price)}</span>
-          </div>
-          ${actionButton}
+      <div class="mt-auto min-w-0 pt-1.5 sm:pt-2 border-t border-slate-100">
+        <div class="flex min-w-0 items-baseline justify-between gap-1">
+          <span class="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Đơn giá</span>
+          <span class="min-w-0 truncate text-xs sm:text-base font-black leading-none text-emerald-600">${formatMoney(book.price)}</span>
         </div>
+        ${actionButton}
       </div>
     </article>
   `;
+}
+
+function openBookPreview(bookId) {
+  const book = allBooks.find(b => b.id === bookId);
+  if (!book) return;
+
+  const imgEl = document.getElementById('bookPreviewImage');
+  const titleEl = document.getElementById('bookPreviewTitle');
+  const metaEl = document.getElementById('bookPreviewMeta');
+  const descEl = document.getElementById('bookPreviewDescription');
+  const priceEl = document.getElementById('bookPreviewPrice');
+  const actionWrap = document.getElementById('bookPreviewAction');
+
+  if (imgEl) {
+    imgEl.src = book.cover || '/logo.png';
+    imgEl.alt = book.title || '';
+  }
+  if (titleEl) titleEl.innerText = book.title || '';
+  if (metaEl) metaEl.innerText = bookMetaLine(book);
+  if (descEl) {
+    descEl.innerText = book.description || 'Chưa có mô tả chi tiết cho sách này.';
+    descEl.classList.toggle('hidden', !book.description);
+  }
+  if (priceEl) priceEl.innerText = formatMoney(book.price);
+
+  if (actionWrap) {
+    const isClosed = !currentSettings.isRegistrationOpen;
+    const inCart = cart.find(c => c.bookId === book.id);
+    actionWrap.innerHTML = isClosed
+      ? `<button disabled class="w-full py-2.5 bg-slate-100 text-slate-400 text-xs font-bold rounded-xl cursor-not-allowed">Đã chốt sổ</button>`
+      : `
+        <button onclick="toggleCartBook('${escapeHtml(book.id)}'); openBookPreview('${escapeHtml(book.id)}');"
+          class="w-full py-2.5 ${inCart ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' : 'bg-brand-600 hover:bg-brand-700 text-white'} text-xs font-bold rounded-xl shadow-sm transition flex items-center justify-center space-x-1.5">
+          <i data-lucide="${inCart ? 'check' : 'plus'}" class="w-4 h-4"></i>
+          <span>${inCart ? `Đã chọn (${inCart.quantity} cuốn) — Bấm để đổi` : 'Chọn mua sách này'}</span>
+        </button>
+      `;
+    lucide.createIcons();
+  }
+
+  openModal('bookPreviewModal');
 }
 
 // ============================ GIỎ HÀNG ĐA CUỐN ============================
