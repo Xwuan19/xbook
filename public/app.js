@@ -230,10 +230,22 @@ function renderCheckoutClassPicker() {
 
 /**
  * 5. RENDER DANH SÁCH GIÁO TRÌNH (ĐÃ LỌC THEO KHOA + LỚP)
- * Tỷ lệ: 1 cột mobile → 2 cột tablet → 3 cột desktop
+ * Tỷ lệ: 2 cột mobile → 2 cột tablet → 3 cột desktop.
+ * Card thiết kế theo dạng "bìa sách ở trên, thông tin ở dưới" (dọc) vì trên mobile mỗi cột
+ * chỉ còn ~150–170px: mọi phần tử đều `min-w-0` + `truncate`/`line-clamp` để chữ dài
+ * (tên sách, tên lớp) không phá vỡ khung lưới, chiều cao 2 card cùng hàng luôn bằng nhau.
  */
 function getFilteredBooks() {
   return XBookDomain.filterBooks(allBooks, currentSettings, activeDepartmentFilter, activeClassFilter);
+}
+
+/** Dòng phụ nhỏ dưới tên sách: tác giả · số trang · năm (bỏ trống phần không có) */
+function bookMetaLine(book) {
+  const pages = Number(book.pages);
+  return [book.author, pages > 0 ? `${pages} trang` : '', book.year]
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+    .join(' · ');
 }
 
 function renderBooks() {
@@ -252,59 +264,108 @@ function renderBooks() {
     return;
   }
 
+  grid.innerHTML = filtered.map(book => bookCardHtml(book)).join('');
+
+  lucide.createIcons();
+}
+
+/**
+ * Vẽ lại ĐÚNG 1 card khi trạng thái giỏ hàng của cuốn đó đổi.
+ * Card 2 cột trên mobile có ảnh bìa khá to: vẽ lại cả lưới sẽ tạo mới toàn bộ thẻ <img>
+ * (nạp + giải mã lại ảnh) làm màn hình chớp trắng mỗi lần bấm "Chọn mua".
+ * Không tìm thấy card (đang ở trạng thái rỗng / lọc khác) thì quay về vẽ cả lưới.
+ */
+function refreshBookCard(bookId) {
+  const grid = document.getElementById('bookGrid');
+  if (!grid) return;
+
+  const book = allBooks.find(b => b.id === bookId);
+  const current = [...grid.querySelectorAll('[data-book-id]')].find(el => el.dataset.bookId === bookId);
+  if (!book || !current) { renderBooks(); return; }
+
+  const holder = document.createElement('div');
+  holder.innerHTML = bookCardHtml(book);
+  const fresh = holder.firstElementChild;
+  if (!fresh) { renderBooks(); return; }
+
+  current.replaceWith(fresh);
+  lucide.createIcons();
+}
+
+/**
+ * HTML của MỘT card sách (dùng chung cho cả lưới lẫn vẽ lại 1 card).
+ * Dạng dọc: bìa tỷ lệ 3:4 chiếm trọn chiều ngang → tên sách → thông tin phụ → giá → nút.
+ */
+function bookCardHtml(book) {
   const isClosed = !currentSettings.isRegistrationOpen;
+  const inCart = cart.find(c => c.bookId === book.id);
 
-  grid.innerHTML = filtered.map(book => {
-    const inCart = cart.find(c => c.bookId === book.id);
-    const classesBadges = classesUsingBook(book.id).map(c =>
-      `<span class="text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">${escapeHtml(classLabel(c))}</span>`
-    ).join('');
+  // Sách KHÔNG "thuộc" khoa/lớp nào — bộ lọc Khoa/Lớp ở đầu trang mới là thứ dẫn khách
+  // tới giáo trình của lớp mình học, nên card không dán nhãn khoa/lớp nữa.
+  // Đã có trong giỏ: huy hiệu số lượng ở góc phải ảnh bìa (nền xanh nổi bật trên ảnh)
+  const selectedChip = inCart ? `
+        <span class="pointer-events-none absolute right-1.5 top-1.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center gap-0.5 rounded-full bg-emerald-600 px-1.5 text-[10px] font-black text-white shadow-md">
+          <i data-lucide="check" class="h-3 w-3 flex-shrink-0 stroke-[3]"></i>${inCart.quantity > 1 ? `<span>x${inCart.quantity}</span>` : ''}
+        </span>` : '';
 
-    const coverHtml = book.cover
-      ? `<img src="${escapeHtml(book.cover)}" alt="${escapeHtml(book.title)}" onerror="this.style.display='none'"
-           class="w-full h-24 sm:h-32 object-cover rounded-xl mb-2 sm:mb-3 border border-slate-100" loading="lazy" />`
-      : '';
+  // Ảnh bìa chiếm trọn chiều ngang card, tỷ lệ 3:4 (chuẩn bìa sách) nên 2 cột đều tăm tắp.
+  // Không có ảnh (hoặc ảnh lỗi) thì tự đổi sang khối placeholder có tên sách.
+  const coverHtml = book.cover
+    ? `<img src="${escapeHtml(book.cover)}" alt="Ảnh bìa ${escapeHtml(book.title)}" loading="lazy" decoding="async"
+           onerror="this.style.display='none';this.nextElementSibling.classList.remove('hidden')"
+           class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />`
+    : '';
 
-    const actionButton = isClosed ? `
-      <button disabled class="w-full sm:w-auto px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-slate-100 text-slate-400 text-xs font-bold rounded-xl cursor-not-allowed flex items-center justify-center space-x-1 border border-slate-200">
-        <i data-lucide="lock" class="w-3.5 h-3.5"></i><span>Đã chốt sổ</span>
-      </button>`
-      : inCart ? `
+  const coverFallback = `
+        <div class="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-gradient-to-br from-slate-100 to-slate-200 p-3 text-center ${book.cover ? 'hidden' : ''}">
+          <i data-lucide="book-open" class="h-7 w-7 flex-shrink-0 text-slate-300"></i>
+          <span class="line-clamp-2 text-[10px] font-bold leading-snug text-slate-400">${escapeHtml(book.title)}</span>
+        </div>`;
+
+  const meta = bookMetaLine(book);
+
+  // Nút luôn full chiều ngang card: ở cột hẹp, nút nhỏ đặt cạnh giá sẽ bị chen chữ / tràn khung.
+  // min-h 38px để ngón tay cái bấm trúng trên mobile (chuẩn tap target).
+  const buttonBase = 'mt-2 flex min-h-[2.375rem] w-full items-center justify-center rounded-xl px-2 text-[11px] font-bold transition active:scale-[0.98] sm:mt-2.5 sm:text-xs';
+  const buttonInner = (icon, label) => `
+      <span class="flex items-center justify-center gap-1">
+        <i data-lucide="${icon}" class="h-3.5 w-3.5 flex-shrink-0"></i>
+        <span class="truncate">${label}</span>
+      </span>`;
+
+  const actionButton = isClosed ? `
+      <button disabled class="${buttonBase} cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400">${buttonInner('lock', 'Đã chốt sổ')}</button>`
+    : inCart ? `
+      <button onclick="toggleCartBook('${escapeHtml(book.id)}')" title="Bấm để bỏ khỏi giỏ"
+        class="${buttonBase} border border-emerald-300 bg-emerald-100 text-emerald-700 hover:bg-rose-50 hover:text-rose-600">${buttonInner('check', `Đã chọn · x${inCart.quantity}`)}</button>`
+    : `
       <button onclick="toggleCartBook('${escapeHtml(book.id)}')"
-        class="w-full sm:w-auto px-2 sm:px-3.5 py-1.5 sm:py-2 bg-emerald-100 hover:bg-rose-50 hover:text-rose-600 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-300 transition flex items-center justify-center space-x-1">
-        <i data-lucide="check" class="w-3.5 h-3.5 flex-shrink-0"></i>
-        <span class="truncate">Đã chọn (x${inCart.quantity})</span>
-      </button>`
-      : `
-      <button onclick="toggleCartBook('${escapeHtml(book.id)}')"
-        class="w-full sm:w-auto px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center justify-center space-x-1">
-        <i data-lucide="plus" class="w-3.5 h-3.5 flex-shrink-0"></i>
-        <span>Chọn mua</span>
-      </button>`;
+        class="${buttonBase} bg-brand-600 text-white shadow-sm shadow-brand-500/25 hover:bg-brand-700">${buttonInner('plus', 'Chọn mua')}</button>`;
 
-    return `
-      <div class="bg-white rounded-2xl p-3 sm:p-4.5 border ${inCart ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-slate-200'} hover:shadow-md transition-all flex flex-col justify-between">
-        <div>
-          ${coverHtml}
-          <div class="flex flex-wrap gap-1 mb-1.5 sm:mb-2">
-            ${classesBadges}
-          </div>
-          <h3 class="font-extrabold text-slate-900 text-xs sm:text-base leading-snug line-clamp-2">${escapeHtml(book.title)}</h3>
-          <p class="text-[11px] sm:text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">${escapeHtml(book.description || '')}</p>
-        </div>
+  return `
+    <article data-book-id="${escapeHtml(book.id)}" class="group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-white transition-all hover:shadow-md ${inCart ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-slate-200'}">
+      <div class="relative aspect-[3/4] w-full flex-shrink-0 overflow-hidden bg-slate-100">
+        ${coverHtml}
+        ${coverFallback}
+        ${selectedChip}
+      </div>
 
-        <div class="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <div class="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-wider">Đơn giá</div>
-            <div class="text-sm sm:text-lg font-black text-emerald-600 leading-none">${formatMoney(book.price)}</div>
+      <div class="flex min-w-0 flex-1 flex-col p-2.5 sm:p-3.5">
+        <h3 class="line-clamp-2 break-words text-[13px] font-extrabold leading-snug text-slate-900 sm:text-sm">${escapeHtml(book.title)}</h3>
+        ${meta ? `<p class="mt-0.5 line-clamp-1 text-[10px] font-medium text-slate-400 sm:text-[11px]">${escapeHtml(meta)}</p>` : ''}
+        <!-- Mô tả chỉ hiện từ tablet trở lên: cột mobile ~150px đọc không nổi, nhường chỗ cho giá + nút -->
+        ${book.description ? `<div class="mt-1 hidden min-w-0 sm:block"><p class="line-clamp-2 text-[11px] leading-relaxed text-slate-500">${escapeHtml(book.description)}</p></div>` : ''}
+
+        <div class="mt-auto min-w-0 border-t border-slate-100 pt-2 sm:pt-2.5">
+          <div class="flex min-w-0 items-baseline justify-between gap-1.5">
+            <span class="hidden flex-shrink-0 text-[9px] font-bold uppercase tracking-wider text-slate-400 sm:block">Đơn giá</span>
+            <span class="min-w-0 truncate text-sm font-black leading-none text-emerald-600 sm:text-lg">${formatMoney(book.price)}</span>
           </div>
           ${actionButton}
         </div>
       </div>
-    `;
-  }).join('');
-
-  lucide.createIcons();
+    </article>
+  `;
 }
 
 // ============================ GIỎ HÀNG ĐA CUỐN ============================
@@ -315,7 +376,7 @@ function toggleCartBook(bookId) {
   } else {
     cart.push({ bookId, quantity: 1 });
   }
-  renderBooks();
+  refreshBookCard(bookId);
   renderCartUI();
 }
 
@@ -453,18 +514,18 @@ function changeCartQuantity(index, delta) {
   item.quantity = Math.max(1, Math.min(50, item.quantity + delta));
   renderCheckoutItems();
   renderCartUI();
-  renderBooks();
+  refreshBookCard(item.bookId);
 }
 
 function removeCartItem(index) {
-  cart.splice(index, 1);
+  const [removed] = cart.splice(index, 1);
   if (cart.length === 0) {
     closeModal('checkoutModal');
   } else {
     renderCheckoutItems();
   }
   renderCartUI();
-  renderBooks();
+  if (removed) refreshBookCard(removed.bookId);
 }
 
 /**

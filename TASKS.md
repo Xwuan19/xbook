@@ -101,7 +101,7 @@
 - [x] T6. Bộ lọc giáo trình theo **Khoa** (chips) và theo **Lớp** (dropdown) trên trang chủ.
 - [x] T7. **Giỏ hàng đa cuốn**: chọn nhiều sách, tăng/giảm số lượng từng cuốn, thanh toán 1 lần.
 - [x] T8. Form đặt mua bổ sung ô **Lớp** (datalist gợi ý từ danh sách lớp + lớp của giáo trình).
-- [x] T9. Responsive: mobile 1 cột → tablet 2 cột → desktop 3 cột, container mở rộng `max-w-6xl`.
+- [x] T9. Responsive: mobile 2 cột → tablet 2 cột → desktop 3 cột, container mở rộng `max-w-6xl`; card sách dạng dọc (bìa 3:4 → tên → giá → nút) để cột hẹp ~150px không vỡ khung.
 
 ## Giai đoạn 3 — Bảng quản trị (phân loại & thống kê)
 - [x] T10. Tab **Đơn hàng**: tổng hợp số cuốn theo từng khoa + lọc danh sách phát sách theo lớp + tìm tên.

@@ -100,7 +100,6 @@ function orderDepartments(order) {
 }
 function classLabel(entry) { return `${entry.department} / ${entry.name}`; }
 function catalogClasses() { return XBookDomain.classes(currentSettings.classes, currentSettings.departments); }
-function classesUsingBook(id) { return catalogClasses().filter(c => c.bookIds.includes(id)); }
 function orderClassLabel(order) {
   return order.customerClass ? [order.customerDepartment, order.customerClass].filter(Boolean).join(' / ') : '';
 }

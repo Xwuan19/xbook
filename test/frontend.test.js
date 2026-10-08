@@ -539,3 +539,54 @@ test('admin filters orders by order date / payment date and settles per day', as
   assert.equal(window.isAdminDateFilterActive(), false);
   dom.window.close();
 });
+
+test('home book grid shows 2 columns on mobile with a compact vertical card', async () => {
+  const fixture = demoFixture();
+  const dom = loadPage('public/index.html', STOREFRONT_SCRIPTS, {
+    fetch: async () => ({ status: 200, headers: { get: () => null }, json: async () => ({ success: true, ...fixture }) })
+  });
+  const { window } = dom;
+  await window.fetchBooksAndSettings();
+  const grid = window.document.getElementById('bookGrid');
+
+  // 1. Mobile giữ đúng 2 cột (không tụt về 1 cột), desktop vẫn 3 cột
+  assert.match(grid.className, /(^|\s)grid-cols-2(\s|$)/);
+  assert.doesNotMatch(grid.className, /grid-cols-1/);
+  assert.match(grid.className, /lg:grid-cols-3/);
+
+  // 2. Card dạng dọc cho cột hẹp: khung bìa 3:4 + min-w-0/overflow-hidden chống tràn,
+  //    tên sách kẹp 2 dòng, luôn có nút mua full chiều ngang
+  const cards = [...grid.querySelectorAll('article[data-book-id]')];
+  assert.equal(cards.length, 3);
+  for (const card of cards) {
+    assert.ok(card.classList.contains('min-w-0') && card.classList.contains('overflow-hidden'));
+    const cover = [...card.children].find((el) => /aspect-\[3\/4\]/.test(el.className));
+    assert.ok(cover, 'card có khung ảnh bìa tỉ lệ 3:4');
+    assert.match(card.querySelector('h3').className, /line-clamp-2/);
+    const button = card.querySelector('button');
+    assert.ok(button && button.classList.contains('w-full'));
+    // Sách không "thuộc" khoa/lớp nào: card KHÔNG dán nhãn khoa/lớp (bộ lọc ở đầu trang mới dẫn đường)
+    assert.doesNotMatch(card.innerHTML, /IT \/ A|Business \/ A|IT \/ B/, 'card không dán nhãn khoa/lớp');
+    assert.equal(card.querySelector('.backdrop-blur-sm'), null);
+  }
+
+  // 3. Đổi giỏ hàng chỉ vẽ lại ĐÚNG card đó: card khác giữ nguyên node (ảnh bìa không nạp lại)
+  const untouched = grid.querySelector('article[data-book-id="it"]');
+  window.toggleCartBook('shared');
+  assert.equal(grid.querySelector('article[data-book-id="it"]'), untouched);
+  const sharedCard = grid.querySelector('article[data-book-id="shared"]');
+  assert.match(sharedCard.className, /border-emerald-400/);
+  assert.match(sharedCard.querySelector('button').textContent, /Đã chọn/);
+  window.changeCartQuantity(0, 2);
+  assert.match(grid.querySelector('article[data-book-id="shared"] button').textContent, /x3/);
+  window.removeCartItem(0);
+  assert.match(grid.querySelector('article[data-book-id="shared"] button').textContent, /Chọn mua/);
+  assert.doesNotMatch(grid.querySelector('article[data-book-id="shared"]').className, /border-emerald-400/);
+
+  // 4. Card không còn trên lưới (lọc khác) thì quay về vẽ cả lưới, không ném lỗi
+  window.setClassFilter(window.XBookDomain.classKey(fixture.settings.classes[2]));
+  assert.match(grid.textContent, /Chưa có sách/);
+  window.refreshBookCard('shared');
+  assert.match(grid.textContent, /Chưa có sách/);
+  dom.window.close();
+});
