@@ -608,3 +608,123 @@ test('home book grid shows 2 columns on mobile with a compact vertical card', as
   assert.match(grid.textContent, /Chưa có sách/);
   dom.window.close();
 });
+
+test('mobile storefront: bottom-sheet checkout, scroll lock, toast and thumb-sized controls', async () => {
+  const fixture = demoFixture();
+  const alerts = [];
+  const dom = loadPage('public/index.html', STOREFRONT_SCRIPTS, {
+    fetch: async () => ({ status: 200, headers: { get: () => null }, json: async () => ({ success: true, ...fixture }) })
+  });
+  const { window } = dom;
+  window.alert = (msg) => alerts.push(msg);
+  await window.fetchBooksAndSettings();
+  const doc = window.document;
+
+  // 1. Ô nhập trên mobile phải 16px (nếu nhỏ hơn, iPhone tự phóng to cả trang khi gõ)
+  const styleBlock = fs.readFileSync('public/index.html', 'utf8');
+  assert.match(styleBlock, /@media \(max-width: 640px\) \{\s*input, textarea, select \{ font-size: 16px !important; \}/);
+  // Cho phép khách pinch-zoom xem giá & mã QR
+  assert.doesNotMatch(doc.querySelector('meta[name="viewport"]').getAttribute('content'), /user-scalable=no/);
+
+  // 2. Modal đặt mua là SHEET trượt từ đáy: form chiếm trọn chiều ngang, thân cuộn riêng,
+  //    nút tạo QR nằm ở chân DÍNH (không phải cuộn tìm nút), có đệm an toàn iPhone
+  const sheet = doc.getElementById('orderForm');
+  assert.match(sheet.className, /xb-sheet/);
+  assert.match(sheet.className, /flex-col/);
+  assert.match(sheet.parentElement.className, /items-end/, 'dính đáy màn hình trên mobile');
+  assert.match(sheet.parentElement.className, /sm:items-center/, 'desktop vẫn là hộp thoại giữa màn hình');
+  assert.match(sheet.parentElement.className, /xb-sheet-lift/, 'sheet được đẩy lên khi bàn phím bật');
+  const body = sheet.querySelector('[data-sheet-body]');
+  assert.ok(body && /overflow-y-auto/.test(body.className), 'thân form cuộn riêng');
+  const submit = doc.getElementById('btnSubmitOrder');
+  assert.equal(body.contains(submit), false, 'nút tạo QR không nằm trong vùng cuộn');
+  assert.match(submit.closest('.flex-shrink-0').className, /xb-safe-bottom/);
+  assert.match(submit.className, /min-h-\[52px\]/, 'nút gửi đủ cao cho ngón cái');
+  assert.equal(body.contains(doc.getElementById('checkoutTotalDisplay')), false, 'tổng tiền ở chân sheet');
+
+  // 3. Mở sheet → khóa cuộn nền; bấm nền tối hoặc Esc → đóng và trả lại cuộn
+  window.toggleCartBook('shared');
+  window.openCheckoutModal();
+  assert.equal(doc.getElementById('checkoutModal').classList.contains('hidden'), false);
+  assert.equal(doc.body.classList.contains('xb-modal-open'), true);
+  doc.querySelector('[data-modal-backdrop="checkoutModal"]')
+    .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  assert.equal(doc.getElementById('checkoutModal').classList.contains('hidden'), true);
+  assert.equal(doc.body.classList.contains('xb-modal-open'), false);
+
+  window.openCheckoutModal();
+  doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(doc.getElementById('checkoutModal').classList.contains('hidden'), true);
+  // Mở 2 sheet chồng nhau: chỉ hết khóa cuộn khi đóng hết
+  window.openCheckoutModal();
+  window.openBookPreview('shared');
+  window.closeModal('bookPreviewModal');
+  assert.equal(doc.body.classList.contains('xb-modal-open'), true);
+  window.closeModal('checkoutModal');
+  assert.equal(doc.body.classList.contains('xb-modal-open'), false);
+
+  // 4. Thêm sách có phản hồi rõ ràng (toast) — trên mobile không có hover để biết đã bấm được
+  window.toggleCartBook('it');
+  const toast = doc.querySelector('#toastHost .xb-toast:last-child');
+  assert.ok(toast, 'có toast phản hồi');
+  assert.match(toast.textContent, /Đã thêm/);
+  assert.match(toast.textContent, /IT only/);
+  assert.equal(typeof window.hapticTap, 'function');
+
+  // 5. Nút chạm đủ lớn: nút mua 44px, nút giỏ hàng 48px, chip khoa 38px, ô chọn lớp 44px
+  const buyButton = [...doc.querySelector('#bookGrid article').querySelectorAll('button')].pop();
+  assert.match(buyButton.className, /min-h-\[44px\]/, 'nút Chọn mua đủ cao trên mobile');
+  assert.match(buyButton.className, /w-full/);
+  assert.match(buyButton.textContent, /Chọn mua|Đã chọn/, 'nút mua đổi nhãn theo giỏ hàng');
+  const cartCta = [...doc.querySelectorAll('#cartBar button[onclick="openCheckoutModal()"]')].pop();
+  assert.match(cartCta.className, /min-h-\[48px\]/);
+  assert.match(doc.querySelector('#cartBar').innerHTML, /xb-safe-bottom/, 'thanh giỏ hàng né thanh home iPhone');
+  assert.match(doc.querySelector('#departmentChips button').className, /min-h-\[38px\]/);
+  doc.getElementById('classFilterWrap').querySelector('[data-xbook-trigger]');
+  assert.match(window.document.getElementById('classFilterSelect').querySelector('[data-xbook-trigger]').className, /min-h-\[40px\]/);
+  // Bộ lọc dính ngay dưới header để vuốt dài vẫn đổi lớp được
+  assert.match(doc.getElementById('filterBar').className, /sticky top-14 sm:top-16/);
+
+  // 6. Thiếu thông tin → ô lỗi hiện ra VÀ ô nhập được focus (khách biết phải sửa chỗ nào)
+  window.openCheckoutModal();
+  doc.getElementById('formCustomerName').value = 'An';
+  doc.getElementById('formCustomerPhone').value = '0987654321';
+  await window.handleCreatePayment({ preventDefault() {} });
+  assert.equal(doc.getElementById('formCustomerNameError').classList.contains('hidden'), false);
+  assert.equal(doc.activeElement.id, 'formCustomerName');
+  // Ngày nhận sách có ô lỗi riêng (không mượn ô lỗi của họ tên)
+  doc.getElementById('formCustomerName').value = 'Nguyễn Văn An';
+  window.setXBookSelectValue('formCustomerClass', window.XBookDomain.classKey(fixture.settings.classes[0]), { silent: true });
+  doc.getElementById('formCustomerDeliveryDate').value = '';
+  await window.handleCreatePayment({ preventDefault() {} });
+  assert.equal(doc.getElementById('formCustomerDeliveryDateError').classList.contains('hidden'), false);
+  assert.equal(doc.activeElement.id, 'formCustomerDeliveryDate');
+  window.closeModal('checkoutModal');
+
+  // 7. Màn hình QR: có nút mở app ngân hàng + mở ảnh QR (mobile không tự quét được QR của mình),
+  //    tiền về thì đổi sang nút "Hoàn tất"
+  window.showQRPaymentModal({
+    orderCode: 9, amount: 100000, quantity: 1, bookTitle: 'Shared', customerName: 'Nguyễn Văn An',
+    qrCode: '', accountNumber: '0123456789', bin: '970422', accountName: 'LE VAN QUYEN',
+    description: 'XB9', checkoutUrl: 'https://pay.os/checkout/9'
+  });
+  assert.equal(doc.getElementById('qrPaymentModal').classList.contains('hidden'), false);
+  assert.equal(doc.getElementById('qrOpenBankButton').getAttribute('href'), 'https://pay.os/checkout/9');
+  assert.match(doc.getElementById('qrSaveImageLink').getAttribute('href'), /img\.vietqr\.io/);
+  assert.match(doc.getElementById('qrImageElement').parentElement.className, /w-\[min\(13rem,60vw\)\]/, 'QR co theo màn hình');
+  window.handlePaymentSuccess({
+    orderCode: 9, customerName: 'Nguyễn Văn An', bookTitle: 'Shared', quantity: 1,
+    deliveryAt: new Date(Date.now() + 86400000).toISOString()
+  });
+  assert.equal(doc.getElementById('qrPendingActions').classList.contains('hidden'), true);
+  assert.equal(doc.getElementById('qrDoneButton').classList.contains('hidden'), false);
+  window.stopOrderPolling();
+  window.closeModal('qrPaymentModal');
+
+  // 8. Chép nội dung CK chạy được cả khi vào bằng http:// (không có navigator.clipboard)
+  assert.equal(typeof window.navigator.clipboard, 'undefined');
+  doc.getElementById('qrDescriptionDisplay').innerText = 'XB9';
+  assert.doesNotThrow(() => window.copyToClipboard('qrDescriptionDisplay'));
+  assert.ok(alerts.length > 0, 'có phản hồi khi chép nội dung');
+  dom.window.close();
+});

@@ -137,11 +137,21 @@ function normalizeForSearch(text) {
     .trim();
 }
 
+/**
+ * Kích thước trigger theo size — trên MOBILE luôn cao ≥ 40px để bấm bằng ngón cái
+ * (py-2.5 + text-base 16px: đủ lớn và không bị iPhone phóng to trang khi chạm vào).
+ */
 const XBOOK_SELECT_SIZES = {
-  sm: 'px-2.5 py-1.5 text-xs',
-  md: 'px-3 py-2 text-xs',
-  lg: 'px-3.5 py-2.5 text-sm'
+  sm: 'px-2.5 py-2 sm:py-1.5 text-xs min-h-[40px] sm:min-h-0',
+  md: 'px-3 py-2.5 sm:py-2 text-xs min-h-[44px] sm:min-h-0',
+  lg: 'px-3.5 py-3 sm:py-2.5 text-sm min-h-[48px] sm:min-h-0'
 };
+
+/** Đang xem trên màn hình nhỏ (điện thoại) không? — jsdom/SSR không có matchMedia thì coi như desktop */
+function isSmallScreen() {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(max-width: 639px)').matches;
+}
 
 function xbookSelectPanelOpen(id) {
   const st = ensureXBookSelectState(id);
@@ -159,7 +169,14 @@ function toggleXBookSelect(id) {
   if (st.open) {
     const container = document.getElementById(id);
     const input = container && container.querySelector('[data-xbook-search]');
-    if (input) input.focus();
+    const trigger = container && container.querySelector('[data-xbook-trigger]');
+    if (isSmallScreen()) {
+      // Điện thoại: KHÔNG tự focus ô tìm nhanh (bàn phím bật lên sẽ che mất danh sách lớp),
+      // chỉ kéo ô chọn vào giữa màn hình để panel hiện trọn.
+      if (trigger && typeof trigger.scrollIntoView === 'function') trigger.scrollIntoView({ block: 'center' });
+    } else if (input) {
+      input.focus();
+    }
   }
 }
 
@@ -225,7 +242,7 @@ function renderXBookSelect(id, config = {}) {
     const highlighted = index === st.highlight;
     return `${header}
       <button type="button" data-xbook-option data-value="${escapeHtml(o.value)}" role="option" aria-selected="${active}"
-        class="w-full text-left flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold transition ${
+        class="w-full text-left flex items-center justify-between gap-2 px-2.5 py-2.5 sm:py-2 rounded-xl text-sm sm:text-xs font-semibold transition ${
           active ? 'bg-emerald-50 text-emerald-800' : highlighted ? 'bg-slate-100 text-slate-800' : 'text-slate-700 hover:bg-slate-100'
         }">
         <span class="truncate">${escapeHtml(o.label)}</span>
@@ -244,8 +261,8 @@ function renderXBookSelect(id, config = {}) {
       <i data-lucide="chevron-down" class="w-3.5 h-3.5 flex-shrink-0 text-slate-400 transition-transform ${st.open ? 'rotate-180' : ''}"></i>
     </button>
     <div data-xbook-panel data-xbook-select="${escapeHtml(id)}" role="listbox" class="absolute z-[70] left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-2xl p-1.5 ${st.open ? '' : 'hidden'}">
-      ${showSearch ? `<input data-xbook-search value="${escapeHtml(st.search)}" placeholder="Tìm nhanh khoa / lớp..." class="w-full mb-1 px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500" />` : ''}
-      <div data-xbook-options class="max-h-56 overflow-y-auto">
+      ${showSearch ? `<input data-xbook-search value="${escapeHtml(st.search)}" placeholder="Tìm nhanh khoa / lớp..." class="w-full mb-1 px-3 py-2.5 sm:px-2.5 sm:py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500" />` : ''}
+      <div data-xbook-options class="max-h-[45vh] sm:max-h-56 overflow-y-auto overscroll-contain">
         ${rows || `<p class="px-2.5 py-2 text-xs text-slate-400">${st.options.length ? 'Không tìm thấy lựa chọn phù hợp' : 'Chưa có lựa chọn nào'}</p>`}
       </div>
     </div>
@@ -396,11 +413,35 @@ function renderCatalogViews() {
 }
 
 // ============================ TIỆN ÍCH MODAL ============================
+/**
+ * Modal / bottom-sheet dùng chung:
+ *  - Mở: khóa cuộn nền (body.xb-modal-open) để khách không cuộn nhầm ra sau sheet,
+ *    nhớ vị trí cuộn để đóng lại trả về đúng chỗ.
+ *  - Đóng: bấm ra nền tối (data-modal-backdrop) hoặc phím Esc — chuẩn thao tác trên mobile.
+ */
+let xbOpenModals = [];
+let xbSavedScrollY = 0;
+
+function xbLockBodyScroll() {
+  if (document.body.classList.contains('xb-modal-open')) return;
+  xbSavedScrollY = window.scrollY || window.pageYOffset || 0;
+  document.body.classList.add('xb-modal-open');
+}
+
+function xbUnlockBodyScroll() {
+  if (xbOpenModals.length > 0) return;
+  document.body.classList.remove('xb-modal-open');
+  // Chỉ trả lại vị trí cuộn khi trang thật sự đã bị kéo xuống (tránh gọi scrollTo thừa)
+  if (xbSavedScrollY > 0 && typeof window.scrollTo === 'function') window.scrollTo(0, xbSavedScrollY);
+}
+
 function openModal(id) {
   const modal = document.getElementById(id);
   if (!modal) return;
   modal.classList.remove('hidden');
   modal.classList.add('flex');
+  if (!xbOpenModals.includes(id)) xbOpenModals.push(id);
+  xbLockBodyScroll();
 }
 
 function closeModal(id) {
@@ -408,13 +449,124 @@ function closeModal(id) {
   if (!modal) return;
   modal.classList.add('hidden');
   modal.classList.remove('flex');
+  xbOpenModals = xbOpenModals.filter(openId => openId !== id);
+  xbUnlockBodyScroll();
   // Đóng modal mã QR thì dừng vòng kiểm tra tiền về (hàm nằm ở app.js của trang chủ)
   if (id === 'qrPaymentModal' && typeof stopOrderPolling === 'function') stopOrderPolling();
 }
 
+/** Đang mở modal nào không? (dùng cho test + logic khóa cuộn) */
+function openModalIds() { return [...xbOpenModals]; }
+
+// Bấm ra nền tối → đóng sheet (chỉ khi chạm đúng lớp nền, không phải nội dung bên trong)
+document.addEventListener('click', (event) => {
+  const backdrop = event.target && typeof event.target.closest === 'function'
+    ? event.target.closest('[data-modal-backdrop]')
+    : null;
+  if (backdrop) closeModal(backdrop.dataset.modalBackdrop);
+});
+
+// Phím Esc → đóng modal đang mở trên cùng
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || xbOpenModals.length === 0) return;
+  closeModal(xbOpenModals[xbOpenModals.length - 1]);
+});
+
+// ============================ TOAST PHẢN HỒI (MOBILE) ============================
+/**
+ * Thông báo ngắn ở đáy màn hình: thêm/bớt sách thành công, đã chép nội dung...
+ * Trên điện thoại không có hover nên cần phản hồi rõ ràng bằng toast + rung nhẹ.
+ */
+function showToast(message, { icon = 'check', timeout = 2200 } = {}) {
+  const host = document.getElementById('toastHost');
+  if (!host) return null;
+
+  const toast = document.createElement('div');
+  toast.className = 'xb-toast pointer-events-auto flex max-w-sm items-center gap-2 rounded-2xl bg-slate-900/95 px-3.5 py-2.5 text-xs font-bold text-white shadow-xl border border-slate-700';
+  toast.setAttribute('role', 'status');
+  toast.innerHTML = `<i data-lucide="${escapeHtml(icon)}" class="h-4 w-4 flex-shrink-0 text-emerald-300"></i><span>${escapeHtml(message)}</span>`;
+  host.appendChild(toast);
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
+  // Chỉ giữ 2 toast gần nhất để không che mất thanh giỏ hàng
+  while (host.children.length > 2) host.removeChild(host.firstElementChild);
+
+  setTimeout(() => {
+    toast.classList.add('xb-toast-out');
+    setTimeout(() => toast.remove(), 220);
+  }, timeout);
+  return toast;
+}
+
+/** Rung nhẹ khi chạm (Android/Chrome). iPhone không hỗ trợ thì bỏ qua, không báo lỗi. */
+function hapticTap(ms = 10) {
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate(ms);
+  } catch (error) { /* trình duyệt không hỗ trợ */ }
+}
+
+/**
+ * Bàn phím ảo trên điện thoại (đặc biệt iPhone) che mất nửa dưới màn hình,
+ * làm nút "Tạo mã QR" biến mất khi khách đang gõ tên/SĐT.
+ * → đo chiều cao bàn phím qua VisualViewport rồi đẩy sheet lên đúng bằng đó
+ *   (biến --xb-keyboard dùng trong CSS .xb-sheet-lift / .xb-sheet-max).
+ */
+function initSheetKeyboardFix() {
+  if (typeof window === 'undefined' || !window.visualViewport) return;
+
+  const apply = () => {
+    const viewport = window.visualViewport;
+    const hidden = Math.max(0, Math.round(window.innerHeight - viewport.offsetTop - viewport.height));
+    document.documentElement.style.setProperty('--xb-keyboard', `${hidden}px`);
+  };
+
+  window.visualViewport.addEventListener('resize', apply);
+  window.visualViewport.addEventListener('scroll', apply);
+  apply();
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSheetKeyboardFix);
+  else initSheetKeyboardFix();
+}
+
+/**
+ * Sao chép nội dung chuyển khoản.
+ * Trên điện thoại vào bằng http:// (mạng LAN) thì `navigator.clipboard` không tồn tại
+ * → phải có đường dự phòng bằng textarea tạm, nếu không nút "Chép nội dung" sẽ chết.
+ */
 function copyToClipboard(elementId) {
-  const text = document.getElementById(elementId).innerText;
-  navigator.clipboard.writeText(text).then(() => {
-    alert(`Đã copy: "${text}"`);
-  });
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const text = (el.innerText || '').trim();
+
+  const feedback = (ok) => {
+    if (ok) {
+      hapticTap(12);
+      if (typeof showToast === 'function') showToast(`Đã chép: ${text}`, { icon: 'clipboard-check' });
+      else alert(`Đã copy: "${text}"`);
+    } else {
+      alert(`Không chép được. Nội dung cần chép: ${text}`);
+    }
+  };
+
+  const legacyCopy = () => {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (error) { ok = false; }
+    area.remove();
+    feedback(ok);
+  };
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    navigator.clipboard.writeText(text).then(() => feedback(true)).catch(legacyCopy);
+  } else {
+    legacyCopy();
+  }
 }

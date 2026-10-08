@@ -40,6 +40,23 @@ function clearFieldError(id) {
   if (el) el.classList.add('hidden');
 }
 
+/**
+ * Báo lỗi tại chỗ + kéo ô nhập vào giữa màn hình rồi focus.
+ * Trên điện thoại form nằm trong sheet cuộn được: nếu không cuộn tới,
+ * khách bấm "Tạo mã QR" mà không hiểu vì sao đơn không gửi đi.
+ */
+function focusFieldError(inputId, errorId, message) {
+  showFieldError(errorId, message);
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  if (typeof input.scrollIntoView === 'function') {
+    input.scrollIntoView({ block: 'center' });
+    input.focus({ preventScroll: true });
+  } else {
+    input.focus();
+  }
+}
+
 /** Chuẩn hóa số điện thoại Việt Nam: bỏ khoảng trắng/dấu chấm, +84 → 0 */
 function normalizePhoneNumber(value) {
   return String(value || '').replace(/[\s.\-()]/g, '').replace(/^\+?84/, '0');
@@ -134,14 +151,14 @@ function renderDepartmentChips() {
     return `
       <button
         onclick="setDepartmentFilter('${escapeHtml(value).replace(/'/g, "\\'")}')"
-        class="flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-extrabold border transition flex items-center space-x-1.5 ${
+        class="flex-shrink-0 min-h-[38px] sm:min-h-0 px-3.5 py-2 sm:py-1.5 rounded-full text-xs font-extrabold border transition active:scale-95 flex items-center space-x-1.5 ${
           active
             ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-600/30'
             : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:text-emerald-700'
         }"
       >
         <i data-lucide="${value === '__ALL__' ? 'layout-grid' : 'graduation-cap'}" class="w-3.5 h-3.5"></i>
-        <span>${escapeHtml(label)}</span>
+        <span class="whitespace-nowrap">${escapeHtml(label)}</span>
         <span class="text-[10px] font-black px-1.5 py-0.5 rounded-full ${active ? 'bg-white/20' : 'bg-slate-100 text-slate-500'}">${countFor(value)}</span>
       </button>
     `;
@@ -296,6 +313,9 @@ function refreshBookCard(bookId) {
  * HTML của MỘT card sách:
  * Khối hình vuông bo tròn (aspect-square rounded-2xl sm:rounded-3xl), không có ảnh bìa trực tiếp
  * để card tinh gọn, không chiếm chiều dọc màn hình. Có nút "Xem minh họa" nếu có ảnh.
+ *
+ * MOBILE (mỗi cột chỉ ~160px): ảnh minh họa là NÚT ICON ở góc phải (không chiếm thêm 1 dòng),
+ * nút "Chọn mua" cao 44px để bấm trúng bằng ngón cái — vẫn nằm gọn trong khối vuông.
  */
 function bookCardHtml(book) {
   const isClosed = !currentSettings.isRegistrationOpen;
@@ -308,19 +328,18 @@ function bookCardHtml(book) {
       <i data-lucide="check" class="h-3 w-3 stroke-[3]"></i>${inCart.quantity > 1 ? `<span>x${inCart.quantity}</span>` : ''}
     </span>` : '';
 
-  // Nút xem minh họa: nếu sách có ảnh
+  // Nút xem minh họa: nếu sách có ảnh — icon vuông gọn ở góc phải, không chiếm dòng riêng
   const previewBtn = book.cover ? `
-    <button type="button" onclick="openBookPreview('${escapeHtml(book.id)}')" title="Xem ảnh minh họa sách"
-      class="mt-1 inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-sky-600 hover:text-sky-700 active:scale-95 transition bg-sky-50 hover:bg-sky-100 px-2 py-0.5 rounded-lg border border-sky-200">
-      <i data-lucide="image" class="h-3 w-3 flex-shrink-0"></i>
-      <span>Xem minh họa</span>
+    <button type="button" onclick="openBookPreview('${escapeHtml(book.id)}')" title="Xem ảnh minh họa sách" aria-label="Xem ảnh minh họa sách"
+      class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-sky-200 bg-sky-50 text-sky-600 transition hover:bg-sky-100 active:scale-95 sm:h-9 sm:w-9">
+      <i data-lucide="image" class="h-4 w-4"></i>
     </button>` : '';
 
-  // Nút mua: full chiều ngang đáy card
-  const buttonBase = 'mt-1.5 sm:mt-2 flex min-h-[2rem] sm:min-h-[2.25rem] w-full items-center justify-center rounded-xl px-2 text-[11px] sm:text-xs font-bold transition active:scale-[0.98]';
+  // Nút mua: full chiều ngang đáy card, cao ≥ 44px trên mobile (chuẩn nút chạm)
+  const buttonBase = 'mt-1.5 sm:mt-2 flex min-h-[44px] sm:min-h-[2.25rem] w-full items-center justify-center rounded-xl px-2 text-[11px] sm:text-xs font-bold transition active:scale-[0.98]';
   const buttonInner = (icon, label) => `
-    <span class="flex items-center justify-center gap-1">
-      <i data-lucide="${icon}" class="h-3.5 w-3.5 flex-shrink-0"></i>
+    <span class="flex items-center justify-center gap-1 min-w-0">
+      <i data-lucide="${icon}" class="h-4 w-4 flex-shrink-0"></i>
       <span class="truncate">${label}</span>
     </span>`;
 
@@ -334,19 +353,18 @@ function bookCardHtml(book) {
       class="${buttonBase} bg-brand-600 text-white shadow-sm shadow-brand-500/25 hover:bg-brand-700">${buttonInner('plus', 'Chọn mua')}</button>`;
 
   return `
-    <article data-book-id="${escapeHtml(book.id)}" class="group relative flex min-w-0 aspect-square flex-col justify-between overflow-hidden rounded-2xl sm:rounded-3xl border bg-white p-3 sm:p-4 shadow-sm hover:shadow-md transition-all ${inCart ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-slate-200'}">
+    <article data-book-id="${escapeHtml(book.id)}" class="group relative flex min-w-0 aspect-square flex-col justify-between overflow-hidden rounded-2xl sm:rounded-3xl border bg-white p-2.5 sm:p-4 shadow-sm hover:shadow-md transition-all ${inCart ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-slate-200'}">
       <div class="min-w-0">
         <div class="flex items-start justify-between gap-1.5 mb-0.5">
           <h3 class="line-clamp-2 break-words text-xs sm:text-sm font-extrabold leading-snug text-slate-900 flex-1">${escapeHtml(book.title)}</h3>
-          ${selectedBadge}
+          <span class="flex items-start gap-1 flex-shrink-0">${selectedBadge}${previewBtn}</span>
         </div>
         ${meta ? `<p class="line-clamp-1 text-[10px] font-medium text-slate-400 sm:text-[11px] mb-1">${escapeHtml(meta)}</p>` : ''}
-        ${previewBtn}
       </div>
 
       <div class="mt-auto min-w-0 pt-1.5 sm:pt-2 border-t border-slate-100">
         <div class="flex min-w-0 items-baseline justify-between gap-1">
-          <span class="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Đơn giá</span>
+          <span class="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400 flex-shrink-0">Đơn giá</span>
           <span class="min-w-0 truncate text-xs sm:text-base font-black leading-none text-emerald-600">${formatMoney(book.price)}</span>
         </div>
         ${actionButton}
@@ -382,10 +400,10 @@ function openBookPreview(bookId) {
     const isClosed = !currentSettings.isRegistrationOpen;
     const inCart = cart.find(c => c.bookId === book.id);
     actionWrap.innerHTML = isClosed
-      ? `<button disabled class="w-full py-2.5 bg-slate-100 text-slate-400 text-xs font-bold rounded-xl cursor-not-allowed">Đã chốt sổ</button>`
+      ? `<button disabled class="w-full min-h-[48px] bg-slate-100 text-slate-400 text-xs font-bold rounded-xl cursor-not-allowed">Đã chốt sổ</button>`
       : `
         <button onclick="toggleCartBook('${escapeHtml(book.id)}'); openBookPreview('${escapeHtml(book.id)}');"
-          class="w-full py-2.5 ${inCart ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' : 'bg-brand-600 hover:bg-brand-700 text-white'} text-xs font-bold rounded-xl shadow-sm transition flex items-center justify-center space-x-1.5">
+          class="w-full min-h-[48px] ${inCart ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' : 'bg-brand-600 hover:bg-brand-700 text-white'} text-sm font-bold rounded-xl shadow-sm transition flex items-center justify-center space-x-1.5 active:scale-[0.99]">
           <i data-lucide="${inCart ? 'check' : 'plus'}" class="w-4 h-4"></i>
           <span>${inCart ? `Đã chọn (${inCart.quantity} cuốn) — Bấm để đổi` : 'Chọn mua sách này'}</span>
         </button>
@@ -399,10 +417,15 @@ function openBookPreview(bookId) {
 // ============================ GIỎ HÀNG ĐA CUỐN ============================
 function toggleCartBook(bookId) {
   const idx = cart.findIndex(c => c.bookId === bookId);
+  const book = allBooks.find(b => b.id === bookId);
   if (idx >= 0) {
     cart.splice(idx, 1);
+    hapticTap(8);
+    showToast(`Đã bỏ "${book ? book.title : 'sách'}" khỏi giỏ`, { icon: 'minus' });
   } else {
     cart.push({ bookId, quantity: 1 });
+    hapticTap(12);
+    showToast(`Đã thêm "${book ? book.title : 'sách'}" vào giỏ`, { icon: 'cart-plus' });
   }
   refreshBookCard(bookId);
   renderCartUI();
@@ -474,6 +497,7 @@ function openCheckoutModal() {
   clearFieldError('formCustomerNameError');
   clearFieldError('formCustomerPhoneError');
   clearFieldError('formCustomerClassError');
+  clearFieldError('formCustomerDeliveryDateError');
 
   // Lưu ý ngày nhận sách (ngắn gọn) trong form đăng ký
   const deliveryWrap = document.getElementById('checkoutDeliveryInfo');
@@ -506,6 +530,10 @@ function openCheckoutModal() {
 
   renderCheckoutItems();
   openModal('checkoutModal');
+
+  // Mở lại sheet thì đưa nội dung về đầu (phiên trước khách có thể đã cuộn xuống cuối)
+  const sheetBody = document.querySelector('#checkoutModal [data-sheet-body]');
+  if (sheetBody) sheetBody.scrollTop = 0;
 }
 
 function renderCheckoutItems() {
@@ -514,18 +542,26 @@ function renderCheckoutItems() {
     const book = allBooks.find(b => b.id === c.bookId);
     if (!book) return '';
     return `
-      <div class="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-2xl p-2.5">
-        <div class="min-w-0 flex-1">
-          <div class="text-xs font-extrabold text-slate-900 truncate">${escapeHtml(book.title)}</div>
-          <div class="text-[10px] text-slate-400 font-semibold">${formatMoney(book.price)}/cuốn</div>
-        </div>
-        <div class="flex items-center space-x-1.5 flex-shrink-0">
-          <button type="button" onclick="changeCartQuantity(${idx}, -1)" class="w-7 h-7 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold flex items-center justify-center">-</button>
-          <span class="w-6 text-center text-sm font-black text-slate-900">${c.quantity}</span>
-          <button type="button" onclick="changeCartQuantity(${idx}, 1)" class="w-7 h-7 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold flex items-center justify-center">+</button>
-          <button type="button" onclick="removeCartItem(${idx})" class="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition" title="Bỏ cuốn này">
-            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+      <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <div class="text-xs font-extrabold text-slate-900 leading-snug line-clamp-2">${escapeHtml(book.title)}</div>
+            <div class="text-[10px] text-slate-400 font-semibold mt-0.5">
+              ${formatMoney(book.price)} × ${c.quantity} =
+              <span class="text-emerald-700 font-black">${formatMoney(book.price * c.quantity)}</span>
+            </div>
+          </div>
+          <button type="button" onclick="removeCartItem(${idx})" title="Bỏ cuốn này" aria-label="Bỏ cuốn này khỏi giỏ"
+            class="h-9 w-9 flex-shrink-0 flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
           </button>
+        </div>
+        <div class="mt-2 flex items-center justify-end gap-2">
+          <button type="button" onclick="changeCartQuantity(${idx}, -1)" aria-label="Giảm số lượng"
+            class="h-10 w-10 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-black text-base flex items-center justify-center active:scale-95 transition">-</button>
+          <span class="w-8 text-center text-sm font-black text-slate-900">${c.quantity}</span>
+          <button type="button" onclick="changeCartQuantity(${idx}, 1)" aria-label="Tăng số lượng"
+            class="h-10 w-10 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-black text-base flex items-center justify-center active:scale-95 transition">+</button>
         </div>
       </div>
     `;
@@ -540,6 +576,7 @@ function changeCartQuantity(index, delta) {
   const item = cart[index];
   if (!item) return;
   item.quantity = Math.max(1, Math.min(50, item.quantity + delta));
+  hapticTap(8);
   renderCheckoutItems();
   renderCartUI();
   refreshBookCard(item.bookId);
@@ -570,6 +607,7 @@ async function handleCreatePayment(event) {
   clearFieldError('formCustomerNameError');
   clearFieldError('formCustomerPhoneError');
   clearFieldError('formCustomerClassError');
+  clearFieldError('formCustomerDeliveryDateError');
 
   const nameInput = document.getElementById('formCustomerName');
   const phoneInput = document.getElementById('formCustomerPhone');
@@ -582,20 +620,17 @@ async function handleCreatePayment(event) {
   // BẮT BUỘC 1: Họ và Tên đầy đủ (tối thiểu 2 từ)
   const nameParts = customerName.split(/\s+/).filter(w => w.length > 0);
   if (nameParts.length < 2) {
-    showFieldError('formCustomerNameError', 'Vui lòng nhập đầy đủ cả Họ và Tên (ví dụ: Nguyễn Văn An).');
-    nameInput.focus();
+    focusFieldError('formCustomerName', 'formCustomerNameError', 'Vui lòng nhập đầy đủ cả Họ và Tên (ví dụ: Nguyễn Văn An).');
     return;
   }
 
   // BẮT BUỘC 2: Số điện thoại đúng định dạng Việt Nam
   if (!customerPhone) {
-    showFieldError('formCustomerPhoneError', 'Vui lòng nhập số điện thoại để liên hệ khi phát sách.');
-    phoneInput?.focus();
+    focusFieldError('formCustomerPhone', 'formCustomerPhoneError', 'Vui lòng nhập số điện thoại để liên hệ khi phát sách.');
     return;
   }
   if (!/^0\d{9}$/.test(customerPhone)) {
-    showFieldError('formCustomerPhoneError', 'Số điện thoại chưa đúng (10 số, ví dụ: 0987 654 321).');
-    phoneInput?.focus();
+    focusFieldError('formCustomerPhone', 'formCustomerPhoneError', 'Số điện thoại chưa đúng (10 số, ví dụ: 0987 654 321).');
     return;
   }
 
@@ -604,6 +639,9 @@ async function handleCreatePayment(event) {
     showFieldError('formCustomerClassError', catalogClasses().length
       ? 'Vui lòng chọn lớp của bạn trong danh sách.'
       : 'Hệ thống chưa mở lớp nào — vui lòng liên hệ quản trị viên để được thêm lớp.');
+    // Kéo ô chọn lớp vào tầm nhìn: trên mobile ô này nằm giữa sheet, dễ bị bỏ sót
+    const classField = document.getElementById('formCustomerClass');
+    if (classField && typeof classField.scrollIntoView === 'function') classField.scrollIntoView({ block: 'center' });
     return;
   }
 
@@ -611,13 +649,11 @@ async function handleCreatePayment(event) {
   const deliveryDateInput = document.getElementById('formCustomerDeliveryDate');
   const deliveryDate = (deliveryDateInput?.value || '').trim();
   if (!deliveryDate) {
-    alert("Vui lòng chọn ngày muốn nhận sách!");
-    deliveryDateInput?.focus();
+    focusFieldError('formCustomerDeliveryDate', 'formCustomerDeliveryDateError', 'Vui lòng chọn ngày muốn nhận sách (từ ngày mai trở đi).');
     return;
   }
   if (deliveryDateInput?.min && deliveryDate < deliveryDateInput.min) {
-    alert("Ngày nhận sách bắt buộc phải sau ngày đặt đơn ít nhất 1 ngày!");
-    deliveryDateInput?.focus();
+    focusFieldError('formCustomerDeliveryDate', 'formCustomerDeliveryDateError', 'Ngày nhận sách phải sau ngày đặt đơn ít nhất 1 ngày.');
     return;
   }
 
@@ -652,7 +688,7 @@ async function handleCreatePayment(event) {
       return;
     }
 
-    const { orderCode, amount, quantity, bookTitle, qrCode, accountNumber, bin, accountName, description } = result.data;
+    const { orderCode, amount, quantity, bookTitle, qrCode, accountNumber, bin, accountName, description, checkoutUrl } = result.data;
     activeOrderCode = orderCode;
 
     // Đặt xong thì làm trống giỏ
@@ -663,7 +699,7 @@ async function handleCreatePayment(event) {
     closeModal('checkoutModal');
     showQRPaymentModal({
       orderCode, amount, quantity, bookTitle, customerName,
-      qrCode, accountNumber, bin, accountName, description
+      qrCode, accountNumber, bin, accountName, description, checkoutUrl
     });
 
   } catch (error) {
@@ -680,6 +716,9 @@ async function handleCreatePayment(event) {
 
 /**
  * 7. HIỂN THỊ MODAL MÃ DYNAMIC VIETQR & BẮT ĐẦU POLLING
+ * Mobile không tự quét được QR trên cùng một màn hình → gắn thêm:
+ *  - nút MỞ APP NGÂN HÀNG (checkoutUrl PayOS mở thẳng app banking),
+ *  - nút MỞ ẢNH QR (để chụp màn hình / lưu rồi quét bằng máy khác).
  */
 function showQRPaymentModal(data) {
   document.getElementById('paymentPendingView').classList.remove('hidden');
@@ -692,6 +731,21 @@ function showQRPaymentModal(data) {
 
   const qrImgUrl = `https://img.vietqr.io/image/${data.bin}-${data.accountNumber}-compact2.png?amount=${data.amount}&addInfo=${encodeURIComponent(data.description)}&accountName=${encodeURIComponent(data.accountName)}`;
   document.getElementById('qrImageElement').src = qrImgUrl;
+
+  // Hành động ở chân sheet: mở app ngân hàng + mở ảnh QR (ẩn khi không có link)
+  const pendingActions = document.getElementById('qrPendingActions');
+  const doneButton = document.getElementById('qrDoneButton');
+  if (pendingActions) pendingActions.classList.remove('hidden');
+  if (doneButton) doneButton.classList.add('hidden');
+
+  const openBank = document.getElementById('qrOpenBankButton');
+  if (openBank) {
+    const hasCheckoutUrl = Boolean(data.checkoutUrl);
+    openBank.href = data.checkoutUrl || '#';
+    openBank.classList.toggle('hidden', !hasCheckoutUrl);
+  }
+  const saveLink = document.getElementById('qrSaveImageLink');
+  if (saveLink) saveLink.href = qrImgUrl;
 
   openModal('qrPaymentModal');
   startOrderPolling(data.orderCode);
@@ -734,6 +788,15 @@ function handlePaymentSuccess(data) {
   document.getElementById('successOrderCode').innerText = `#${data.orderCode}`;
 
   document.getElementById('successDeliveryDate').innerText = formatDelivery(data.deliveryAt);
+
+  // Tiền đã về: ẩn nhóm nút chuyển khoản, hiện nút "Hoàn tất" ở chân sheet
+  const pendingActions = document.getElementById('qrPendingActions');
+  const doneButton = document.getElementById('qrDoneButton');
+  if (pendingActions) pendingActions.classList.add('hidden');
+  if (doneButton) doneButton.classList.remove('hidden');
+
+  hapticTap([12, 60, 12]);
+  showToast('Đã nhận tiền — chốt tên bạn vào danh sách!', { icon: 'check-circle', timeout: 3000 });
 
   lucide.createIcons();
 }
