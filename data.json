@@ -42,34 +42,6 @@
   ],
   "orders": [
     {
-      "orderCode": 285553246,
-      "bookId": "sach-01",
-      "bookTitle": "Sách Giáo trình Lý thuyết Môn học (Bản in màu)",
-      "quantity": 1,
-      "unitPrice": 45000,
-      "amount": 45000,
-      "items": [
-        {
-          "bookId": "sach-01",
-          "bookTitle": "Sách Giáo trình Lý thuyết Môn học (Bản in màu)",
-          "department": "",
-          "quantity": 1,
-          "unitPrice": 45000
-        }
-      ],
-      "customerName": "Nguyen Van Nam",
-      "customerClass": "CNTT K15",
-      "customerPhone": "",
-      "note": "",
-      "status": "PENDING",
-      "isDelivered": false,
-      "checkoutUrl": "http://localhost:3000/mock-checkout.html?orderCode=285553246&amount=45000",
-      "qrCode": "00020101021238540010A00000072701240006970422011001234567890208QRIBFTTA5303704540450005802VN62180814XB2855532466304ABCD",
-      "createdAt": "2026-10-01T14:01:25.553Z",
-      "updatedAt": "2026-10-01T14:01:25.553Z",
-      "paidAt": null
-    },
-    {
       "orderCode": 900000001,
       "items": [
         {
