@@ -67,6 +67,13 @@
       50% { opacity: 1; }
       100% { top: 100%; opacity: 0; }
     }
+    /* Toast phản hồi (lỗi tải số liệu, kết quả đối soát...) */
+    .xb-toast { animation: xb-toast-in 0.18s ease-out; }
+    .xb-toast-out { opacity: 0; transform: translateY(6px); transition: opacity 0.2s, transform 0.2s; }
+    @keyframes xb-toast-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
     /* Ẩn mũi tên lên xuống mặc định của trình duyệt ở ô số lượng */
     input[type=number]::-webkit-inner-spin-button,
     input[type=number]::-webkit-outer-spin-button {
@@ -458,6 +465,40 @@
             </div>
           </div>
 
+          <!-- ĐỐI SOÁT PAYOS: khách đã chuyển tiền nhưng đơn chưa được ghi nhận -->
+          <div class="print:hidden mb-3 bg-amber-50 border border-amber-200 rounded-2xl p-3" id="payosReconcileBox">
+            <div class="flex items-start gap-2">
+              <i data-lucide="shield-alert" class="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0"></i>
+              <div class="min-w-0 flex-1">
+                <p class="text-xs font-bold text-amber-900">Khách báo đã chuyển tiền mà web chưa thấy đơn?</p>
+                <p class="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                  Nhập mã đơn trong nội dung chuyển khoản (dạng <strong>XB123456789</strong>) rồi bấm <strong>Đối soát</strong>.
+                  Hệ thống sẽ hỏi lại PayOS và ghi nhận đơn ngay — kể cả khi đơn chưa từng được lưu.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-2 mt-2">
+                  <input
+                    type="text"
+                    id="reconcileOrderCodeInput"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    placeholder="VD: XB123456789"
+                    class="flex-1 px-3 py-2 text-xs font-mono bg-white border border-amber-300 rounded-xl focus:border-amber-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    data-reconcile-order
+                    id="reconcileOrderButton"
+                    class="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm flex-shrink-0"
+                  >
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                    <span>Đối soát</span>
+                  </button>
+                </div>
+                <p id="reconcileResult" class="hidden text-[11px] font-semibold mt-2 leading-relaxed"></p>
+              </div>
+            </div>
+          </div>
+
           <!-- BẢNG QUYẾT TOÁN TỪNG NGÀY -->
           <div class="border border-slate-200 rounded-2xl overflow-hidden bg-white">
             <div class="max-h-[26rem] overflow-y-auto">
@@ -801,6 +842,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Vùng hiển thị toast (lỗi tải số liệu, kết quả đối soát PayOS) -->
+  <div id="toastHost" class="pointer-events-none fixed inset-x-0 bottom-6 z-[70] flex flex-col items-center gap-2 px-4 print:hidden"></div>
 
   <script src="domain.js"></script>
   <script src="core.js"></script>

@@ -299,7 +299,14 @@ async function refreshAdminData(opts = {}) {
     }
 
     const result = await res.json();
-    if (!result.success) return;
+    if (res.ok === false || Number(res.status) >= 400 || !result.success) {
+      // Không im lặng nữa: nếu DB lỗi mà bảng trống, admin dễ tưởng "mất hết đơn"
+      console.error("Không tải được số liệu quản trị:", result);
+      if (typeof showToast === 'function') {
+        showToast(result.message || `Không tải được số liệu quản trị (mã lỗi ${res.status}).`, { icon: 'alert-triangle', timeout: 6000 });
+      }
+      return;
+    }
 
     const stats = result.data;
     currentSettings = { ...currentSettings, ...(stats.settings || {}) };
@@ -343,6 +350,9 @@ async function refreshAdminData(opts = {}) {
     lucide.createIcons();
   } catch (err) {
     console.error("Lỗi admin:", err);
+    if (typeof showToast === 'function') {
+      showToast('Lỗi kết nối khi tải số liệu quản trị: ' + err.message, { icon: 'alert-triangle', timeout: 6000 });
+    }
   }
 }
 
@@ -390,7 +400,75 @@ function initAdminDelegatedEvents() {
 
     const soldBookRow = target.closest('[data-sold-book]');
     if (soldBookRow) { filterBySoldBook(soldBookRow.dataset.soldBook); return; }
+
+    const reconcileBtn = target.closest('[data-reconcile-order]');
+    if (reconcileBtn) { reconcilePayOSOrder(); return; }
   });
+}
+
+/**
+ * ĐỐI SOÁT LẠI 1 ĐƠN VỚI PAYOS (nút "Đối soát" trong tab Quyết toán).
+ * Dùng khi khách báo đã chuyển tiền nhưng web chưa ghi nhận đơn
+ * (webhook tới muộn / mất mạng / đơn chưa kịp lưu).
+ */
+async function reconcilePayOSOrder() {
+  const input = document.getElementById('reconcileOrderCodeInput');
+  const button = document.getElementById('reconcileOrderButton');
+  const raw = (input && input.value ? input.value : '').trim();
+  if (!raw) {
+    showReconcileResult('Vui lòng nhập mã đơn (VD: XB123456789).', 'warning');
+    if (input) input.focus();
+    return;
+  }
+
+  const buttonLabel = button ? button.querySelector('span') : null;
+  const originalLabel = buttonLabel ? buttonLabel.innerText : '';
+  if (button) button.disabled = true;
+  if (buttonLabel) buttonLabel.innerText = 'Đang kiểm tra...';
+  showReconcileResult('Đang hỏi PayOS...', 'info');
+
+  try {
+    const res = await adminFetch('/api/admin/orders/reconcile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderCode: raw })
+    });
+    if (res.status === 401) {
+      askAdminLogin('Phiên đăng nhập đã hết hạn — vui lòng nhập lại mật khẩu quản trị.');
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      showReconcileResult(data.message || `Không đối soát được (mã lỗi ${res.status}).`, 'error');
+      return;
+    }
+    showReconcileResult(data.message || 'Đã đối soát xong.', data.changed ? 'success' : 'warning');
+    if (data.changed) {
+      if (input) input.value = '';
+      await refreshAdminData();
+      lucide.createIcons();
+    }
+  } catch (err) {
+    showReconcileResult('Lỗi kết nối khi đối soát: ' + err.message, 'error');
+  } finally {
+    if (button) button.disabled = false;
+    if (buttonLabel) buttonLabel.innerText = originalLabel || 'Đối soát';
+  }
+}
+
+/** Hiển thị kết quả đối soát ngay dưới ô nhập (không phụ thuộc toast) */
+function showReconcileResult(message, tone = 'info') {
+  const el = document.getElementById('reconcileResult');
+  if (!el) return;
+  const tones = {
+    success: 'text-emerald-700',
+    error: 'text-rose-700',
+    warning: 'text-amber-800',
+    info: 'text-slate-600'
+  };
+  el.className = `text-[11px] font-semibold mt-2 leading-relaxed ${tones[tone] || tones.info}`;
+  el.innerText = message;
+  el.classList.remove('hidden');
 }
 
 // ============================ BỘ LỌC NGÀY TRONG BẢNG QUẢN TRỊ ============================

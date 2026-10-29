@@ -156,22 +156,139 @@ async function callPayOSCreatePaymentLink(paymentData) {
   throw new Error("Không tìm thấy hàm createPaymentLink trên SDK PayOS");
 }
 
-function verifyPayOSWebhook(webhookBody) {
+/**
+ * ⚠️ QUAN TRỌNG: `payos.webhooks.verify()` của @payos/node v2 là hàm **async**.
+ * Nếu gọi mà không `await`, kết quả là 1 Promise → `verifiedData.orderCode` = undefined
+ * → webhook "không tìm thấy đơn" và khách đã trả tiền vẫn KHÔNG được ghi nhận.
+ * Vì vậy hàm này (và nơi gọi nó) bắt buộc phải async/await.
+ */
+async function verifyPayOSWebhook(webhookBody) {
   if (!payos) {
+    // Chế độ demo (chưa cấu hình key): chấp nhận payload để chạy thử nội bộ.
     return webhookBody?.data || webhookBody;
   }
   if (payos.webhooks && typeof payos.webhooks.verify === 'function') {
-    return payos.webhooks.verify(webhookBody);
+    return await payos.webhooks.verify(webhookBody);
   }
   if (typeof payos.verifyPaymentWebhookData === 'function') {
-    return payos.verifyPaymentWebhookData(webhookBody);
+    return await payos.verifyPaymentWebhookData(webhookBody);
   }
   throw new Error("Không tìm thấy hàm verify Webhook trên SDK PayOS");
+}
+
+/** PayOS SDK v2 trả `status: 'PAID'`, các bản cũ trả `COMPLETED`. */
+function isPayOSPaidStatus(status) {
+  return ['PAID', 'COMPLETED'].includes(String(status || '').toUpperCase());
+}
+
+/** Lấy thông tin 1 link thanh toán từ PayOS (hỗ trợ cả SDK v2 và v1). */
+async function fetchPayOSPaymentInfo(orderCode) {
+  if (!payos) return null;
+  if (payos.paymentRequests && typeof payos.paymentRequests.get === 'function') {
+    return await payos.paymentRequests.get(orderCode);
+  }
+  if (typeof payos.getPaymentLinkInformation === 'function') {
+    return await payos.getPaymentLinkInformation(orderCode);
+  }
+  return null;
+}
+
+/**
+ * PayOS gửi `transactionDateTime` dạng "2026-10-29 10:00:00" (giờ Việt Nam, không kèm múi giờ).
+ * Trên server (Vercel chạy UTC) nếu parse trực tiếp sẽ lệch 7 tiếng → lọc "ngày thanh toán" sai.
+ */
+function parsePayOSDateTime(value) {
+  if (!value) return new Date().toISOString();
+  const str = String(value).trim();
+  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/);
+  if (m) {
+    const parsed = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}+07:00`);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  const parsed = new Date(str);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+}
+
+/**
+ * GHI NHẬN 1 ĐƠN ĐÃ THANH TOÁN — dùng chung cho Webhook, Polling và nút "Đối soát PayOS".
+ *  - Đơn đã có trong DB  → chuyển sang PAID (idempotent, gọi lại nhiều lần vẫn an toàn).
+ *  - Đơn KHÔNG có trong DB (mất dữ liệu / DB lỗi lúc tạo đơn) → tạo bản ghi PAID
+ *    để tiền khách đã chuyển KHÔNG bị mất khỏi sổ sách.
+ * Ném lỗi nếu DB hỏng, để PayOS retry webhook thay vì nuốt mất thanh toán.
+ */
+async function recordPaidOrder({ orderCode, amount, description = '', reference = '', accountNumber = '', paidAt, customerName = '', counterAccountName = '' }) {
+  const code = Number(orderCode);
+  if (!Number.isFinite(code) || code <= 0) throw new Error(`Mã đơn hàng không hợp lệ: ${orderCode}`);
+  const paid = Number(amount) || 0;
+  const paidAtIso = paidAt || new Date().toISOString();
+
+  const existing = await db.getOrderByCode(code);
+  if (existing && existing.status === 'PAID') {
+    return { order: existing, recovered: false, alreadyPaid: true };
+  }
+  if (existing) {
+    const updated = await db.updateOrderStatus(code, 'PAID', { paidAt: paidAtIso, reference, accountNumber });
+    if (!updated) throw new Error(`Không cập nhật được đơn #${code}`);
+    return { order: updated, recovered: false, alreadyPaid: false };
+  }
+
+  const noteParts = [`Tự động ghi nhận khi đối soát PayOS (nội dung CK: ${description || 'XB' + code})`];
+  if (counterAccountName) noteParts.push(`người gửi: ${counterAccountName}`);
+  const recoveredOrder = await db.createOrder({
+    orderCode: code,
+    status: 'PAID',
+    bookTitle: 'Đơn đối soát PayOS (chưa rõ sách)',
+    quantity: 1,
+    unitPrice: paid,
+    amount: paid,
+    customerName: customerName || counterAccountName || 'Khách chuyển khoản (PayOS)',
+    customerPhone: '',
+    customerClass: '',
+    customerDepartment: '',
+    note: noteParts.join(' · '),
+    bankReference: reference,
+    accountNumber,
+    paidAt: paidAtIso
+  });
+  console.warn(` [PayOS] Đơn #${code} đã thanh toán nhưng chưa có trong DB → đã tự tạo bản ghi PAID (${paid.toLocaleString('vi-VN')} đ).`);
+  return { order: recoveredOrder, recovered: true, alreadyPaid: false };
+}
+
+/** Mã đơn hàng số nguyên duy nhất cho PayOS (tránh trùng giữa các lần tạo / nhiều instance). */
+async function generateOrderCode() {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const candidate = Number(String(Date.now()).slice(-6) + Math.floor(100 + Math.random() * 900));
+    const taken = await db.getOrderByCode(candidate);
+    if (!taken) return candidate;
+  }
+  throw new Error('Không sinh được mã đơn hàng duy nhất, vui lòng thử lại!');
 }
 
 // ============================================================================
 // API ROUTES
 // ============================================================================
+
+/**
+ * 1b. KIỂM TRA SỨC KHỎE HỆ THỐNG (dùng khi "khách báo đã trả tiền mà web không thấy đơn")
+ * Trả về đang lưu ở đâu, DB có đọc/ghi được không, PayOS đã cấu hình chưa.
+ */
+app.get('/api/health', async (req, res) => {
+  const health = await db.ping();
+  const isAdmin = verifyAdminToken(readAdminToken(req)) || readAdminPassword(req) === ADMIN_PASSWORD;
+  return res.status(health.ok ? 200 : 503).json({
+    success: health.ok,
+    data: {
+      database: health.database,
+      databaseOk: health.ok,
+      // Chi tiết lỗi chỉ trả cho quản trị viên đã đăng nhập
+      databaseError: isAdmin ? health.error : '',
+      payosConfigured: Boolean(payos),
+      // Trên Vercel ổ đĩa là read-only: chỉ dùng được file storage khi chạy local
+      persistentStorage: db.isNeon,
+      serverTime: new Date().toISOString()
+    }
+  });
+});
 
 /**
  * 1. LẤY DANH SÁCH SÁCH & TRẠNG THÁI ĐĂNG KÝ
@@ -286,9 +403,26 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
     const totalAmount = items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
     const bookTitleSummary = items.map(it => it.bookTitle).join(', ');
 
-    // Sinh mã đơn hàng duy nhất cho PayOS (Số nguyên)
-    const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(100 + Math.random() * 900));
+    // Sinh mã đơn hàng duy nhất cho PayOS (Số nguyên) — kiểm tra trùng với DB trước khi dùng
+    const orderCode = await generateOrderCode();
     const transferDescription = `XB${orderCode}`;
+
+    // ⚠️ LƯU ĐƠN TRƯỚC KHI TẠO MÃ QR: nếu DB lỗi/không ghi được thì dừng ngay (báo 500),
+    // khách chưa thấy mã QR nào → không thể chuyển tiền vào một đơn không tồn tại.
+    const order = await db.createOrder({
+      orderCode: orderCode,
+      items: items,
+      bookTitle: bookTitleSummary,
+      quantity: totalQuantity,
+      amount: totalAmount,
+      customerName: customerName || 'Bạn cùng lớp',
+      customerClass: selectedClass.name,
+      customerDepartment: selectedClass.department,
+      customerPhone: phone,
+      note: note || '',
+      deliveryDate: (deliveryDate && String(deliveryDate).trim()) || settings.deliveryDate || '',
+      status: 'PENDING'
+    });
 
     const paymentPayload = {
       orderCode: orderCode,
@@ -305,21 +439,10 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
 
     const paymentResponse = await callPayOSCreatePaymentLink(paymentPayload);
 
-    // Lưu vào database
-    const order = await db.createOrder({
-      orderCode: orderCode,
-      items: items,
-      bookTitle: bookTitleSummary,
-      quantity: totalQuantity,
-      amount: totalAmount,
-      customerName: customerName || 'Bạn cùng lớp',
-      customerClass: selectedClass.name,
-      customerDepartment: selectedClass.department,
-      customerPhone: phone,
-      note: note || '',
-      deliveryDate: (deliveryDate && String(deliveryDate).trim()) || settings.deliveryDate || '',
-      checkoutUrl: paymentResponse.checkoutUrl,
-      qrCode: paymentResponse.qrCode
+    // Gắn link thanh toán / mã QR vào đơn vừa lưu (đơn vẫn ở trạng thái PENDING chờ tiền về)
+    await db.savePaymentLink(order.orderCode, {
+      checkoutUrl: paymentResponse.checkoutUrl || '',
+      qrCode: paymentResponse.qrCode || ''
     });
 
     console.log(`\n Đã tạo mã QR PayOS cho: ${customerName} (${selectedClass.department} / ${selectedClass.name}) - ${totalQuantity} cuốn [${bookTitleSummary}] - ${totalAmount.toLocaleString('vi-VN')} đ (Mã: ${transferDescription})`);
@@ -353,48 +476,44 @@ app.post('/api/orders/create-payment-link', async (req, res) => {
 
 /**
  * 3. TRA CỨU TRẠNG THÁI ĐƠN HÀNG (REALTIME POLLING + ĐỒNG BỘ TRỰC TIẾP TỪ PAYOS)
+ * Trang chủ gọi API này vài giây/lần sau khi khách quét QR; nếu PayOS báo đã thanh toán
+ * thì ghi nhận ngay (kể cả khi webhook chưa tới hoặc đơn chưa có trong DB).
  */
+const PAYOS_SYNC_TTL_MS = 5000;
+const payosSyncAt = new Map();
+
 app.get('/api/orders/:orderCode', async (req, res) => {
   try {
     const orderCode = Number(req.params.orderCode);
+    if (!Number.isFinite(orderCode) || orderCode <= 0) {
+      return res.status(400).json({ success: false, message: "Mã đơn hàng không hợp lệ!" });
+    }
     let order = await db.getOrderByCode(orderCode);
 
-    // NẾU CHƯA PAID, CHỦ ĐỘNG HỎI TRỰC TIẾP PAYOS SERVER XEM TIỀN ĐÃ VỀ CHƯA!
-    if (!order || order.status !== 'PAID') {
+    // Chưa PAID → hỏi thẳng PayOS xem tiền về chưa (giới hạn tần suất để không spam API PayOS)
+    const lastSync = payosSyncAt.get(orderCode) || 0;
+    if ((!order || order.status !== 'PAID') && payos && Date.now() - lastSync > PAYOS_SYNC_TTL_MS) {
+      if (payosSyncAt.size > 5000) payosSyncAt.clear();
+      payosSyncAt.set(orderCode, Date.now());
       try {
-        let paymentInfo = null;
-        if (payos && payos.paymentRequests && typeof payos.paymentRequests.get === 'function') {
-          paymentInfo = await payos.paymentRequests.get(orderCode);
-        } else if (payos && typeof payos.getPaymentLinkInformation === 'function') {
-          paymentInfo = await payos.getPaymentLinkInformation(orderCode);
-        }
-
-        if (paymentInfo && (paymentInfo.status === 'PAID' || paymentInfo.status === 'COMPLETED')) {
-          if (order) {
-            order = await db.updateOrderStatus(orderCode, 'PAID', {
-              paidAt: new Date().toISOString(),
-              reference: paymentInfo.id || 'PAYOS_SYNC'
-            });
-          } else {
-            order = await db.createOrder({
-              orderCode: orderCode,
-              status: 'PAID',
-              bookTitle: paymentInfo.items?.[0]?.name || 'Sách',
-              quantity: paymentInfo.items?.[0]?.quantity || 1,
-              amount: paymentInfo.amount,
-              unitPrice: paymentInfo.amount,
-              customerName: paymentInfo.buyerName || 'Sinh viên',
-              customerPhone: paymentInfo.buyerPhone || '',
-              note: '',
-              isDelivered: false,
-              paidAt: new Date().toISOString()
-            });
-            await db.updateOrderStatus(orderCode, 'PAID');
-          }
-          console.log(`[SYNC PAYOS] Đã xác nhận đơn #${orderCode} đã thanh toán thành công từ PayOS!`);
+        const paymentInfo = await fetchPayOSPaymentInfo(orderCode);
+        if (paymentInfo && isPayOSPaidStatus(paymentInfo.status)) {
+          const tx = Array.isArray(paymentInfo.transactions) ? (paymentInfo.transactions[0] || {}) : {};
+          const result = await recordPaidOrder({
+            orderCode,
+            amount: paymentInfo.amount,
+            description: paymentInfo.description || `XB${orderCode}`,
+            reference: tx.reference || paymentInfo.paymentLinkId || 'PAYOS_SYNC',
+            accountNumber: paymentInfo.accountNumber || tx.accountNumber || '',
+            paidAt: parsePayOSDateTime(tx.transactionDateTime || paymentInfo.createdAt),
+            counterAccountName: tx.counterAccountName || ''
+          });
+          order = result.order;
+          console.log(`[SYNC PAYOS] Đã xác nhận thanh toán đơn #${orderCode}${result.recovered ? ' (tự tạo bản ghi PAID)' : ''}.`);
         }
       } catch (err) {
-        // Khi chưa thanh toán hoặc chưa tìm thấy đơn trên PayOS
+        // PayOS chưa có link này / mạng lỗi → vẫn trả trạng thái hiện tại trong DB
+        if (!order) console.warn(`[SYNC PAYOS] Không lấy được thông tin đơn #${orderCode} từ PayOS:`, err.message);
       }
     }
 
@@ -418,17 +537,22 @@ app.get('/api/orders/:orderCode', async (req, res) => {
       }
     });
   } catch (error) {
+    console.error("Lỗi tra cứu đơn hàng:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 });
 
 /**
  * 4. XỬ LÝ WEBHOOK TỪ PAYOS KHI TIỀN VỀ TÀI KHOẢN NGÂN HÀNG
+ * Nguyên tắc: đã xác thực chữ ký + đúng số tiền thì PHẢI ghi nhận được đơn.
+ * Nếu DB lỗi → trả 500 để PayOS gửi lại (không bao giờ nuốt mất thanh toán).
  */
 const handlePayOSWebhook = async (req, res) => {
+  const webhookBody = req.body || {};
+  const signature = webhookBody.signature || '';
+
   try {
-    const webhookBody = req.body;
-    if (!webhookBody) {
+    if (Object.keys(webhookBody).length === 0) {
       return res.status(200).json({ success: true, message: "Empty body" });
     }
 
@@ -437,12 +561,19 @@ const handlePayOSWebhook = async (req, res) => {
       return res.json({ success: true, message: "Webhook URL hợp lệ" });
     }
 
-    // Xác thực chữ ký số bằng Checksum Key
+    // Chưa cấu hình PayOS = chế độ demo: KHÔNG nhận webhook (tránh ai cũng đánh dấu đơn là PAID).
+    if (!payos) {
+      console.warn(" [PayOS] Từ chối webhook vì server chưa cấu hình PAYOS_CLIENT_ID / PAYOS_API_KEY / PAYOS_CHECKSUM_KEY.");
+      return res.status(503).json({ success: false, message: "PayOS chưa được cấu hình trên server." });
+    }
+
+    // Xác thực chữ ký số bằng Checksum Key — verify() của SDK v2 là async, PHẢI await
     let verifiedData;
     try {
-      verifiedData = verifyPayOSWebhook(webhookBody);
+      verifiedData = await verifyPayOSWebhook(webhookBody);
     } catch (err) {
       console.error(" [BẢO MẬT] Chữ ký Webhook không hợp lệ:", err.message);
+      await db.saveWebhookLog({ isVerified: false, signature, payload: webhookBody, error: err.message });
       if (webhookBody.data?.description?.includes('Mã xác nhận')) {
         return res.json({ success: true, message: "Webhook URL hợp lệ" });
       }
@@ -450,57 +581,84 @@ const handlePayOSWebhook = async (req, res) => {
     }
 
     // Trường hợp mã test xác nhận từ PayOS Dashboard
-    if (verifiedData.description && verifiedData.description.includes('Mã xác nhận')) {
+    if (verifiedData?.description && String(verifiedData.description).includes('Mã xác nhận')) {
       return res.json({ success: true, message: "Webhook URL hợp lệ" });
     }
 
-    const { orderCode, amount, reference, accountNumber, transactionDateTime } = verifiedData;
-
-    const order = await db.getOrderByCode(orderCode);
-    if (!order) {
-      console.warn(`Webhook: Không tìm thấy đơn #${orderCode}`);
-      return res.status(200).json({ success: false, message: "Đơn không tồn tại" });
+    const { reference, accountNumber, transactionDateTime } = verifiedData || {};
+    const orderCode = Number(verifiedData?.orderCode);
+    const amount = Number(verifiedData?.amount) || 0;
+    if (!Number.isFinite(orderCode) || orderCode <= 0) {
+      console.error(" [PayOS] Webhook thiếu orderCode hợp lệ:", JSON.stringify(webhookBody).slice(0, 500));
+      await db.saveWebhookLog({ isVerified: true, signature, payload: webhookBody, error: 'orderCode không hợp lệ' });
+      return res.status(400).json({ success: false, message: "Webhook thiếu mã đơn hàng" });
     }
 
-    // Đối soát số tiền
-    if (Number(order.amount) !== Number(amount)) {
-      console.error(` Sai lệch số tiền đơn #${orderCode}: Cần ${order.amount}, nhận ${amount}`);
+    const order = await db.getOrderByCode(orderCode);
+
+    // Đối soát số tiền (chỉ khi đơn đã có trong DB và chưa PAID)
+    if (order && order.status !== 'PAID' && Number(order.amount) !== amount) {
+      const message = `Sai lệch số tiền đơn #${orderCode}: cần ${order.amount}, nhận ${amount}`;
+      console.error(` [PayOS] ${message}`);
+      await db.saveWebhookLog({ orderCode, isVerified: true, signature, payload: webhookBody, error: message });
       return res.status(400).json({ success: false, message: "Số tiền không khớp" });
     }
 
-    // Idempotency: Đã xử lý rồi thì bỏ qua
-    if (order.status === 'PAID') {
+    // Idempotency: đã xử lý rồi thì bỏ qua
+    if (order && order.status === 'PAID') {
+      await db.saveWebhookLog({ orderCode, isVerified: true, signature, payload: webhookBody });
       return res.status(200).json({ success: true, message: "Đã xử lý trước đó" });
     }
 
-    // Đánh dấu đã thanh toán thành công
-    await db.updateOrderStatus(orderCode, 'PAID', {
-      paidAt: transactionDateTime || new Date().toISOString(),
-      reference,
-      accountNumber
-    });
-
-    await db.saveTransaction({
+    // Ghi nhận thanh toán (nếu đơn không có trong DB → tự tạo bản ghi PAID, không để mất tiền)
+    const paidAt = parsePayOSDateTime(transactionDateTime);
+    const result = await recordPaidOrder({
       orderCode,
-      reference,
       amount,
       description: verifiedData.description || '',
-      accountNumber,
-      transactionDateTime,
-      counterAccountBankId: verifiedData.counterAccountBankId || '',
-      counterAccountName: verifiedData.counterAccountName || '',
-      counterAccountNumber: verifiedData.counterAccountNumber || ''
+      reference: reference || '',
+      accountNumber: accountNumber || '',
+      paidAt,
+      counterAccountName: verifiedData.counterAccountName || ''
+    });
+    const savedOrder = result.order;
+    if (!savedOrder) throw new Error(`Không ghi nhận được đơn #${orderCode}`);
+
+    // Lưu sao kê (không chặn việc xác nhận thanh toán nếu bảng sao kê lỗi)
+    try {
+      await db.saveTransaction({
+        orderCode,
+        reference,
+        amount,
+        description: verifiedData.description || '',
+        accountNumber,
+        transactionDateTime: paidAt,
+        counterAccountBankId: verifiedData.counterAccountBankId || '',
+        counterAccountName: verifiedData.counterAccountName || '',
+        counterAccountNumber: verifiedData.counterAccountNumber || ''
+      });
+    } catch (txErr) {
+      console.error(" [PayOS] Không lưu được sao kê (đơn vẫn đã PAID):", txErr.message);
+    }
+    await db.saveWebhookLog({ orderCode, isVerified: true, signature, payload: webhookBody });
+
+    console.log(`\n TIỀN ĐÃ VỀ TÀI KHOẢN! Đã xác nhận thanh toán đơn #${orderCode}${result.recovered ? ' (tự tạo bản ghi vì đơn chưa có trong DB)' : ''}`);
+    console.log(`- Bạn: ${savedOrder.customerName}`);
+    console.log(`- Sách: ${savedOrder.quantity}x "${savedOrder.bookTitle}"`);
+    console.log(`- Số tiền nhận được: ${(Number(savedOrder.amount) || 0).toLocaleString('vi-VN')} đ\n`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Thanh toán thành công",
+      data: { orderCode, status: 'PAID', recovered: result.recovered }
     });
 
-    console.log(`\n TIỀN ĐÃ VỀ TÀI KHOẢN! Đã xác nhận thanh toán đơn #${orderCode}`);
-    console.log(`- Bạn: ${order.customerName}`);
-    console.log(`- Sách: ${order.quantity}x "${order.bookTitle}"`);
-    console.log(`- Số tiền nhận được: ${amount.toLocaleString('vi-VN')} đ\n`);
-
-    return res.status(200).json({ success: true, message: "Thanh toán thành công" });
-
   } catch (error) {
+    // Lỗi DB → trả 500 để PayOS retry webhook (đơn sẽ được ghi nhận ở lần gửi lại)
     console.error("Lỗi Webhook:", error);
+    try {
+      await db.saveWebhookLog({ isVerified: true, signature, payload: webhookBody, error: error.message });
+    } catch (logErr) { /* bỏ qua lỗi ghi log */ }
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -711,6 +869,86 @@ app.delete('/api/admin/orders/:orderCode', requireAdminAuth, async (req, res) =>
 });
 
 /**
+ * 8c. QUẢN TRỊ: ĐỐI SOÁT LẠI 1 ĐƠN VỚI PAYOS
+ * Dùng khi khách báo "đã chuyển tiền mà web chưa ghi nhận" (webhook tới muộn, mất mạng,
+ * hoặc đơn chưa kịp lưu). Server hỏi thẳng PayOS:
+ *   - PayOS báo chưa thanh toán  → báo lại cho admin, không đổi dữ liệu
+ *   - PayOS báo đã thanh toán    → đánh dấu PAID (hoặc tạo bản ghi PAID nếu đơn chưa có)
+ * Nhận cả "123456789" và nội dung chuyển khoản "XB123456789".
+ */
+app.post('/api/admin/orders/reconcile', requireAdminAuth, async (req, res) => {
+  try {
+    const raw = String((req.body && req.body.orderCode) || '').trim();
+    const orderCode = Number(raw.replace(/^\s*XB/i, '').replace(/[^0-9]/g, ''));
+    if (!Number.isFinite(orderCode) || orderCode <= 0) {
+      return res.status(400).json({ success: false, message: "Mã đơn hàng không hợp lệ. Nhập dạng 123456789 hoặc XB123456789." });
+    }
+    if (!payos) {
+      return res.status(400).json({ success: false, message: "Chưa cấu hình PayOS (PAYOS_CLIENT_ID / PAYOS_API_KEY / PAYOS_CHECKSUM_KEY) nên không đối soát được." });
+    }
+
+    let paymentInfo;
+    try {
+      paymentInfo = await fetchPayOSPaymentInfo(orderCode);
+    } catch (err) {
+      return res.status(502).json({ success: false, message: `Không gọi được PayOS: ${err.message}` });
+    }
+    if (!paymentInfo) {
+      return res.status(404).json({ success: false, message: `PayOS không có link thanh toán cho mã đơn #${orderCode}.` });
+    }
+    if (!isPayOSPaidStatus(paymentInfo.status)) {
+      return res.json({
+        success: true,
+        changed: false,
+        status: paymentInfo.status || 'PENDING',
+        message: `PayOS báo đơn #${orderCode} đang ở trạng thái ${paymentInfo.status || 'chưa thanh toán'} — chưa có tiền về.`
+      });
+    }
+
+    const tx = Array.isArray(paymentInfo.transactions) ? (paymentInfo.transactions.find(t => t && t.amount > 0) || paymentInfo.transactions[0] || {}) : {};
+    const result = await recordPaidOrder({
+      orderCode,
+      amount: paymentInfo.amount,
+      description: paymentInfo.description || `XB${orderCode}`,
+      reference: tx.reference || paymentInfo.paymentLinkId || 'PAYOS_RECONCILE',
+      accountNumber: paymentInfo.accountNumber || tx.accountNumber || '',
+      paidAt: parsePayOSDateTime(tx.transactionDateTime || paymentInfo.createdAt),
+      counterAccountName: tx.counterAccountName || ''
+    });
+
+    if (!result.alreadyPaid) {
+      try {
+        await db.saveTransaction({
+          orderCode,
+          reference: tx.reference || paymentInfo.paymentLinkId || 'PAYOS_RECONCILE',
+          amount: paymentInfo.amount,
+          description: paymentInfo.description || `XB${orderCode}`,
+          accountNumber: paymentInfo.accountNumber || tx.accountNumber || '',
+          transactionDateTime: parsePayOSDateTime(tx.transactionDateTime || paymentInfo.createdAt),
+          counterAccountBankId: tx.counterAccountBankId || '',
+          counterAccountName: tx.counterAccountName || '',
+          counterAccountNumber: tx.counterAccountNumber || ''
+        });
+      } catch (txErr) {
+        console.error(" [ADMIN] Không lưu được sao kê khi đối soát:", txErr.message);
+      }
+    }
+
+    const message = result.alreadyPaid
+      ? `Đơn #${orderCode} đã ở trạng thái đã thanh toán từ trước.`
+      : result.recovered
+        ? `Đã tạo mới và ghi nhận đơn #${orderCode} (${Number(paymentInfo.amount || 0).toLocaleString('vi-VN')} đ) từ PayOS — đơn này trước đó chưa có trong web.`
+        : `Đã cập nhật đơn #${orderCode} sang "Đã thanh toán".`;
+    console.log(` [ADMIN] Đối soát PayOS đơn #${orderCode}: ${message}`);
+
+    return res.json({ success: true, changed: !result.alreadyPaid, recovered: result.recovered, order: result.order, message });
+  } catch (error) {
+    console.error("Lỗi đối soát PayOS:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * 9. QUẢN TRỊ GIÁO TRÌNH: THÊM / SỬA / XÓA (PHÂN LOẠI KHOA & LỚP)
  */
 function normalizeBookPayload(body) {
@@ -835,6 +1073,9 @@ app.put('/api/admin/settings', requireAdminAuth, async (req, res) => {
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`\n Hệ thống XBook Bán Sách Cho Lớp đang chạy tại: ${BASE_URL}`);
+    if (!db.isNeon && process.env.VERCEL) {
+      console.error(" [CẢNH BÁO] Đang chạy trên Vercel nhưng KHÔNG có DATABASE_URL → đơn hàng không thể lưu vĩnh viễn!");
+    }
   });
 }
 

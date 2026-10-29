@@ -118,6 +118,16 @@ test('API supports global books shared across faculties, class curricula and imm
     assert.equal((await request('/api/admin/books/sach-04', 'DELETE')).status, 200);
     assert.deepEqual((await request('/api/books')).data.settings.classes[0].bookIds, []);
     assert.equal((await request(`/api/orders/${created.data.data.orderCode}`)).data.data.bookTitle, 'Shared book');
+    // /api/health: cho biết đang lưu ở đâu + đã cấu hình PayOS chưa (chẩn đoán sự cố "mất đơn")
+    const health = await request('/api/health');
+    assert.equal(health.status, 200);
+    assert.equal(health.data.data.database, 'file-local');
+    assert.equal(health.data.data.databaseOk, true);
+    assert.equal(health.data.data.payosConfigured, false);
+    // Chế độ demo (chưa cấu hình PayOS) KHÔNG được nhận webhook: tránh đánh dấu PAID khống
+    assert.equal((await request('/api/payos-webhook', 'POST', { data: { orderCode: created.data.data.orderCode, amount: 1 }, signature: 'gia.mao' })).status, 503);
+    // Đơn vẫn chưa thanh toán sau webhook bị từ chối
+    assert.equal((await request(`/api/orders/${created.data.data.orderCode}`)).data.data.status, 'PENDING');
   } finally {
     await new Promise(resolve => server.close(resolve));
     fs.rmSync(dir, { recursive: true, force: true });

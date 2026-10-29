@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.4.8 (Đồng bộ logo mới cho trang Admin & cache buster)
+## Phiên bản hiện tại: v1.4.9 (Sửa lỗi khách đã thanh toán nhưng web không ghi nhận đơn)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -8,6 +8,47 @@
 - **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
+
+## 0o. Điểm mới v1.4.9 (SỬA LỖI THANH TOÁN — đọc kỹ)
+
+> **Triệu chứng người dùng báo:** khách đã chuyển tiền nhưng đơn không được ghi nhận, dữ liệu đặt hàng không lưu vào web.
+
+### Nguyên nhân gốc (đã tái hiện được)
+`@payos/node` v2 có `payos.webhooks.verify()` là hàm **async**, nhưng `verifyPayOSWebhook()` cũ gọi đồng bộ và trả về `Promise`:
+```js
+verifiedData = verifyPayOSWebhook(webhookBody);   // ❌ Promise, không phải data
+const { orderCode, amount } = verifiedData;       // → undefined
+```
+→ log `Webhook: Không tìm thấy đơn #undefined`, đơn giữ `PENDING` vĩnh viễn dù tiền đã về. Ngoài ra lỗi chữ ký còn tạo **unhandled rejection** vì không được `await`/`catch`.
+
+### Các thay đổi
+- **`server.js`**
+  - `verifyPayOSWebhook()` → `async`, `await` trong `handlePayOSWebhook`; `payos.verifyPaymentWebhookData` (SDK v1) cũng await.
+  - `recordPaidOrder()` **dùng chung** cho webhook, polling và đối soát: đơn có → `PAID`; đơn **không có** → tạo bản ghi `PAID` (bookTitle `Đơn đối soát PayOS (chưa rõ sách)`, ghi chú nội dung CK + người gửi) để không mất tiền.
+  - `/api/orders/create-payment-link`: **lưu đơn `PENDING` trước**, sau đó mới gọi PayOS, rồi `db.savePaymentLink()` gắn `checkoutUrl`/`qrCode`. DB lỗi → 500, khách không thấy QR.
+  - `generateOrderCode()` kiểm tra trùng trong DB (10 lần thử).
+  - `parsePayOSDateTime()` đổi `YYYY-MM-DD HH:mm:ss` (giờ VN) → ISO, sửa lệch 7 tiếng khi lọc “ngày thanh toán” trên server UTC.
+  - `handlePayOSWebhook`: mọi nhánh đều ghi `db.saveWebhookLog()`; lỗi DB → **500** để PayOS retry; idempotent khi đơn đã `PAID`; kiểm tra `orderCode` hợp lệ.
+  - `GET /api/orders/:orderCode`: dùng `fetchPayOSPaymentInfo()` + `recordPaidOrder()`, giới hạn hỏi PayOS **1 lần/5 giây/đơn** (`PAYOS_SYNC_TTL_MS`).
+  - **Mới** `POST /api/admin/orders/reconcile` (admin): nhận `123456789` hoặc `XB123456789`, hỏi PayOS → cập nhật/tạo đơn, trả `changed`/`recovered`.
+  - **Mới** `GET /api/health`: `database` (`neon`/`file-local`), `databaseOk`, `payosConfigured`, `persistentStorage`, `serverTime`.
+  - Cảnh báo log khi chạy trên Vercel mà **không** có `DATABASE_URL`.
+- **`database.js`**
+  - `writeFile()` ghi **nguyên tử** (tmp + `rename`) và **ném lỗi** thay vì trả `false` im lặng (trước đây trên Vercel read-only là mất dữ liệu âm thầm).
+  - `neonFailure()`: khi đã dùng Neon thì lỗi **không** fallback sang `data.json` nữa (trước đây admin có thể thấy bảng rỗng/dữ liệu seed → tưởng mất đơn). Áp dụng cho `createOrder`, `updateOrderStatus`, `getOrderByCode`, `getStatistics`, `deleteOrder`, CRUD sách, `saveTransaction`, `updateSettings`, `savePaymentLink`.
+  - **Mới** `savePaymentLink(orderCode, { checkoutUrl, qrCode })`.
+  - `saveWebhookLog` giữ nguyên tắc “log lỗi không làm hỏng luồng thanh toán”.
+- **Frontend**
+  - `admin.html`: thêm khối **Đối soát PayOS** trong tab Quyết toán + `#toastHost` (toast dùng chung của `core.js`).
+  - `admin.js`: `reconcilePayOSOrder()` + `showReconcileResult()`, hook qua delegation `[data-reconcile-order]`; `refreshAdminData()` hiện **toast lỗi** khi không tải được số liệu (trước chỉ `console.error`).
+  - `success.html`: hỏi lại trạng thái mỗi 3 giây (tối đa ~30 giây) để hiện “Đã thanh toán” thay vì “Chưa thanh toán”.
+- **Kiểm thử**: thêm `test/payment.test.js` (PayOS server giả qua `PAYOS_BASE_URL`, không gọi mạng thật) + test giao diện nút Đối soát → **17/17 pass**.
+- **PWA**: bump SW cache `xbook-static-v19`, version `1.4.9` (đồng bộ cả `package-lock.json` đang lệch 1.4.0).
+
+### Bài học
+- Thư viện bên thứ ba đổi API đồng bộ → bất đồng bộ là lỗi **im lặng**: không exception, chỉ ra `undefined`. Phải kiểm tra `typeof verify(...).then` hoặc luôn `await`.
+- Với hệ thống tiền bạc: **không nuốt lỗi ghi DB**. Thà từ chối tạo đơn còn hơn phát mã QR cho đơn không lưu được.
+- Mọi thanh toán phải có **đường cứu**: webhook → polling → đối soát thủ công.
 
 ## 0n. Điểm mới v1.4.8 (đồng bộ logo mới cho trang Admin & cache buster)
 
