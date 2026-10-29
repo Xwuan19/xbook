@@ -729,6 +729,37 @@ class Database {
     return order;
   }
 
+  /**
+   * Thêm 1 dòng ghi chú vào đơn (lưu vết thao tác của quản trị viên: ghi nhận thủ công, đối soát...).
+   * Không ghi đè ghi chú khách đã nhập — chỉ nối thêm.
+   */
+  async addOrderNote(orderCode, note) {
+    const code = Number(orderCode);
+    const text = String(note || '').trim();
+    if (!text) return await this.getOrderByCode(code);
+
+    if (this.isNeon) {
+      try {
+        const rows = await this.sql.query(
+          `UPDATE orders SET note = CASE WHEN COALESCE(note, '') = '' THEN $1 ELSE note || ' | ' || $1 END,
+             updated_at = $2 WHERE order_code = $3 RETURNING *`,
+          [text, new Date().toISOString(), code]
+        );
+        return rows && rows.length > 0 ? mapOrderFromDb(rows[0]) : null;
+      } catch (err) {
+        throw this.neonFailure('addOrderNote', err);
+      }
+    }
+
+    const db = this.readFile();
+    const order = db.orders.find(o => o.orderCode === code);
+    if (!order) return null;
+    order.note = order.note ? `${order.note} | ${text}` : text;
+    order.updatedAt = new Date().toISOString();
+    this.writeFile(db);
+    return order;
+  }
+
   async toggleDeliveredStatus(orderCode) {
     const code = Number(orderCode);
     if (this.isNeon) {

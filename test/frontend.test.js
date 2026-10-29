@@ -852,3 +852,79 @@ test('admin can reconcile a paid order with PayOS from the settlement tab', asyn
   assert.ok(calls.slice(before).some((c) => String(c.url).includes('/api/admin/statistics')), 'tải lại số liệu sau khi đối soát');
   assert.equal(input.value, '', 'xóa ô nhập sau khi đối soát xong');
 });
+
+test('admin can record a bank transfer manually when the customer changed the description', async () => {
+  const calls = [];
+  const reply = (payload, status = 200) => ({ status, ok: status < 400, headers: { get: () => null }, json: async () => payload });
+  const stats = {
+    totalOrders: 1, paidOrdersCount: 0, totalBooksPaid: 0, totalRevenue: 0, bookSummary: [],
+    settings: { isRegistrationOpen: true, departments: ['IT'], classes: [] }, allOrders: []
+  };
+  const dom = loadPage('public/admin.html', ADMIN_SCRIPTS, {
+    fetch: async (url, options = {}) => {
+      calls.push({ url, options });
+      const text = String(url);
+      if (text.includes('/api/admin/orders/pending')) {
+        return reply({
+          success: true,
+          data: {
+            days: 14, amount: 20000,
+            orders: [{ orderCode: 777888999, customerName: 'Tran Quoc', customerClass: 'CNTT K15', amount: 20000, createdAt: '2026-10-29T07:50:00.000Z' }]
+          }
+        });
+      }
+      if (text.includes('/api/admin/orders/manual-paid')) {
+        return reply({ success: true, created: false, order: { orderCode: 777888999, status: 'PAID' }, message: 'Đã ghi nhận đơn #777888999 là đã thanh toán (20.000 đ).' });
+      }
+      if (text.includes('/api/admin/statistics')) return reply({ success: true, data: stats });
+      return reply({ success: true, books: [], settings: stats.settings });
+    }
+  });
+  const { window } = dom;
+  window.initAdminDelegatedEvents();
+  window.confirm = () => true;
+
+  // Khối ghi nhận thủ công nằm ngay dưới ô đối soát, trong tab Quyết toán
+  const manualBox = window.document.getElementById('manualPaidBox');
+  assert.ok(manualBox, 'có khối ghi nhận chuyển khoản thủ công');
+  assert.ok(window.document.getElementById('adminTabSettlement').contains(manualBox));
+  assert.match(manualBox.textContent, /sửa mất nội dung CK/i, 'giải thích đúng tình huống khách sửa nội dung');
+
+  const amountInput = window.document.getElementById('manualAmountInput');
+  const codeInput = window.document.getElementById('manualOrderCodeInput');
+  const nameInput = window.document.getElementById('manualCustomerNameInput');
+
+  // 1. Tìm đơn khớp số tiền (chấp nhận "20.000" có dấu chấm)
+  amountInput.value = '20.000';
+  window.document.querySelector('[data-find-pending-orders]').click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const pendingCall = calls.find((c) => String(c.url).includes('/api/admin/orders/pending'));
+  assert.ok(pendingCall, 'có gọi API tìm đơn chờ');
+  assert.match(String(pendingCall.url), /amount=20000/, '"20.000" được hiểu là 20000');
+  const candidate = window.document.querySelector('[data-pick-pending="777888999"]');
+  assert.ok(candidate, 'hiện đơn ứng viên đúng số tiền');
+  assert.match(candidate.textContent, /Tran Quoc/);
+
+  // 2. Bấm đơn ứng viên → điền mã đơn
+  candidate.click();
+  assert.equal(codeInput.value, '777888999');
+
+  // 3. Ghi nhận đã thanh toán
+  nameInput.value = 'TRAN QUOC';
+  window.document.querySelector('[data-manual-paid]').click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const manualCall = calls.find((c) => String(c.url).includes('/api/admin/orders/manual-paid'));
+  assert.ok(manualCall, 'có gọi API ghi nhận thủ công');
+  assert.equal(manualCall.options.method, 'POST');
+  const sent = JSON.parse(manualCall.options.body);
+  assert.equal(sent.amount, 20000);
+  assert.equal(sent.orderCode, '777888999');
+  assert.equal(sent.customerName, 'TRAN QUOC');
+  assert.match(window.document.getElementById('manualPaidResult').innerText, /Đã ghi nhận đơn #777888999/);
+  assert.equal(amountInput.value, '', 'xóa form sau khi ghi nhận');
+  assert.ok(calls.some((c) => String(c.url).includes('/api/admin/statistics')), 'tải lại số liệu sau khi ghi nhận');
+});

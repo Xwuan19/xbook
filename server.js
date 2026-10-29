@@ -949,6 +949,160 @@ app.post('/api/admin/orders/reconcile', requireAdminAuth, async (req, res) => {
 });
 
 /**
+ * 8d. QUẢN TRỊ: TÌM ĐƠN CHƯA THANH TOÁN THEO SỐ TIỀN
+ * Tình huống thật: khách chuyển khoản nhưng SỬA NỘI DUNG (VD "TRAN QUOC chuyen tien"
+ * thay vì "XB123456789") → PayOS không ghép được với đơn nào nên KHÔNG gửi webhook.
+ * Tiền vẫn vào tài khoản. Công cụ này liệt kê các đơn đang chờ có đúng số tiền đó
+ * để quản trị viên đối chiếu (số tiền + thời gian + tên người chuyển) rồi ghi nhận.
+ */
+app.get('/api/admin/orders/pending', requireAdminAuth, async (req, res) => {
+  try {
+    const amount = Math.round(Number(req.query.amount));
+    const days = Math.min(60, Math.max(1, Number(req.query.days) || 7));
+    const since = Date.now() - days * 86400000;
+
+    const stats = await db.getStatistics();
+    const pending = (stats.allOrders || []).filter(o => {
+      if (o.status === 'PAID') return false;
+      const created = Date.parse(o.createdAt || '');
+      if (Number.isFinite(created) && created < since) return false;
+      if (Number.isFinite(amount) && amount > 0 && Number(o.amount) !== amount) return false;
+      return true;
+    });
+
+    // Đơn tạo gần nhất lên trước; kèm số ngày chờ để dễ đối chiếu với sao kê ngân hàng
+    pending.sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
+
+    return res.json({
+      success: true,
+      data: {
+        days,
+        amount: Number.isFinite(amount) && amount > 0 ? amount : null,
+        orders: pending.slice(0, 30).map(o => ({
+          orderCode: o.orderCode,
+          customerName: o.customerName,
+          customerClass: o.customerClass,
+          customerDepartment: o.customerDepartment,
+          customerPhone: o.customerPhone,
+          amount: o.amount,
+          quantity: o.quantity,
+          bookTitle: o.bookTitle,
+          createdAt: o.createdAt,
+          deliveryAt: o.deliveryAt
+        }))
+      }
+    });
+  } catch (error) {
+    console.error("Lỗi tìm đơn chờ thanh toán:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * 8e. QUẢN TRỊ: GHI NHẬN CHUYỂN KHOẢN THỦ CÔNG
+ * Dành cho trường hợp PayOS KHÔNG THỂ tự xác nhận: khách sửa nội dung chuyển khoản,
+ * chuyển tay không quét QR, hoặc chuyển vào tài khoản ngân hàng trực tiếp.
+ *  - Có mã đơn & đơn tồn tại  → đánh dấu đã thanh toán + ghi chú lưu vết.
+ *  - Chưa có đơn (khách chuyển trước khi đặt) → tạo đơn PAID để vẫn có trong sổ sách.
+ * Luôn lưu kèm: số tiền, mã giao dịch ngân hàng (nếu có), tên người chuyển, ghi chú của admin.
+ */
+app.post('/api/admin/orders/manual-paid', requireAdminAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const amount = Math.round(Number(body.amount));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ success: false, message: "Vui lòng nhập số tiền khách đã chuyển (lớn hơn 0)." });
+    }
+
+    const rawCode = String(body.orderCode || '').trim();
+    const orderCode = rawCode ? Number(rawCode.replace(/^\s*XB/i, '').replace(/[^0-9]/g, '')) : 0;
+    if (rawCode && (!Number.isFinite(orderCode) || orderCode <= 0)) {
+      return res.status(400).json({ success: false, message: "Mã đơn hàng không hợp lệ. Bỏ trống nếu khách chưa có mã đơn." });
+    }
+
+    const customerName = String(body.customerName || '').trim();
+    const reference = String(body.reference || '').trim();
+    const note = String(body.note || '').trim();
+    const paidAt = body.paidAt ? parsePayOSDateTime(body.paidAt) : new Date().toISOString();
+    if (!orderCode && !customerName) {
+      return res.status(400).json({ success: false, message: "Nhập mã đơn hàng, hoặc tên người chuyển khoản để lưu vết." });
+    }
+
+    const existing = orderCode ? await db.getOrderByCode(orderCode) : null;
+    if (existing && existing.status === 'PAID') {
+      return res.status(409).json({ success: false, message: `Đơn #${orderCode} đã ở trạng thái đã thanh toán từ trước, không ghi nhận lại.` });
+    }
+
+    const auditNote = `Ghi nhận thủ công bởi quản trị viên lúc ${new Date().toLocaleString('vi-VN')}`
+      + ` — ${amount.toLocaleString('vi-VN')} đ`
+      + (reference ? `, mã GD: ${reference}` : '')
+      + (customerName ? `, người chuyển: ${customerName}` : '')
+      + (note ? `, ghi chú: ${note}` : '');
+
+    let order;
+    let created = false;
+    if (existing) {
+      const result = await recordPaidOrder({
+        orderCode: existing.orderCode,
+        amount: Number(existing.amount) || amount,
+        description: `MANUAL-${existing.orderCode}`,
+        reference: reference || 'MANUAL',
+        paidAt,
+        customerName,
+        counterAccountName: customerName
+      });
+      if (!result.order) throw new Error(`Không cập nhật được đơn #${existing.orderCode}`);
+      order = await db.addOrderNote(existing.orderCode, auditNote);
+      if (!order) order = result.order;
+    } else {
+      created = true;
+      const newCode = orderCode || await generateOrderCode();
+      order = await db.createOrder({
+        orderCode: newCode,
+        status: 'PAID',
+        bookTitle: 'Chuyển khoản ghi nhận thủ công (không có mã đơn)',
+        quantity: 1,
+        unitPrice: amount,
+        amount,
+        customerName: customerName || 'Khách chuyển khoản',
+        customerPhone: '',
+        customerClass: '',
+        customerDepartment: '',
+        note: auditNote,
+        bankReference: reference || 'MANUAL',
+        paidAt
+      });
+    }
+
+    // Sao kê: đánh dấu rõ đây là ghi nhận thủ công (không phải webhook PayOS)
+    try {
+      await db.saveTransaction({
+        orderCode: order.orderCode,
+        reference: reference || 'MANUAL',
+        amount,
+        description: `MANUAL — ${note || customerName || 'ghi nhận thủ công'}`,
+        accountNumber: '',
+        transactionDateTime: paidAt,
+        counterAccountName: customerName || '',
+        counterAccountNumber: ''
+      });
+    } catch (txErr) {
+      console.error(" [ADMIN] Không lưu được sao kê khi ghi nhận thủ công:", txErr.message);
+    }
+
+    const message = created
+      ? `Đã tạo đơn #${order.orderCode} và ghi nhận ${amount.toLocaleString('vi-VN')} đ là đã thanh toán (khách chưa có mã đơn).`
+      : `Đã ghi nhận đơn #${order.orderCode} là đã thanh toán (${amount.toLocaleString('vi-VN')} đ).`;
+    console.log(` [ADMIN] ${message}`);
+
+    return res.json({ success: true, created, order, message });
+  } catch (error) {
+    console.error("Lỗi ghi nhận thanh toán thủ công:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * 9. QUẢN TRỊ GIÁO TRÌNH: THÊM / SỬA / XÓA (PHÂN LOẠI KHOA & LỚP)
  */
 function normalizeBookPayload(body) {

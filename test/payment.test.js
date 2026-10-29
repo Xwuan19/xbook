@@ -283,6 +283,74 @@ test('PayOS payments are always recorded: webhook signature, recovery, idempoten
       body: JSON.stringify({ orderCode: String(orphanCode) })
     });
     assert.equal(noAuth.status, 401);
+
+    // ---------------- 11. Khách SỬA NỘI DUNG CK → ghi nhận thủ công -------------
+    // Tình huống thật: chuyển 20.000đ với nội dung "TRAN QUOC chuyen tien" (không có mã XB...)
+    // → PayOS không ghép được đơn, không có webhook; admin phải ghi nhận tay.
+    const manualOrder = await request('/api/orders/create-payment-link', 'POST', {
+      customerName: 'Tran Quoc',
+      customerPhone: '0933222111',
+      customerClass: 'CNTT K15',
+      customerDepartment: 'Khoa CNTT',
+      items: [{ bookId: 'sach-04', quantity: 1 }]
+    });
+    const manualCode = manualOrder.data.data.orderCode;
+    const manualAmount = manualOrder.data.data.amount;
+
+    // Tìm đơn ứng viên theo đúng số tiền đã nhận
+    const candidates = await request(`/api/admin/orders/pending?amount=${manualAmount}&days=14`);
+    assert.equal(candidates.status, 200);
+    assert.ok(candidates.data.data.orders.some(o => o.orderCode === manualCode), 'tìm thấy đơn đang chờ đúng số tiền');
+    assert.equal((await request(`/api/admin/orders/pending?amount=1&days=14`)).data.data.orders.length, 0, 'số tiền khác thì không khớp');
+
+    // Ghi nhận thủ công cho đơn đó
+    const manual = await request('/api/admin/orders/manual-paid', 'POST', {
+      amount: manualAmount,
+      orderCode: `XB${manualCode}`,
+      customerName: 'TRAN QUOC',
+      note: 'Chuyển lúc 14:50 ngày 29/10, MB Bank, nội dung bị sửa'
+    });
+    assert.equal(manual.status, 200);
+    assert.equal(manual.data.created, false);
+    assert.equal(manual.data.order.status, 'PAID');
+    assert.match(manual.data.order.note, /Ghi nhận thủ công/, 'lưu vết thao tác của admin');
+    assert.match(manual.data.order.note, /TRAN QUOC/);
+    assert.equal(manual.data.order.bankReference, 'MANUAL');
+
+    stats = (await request('/api/admin/statistics')).data.data;
+    assert.equal(stats.allOrders.find(o => o.orderCode === manualCode).status, 'PAID');
+    const dumpAfterManual = JSON.parse(fs.readFileSync(path.join(dir, 'data.json'), 'utf-8'));
+    assert.ok(dumpAfterManual.transactions.some(t => t.orderCode === manualCode && /MANUAL/.test(t.description)), 'lưu sao kê ghi nhận thủ công');
+    // Không có link PayOS nào bị coi là đã thanh toán (tiền về ngoài hệ thống PayOS)
+    assert.equal(payosLinks.get(manualCode).status, 'PENDING');
+
+    // Không ghi nhận lại đơn đã thanh toán
+    const again = await request('/api/admin/orders/manual-paid', 'POST', { amount: manualAmount, orderCode: String(manualCode) });
+    assert.equal(again.status, 409);
+
+    // Khách chưa có mã đơn → tạo bản ghi PAID để vẫn vào sổ sách
+    const createdManually = await request('/api/admin/orders/manual-paid', 'POST', {
+      amount: 20000,
+      customerName: 'TRAN QUOC',
+      note: 'Khách chuyển trước khi đặt, không có mã đơn'
+    });
+    assert.equal(createdManually.status, 200);
+    assert.equal(createdManually.data.created, true);
+    assert.equal(createdManually.data.order.status, 'PAID');
+    assert.equal(createdManually.data.order.amount, 20000);
+    stats = (await request('/api/admin/statistics')).data.data;
+    assert.ok(stats.allOrders.some(o => o.orderCode === createdManually.data.order.orderCode && o.status === 'PAID'));
+
+    // Thiếu dữ liệu / sai dữ liệu → 400, không ghi bậy
+    assert.equal((await request('/api/admin/orders/manual-paid', 'POST', { amount: 0, orderCode: String(manualCode) })).status, 400);
+    assert.equal((await request('/api/admin/orders/manual-paid', 'POST', { amount: 20000 })).status, 400, 'cần mã đơn hoặc tên người chuyển');
+    assert.equal((await request('/api/admin/orders/manual-paid', 'POST', { amount: 20000, orderCode: 'linh tinh' })).status, 400);
+    const noAuthManual = await fetch(`${base}/api/admin/orders/manual-paid`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-password': 'sai-mat-khau' },
+      body: JSON.stringify({ amount: 20000, customerName: 'Hacker' })
+    });
+    assert.equal(noAuthManual.status, 401);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await new Promise((resolve) => payosServer.close(resolve));

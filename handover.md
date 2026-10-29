@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.4.9 (Sửa lỗi khách đã thanh toán nhưng web không ghi nhận đơn)
+## Phiên bản hiện tại: v1.4.10 (Ghi nhận chuyển khoản thủ công khi khách sửa mất nội dung CK)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -8,6 +8,39 @@
 - **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
+
+## 0p. Điểm mới v1.4.10 (khách chuyển khoản SAI nội dung → ghi nhận thủ công)
+
+### Hiện trường
+Khách chuyển **20.000 đ** vào đúng VA PayOS (`VQRQANEGD2256`, MB Bank) nhưng nội dung CK là
+**“TRAN QUOC chuyen tien”** thay vì `XB<orderCode>`. `/api/health` báo `neon` + `payosConfigured: true`
+→ hạ tầng OK, nhưng PayOS **không ghép được** giao dịch với đơn nào nên **không gửi webhook**.
+Hệ quả: web không có đơn để cập nhật; tiền vẫn nằm trong tài khoản merchant. API PayOS v2 **không** có
+endpoint liệt kê giao dịch không xác định ⇒ bắt buộc phải có đường ghi nhận tay.
+
+### Thay đổi
+- **`server.js`**
+  - **Mới** `GET /api/admin/orders/pending?amount=&days=14`: danh sách đơn **chưa thanh toán** khớp đúng số tiền
+    (mặc định 14 ngày, tối đa 30 đơn, mới nhất trước) để đối chiếu với sao kê.
+  - **Mới** `POST /api/admin/orders/manual-paid`: `{ amount, orderCode?, customerName?, note?, reference?, paidAt? }`
+    - Đơn tồn tại & chưa PAID → `recordPaidOrder()` + `db.addOrderNote()` (ghi chú kiểu
+      *“Ghi nhận thủ công bởi quản trị viên lúc …, 20.000 đ, mã GD …, người chuyển …, ghi chú …”*).
+    - Chưa có mã đơn → `generateOrderCode()` + tạo đơn `PAID` (`bookTitle: 'Chuyển khoản ghi nhận thủ công (không có mã đơn)'`).
+    - Đã PAID → **409** (chống cộng doanh thu 2 lần). Thiếu tiền / thiếu mã đơn & tên → **400**.
+    - Luôn thêm 1 dòng `transactions` với `description: 'MANUAL — …'` + `reference: MANUAL`.
+- **`database.js`**: **mới** `addOrderNote(orderCode, text)` — nối thêm ghi chú (Neon: `note || ' | ' || $1`), không ghi đè ghi chú của khách.
+- **`public/admin.html` / `admin.js`**
+  - Trong khối Đối soát (tab Quyết toán) thêm `<details id="manualPaidBox">`: số tiền, mã đơn (tùy chọn), tên người chuyển, ghi chú.
+  - `findPendingOrdersByAmount()` (đọc tiền kiểu VN: `20.000` → `20000`), `pickPendingOrder()`, `recordManualPayment()` (có `confirm()` trước khi ghi), `showManualResult()`.
+  - Delegation: `[data-find-pending-orders]`, `[data-manual-paid]`, `[data-pick-pending]`.
+- **`public/index.html`**: khối cảnh báo vàng trên màn hình QR — *giữ nguyên nội dung `XB…`*, hướng dẫn gửi ảnh chụp giao dịch nếu đã sửa.
+- **Kiểm thử**: `test/payment.test.js` thêm mục 11 (tìm đơn theo số tiền, ghi nhận tay, 409, 400, 401, sao kê MANUAL);
+  `test/frontend.test.js` thêm test UI (điền `20.000` → tìm → chọn đơn → POST đúng payload) → **18/18 pass**.
+- **PWA**: bump `xbook-static-v20`, version `1.4.10`.
+
+### Bài học
+- Thanh toán chuyển khoản luôn có rủi ro **khách sửa nội dung** — hệ thống tiền bạc phải có **đường ghi nhận thủ công có lưu vết**.
+- Không thể "đoán" giao dịch không xác định từ PayOS ⇒ công cụ đối chiếu theo **số tiền + thời gian + tên người chuyển** do con người xác nhận là cách an toàn nhất.
 
 ## 0o. Điểm mới v1.4.9 (SỬA LỖI THANH TOÁN — đọc kỹ)
 
