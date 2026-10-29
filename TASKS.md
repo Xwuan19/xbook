@@ -3,7 +3,18 @@
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này (v1.4.9)
+## Mục tiêu đợt này (v1.4.10)
+1. **Ghi nhận chuyển khoản thủ công**: khách sửa mất nội dung CK (`XB...`) thì PayOS không ghép được đơn → admin tìm đơn theo số tiền và ghi nhận tay, có lưu vết.
+2. **Cảnh báo khách ngay trên màn hình QR**: giữ nguyên nội dung CK, tránh phát sinh về sau.
+
+## Giai đoạn 21 (v1.4.10) — Ghi nhận chuyển khoản sai nội dung
+- [x] T79. `server.js`: `GET /api/admin/orders/pending?amount=&days=` (tìm đơn chờ khớp số tiền) + `POST /api/admin/orders/manual-paid` (có mã đơn → PAID + ghi chú; không có → tạo đơn PAID; 409/400/401).
+- [x] T80. `database.js`: `addOrderNote()` nối ghi chú lưu vết, không ghi đè ghi chú của khách.
+- [x] T81. `public/admin.html` + `admin.js`: khối “Khách sửa mất nội dung CK → ghi nhận thủ công” (số tiền, mã đơn, tên người chuyển, ghi chú, tìm đơn khớp số tiền, xác nhận trước khi ghi).
+- [x] T82. `public/index.html`: khối cảnh báo giữ nguyên nội dung CK trên màn hình QR.
+- [x] T83. Kiểm thử 18/18 pass (API ghi nhận tay + UI) + bump v1.4.10, SW cache v20 + cập nhật README mục 16.0/16.6, handover, TASKS.
+
+## Mục tiêu đợt trước (v1.4.9)
 1. **Sửa lỗi khách đã thanh toán nhưng web không ghi nhận đơn** (nguyên nhân: `payos.webhooks.verify()` là async nhưng không được `await`).
 2. **Không để mất dữ liệu đặt hàng**: lưu đơn trước khi phát QR, DB lỗi thì báo lỗi thay vì nuốt.
 3. **Có công cụ cứu đơn đã trót mất**: “Đối soát PayOS” trong tab Quyết toán + `GET /api/health` để chẩn đoán.

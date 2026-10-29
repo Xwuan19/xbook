@@ -403,6 +403,12 @@ function initAdminDelegatedEvents() {
 
     const reconcileBtn = target.closest('[data-reconcile-order]');
     if (reconcileBtn) { reconcilePayOSOrder(); return; }
+
+    if (target.closest('[data-find-pending-orders]')) { findPendingOrdersByAmount(); return; }
+    if (target.closest('[data-manual-paid]')) { recordManualPayment(); return; }
+
+    const pickPending = target.closest('[data-pick-pending]');
+    if (pickPending) { pickPendingOrder(pickPending.dataset.pickPending); return; }
   });
 }
 
@@ -467,6 +473,148 @@ function showReconcileResult(message, tone = 'info') {
     info: 'text-slate-600'
   };
   el.className = `text-[11px] font-semibold mt-2 leading-relaxed ${tones[tone] || tones.info}`;
+  el.innerText = message;
+  el.classList.remove('hidden');
+}
+
+/** Đọc số tiền admin gõ (chấp nhận "20.000", "20,000", "20 000", "20000đ") → 20000 */
+function parseMoneyInput(value) {
+  const digits = String(value || '').replace(/[^0-9]/g, '');
+  return digits ? Number(digits) : 0;
+}
+
+/**
+ * KHÁCH CHUYỂN KHOẢN NHƯNG SỬA MẤT NỘI DUNG → PayOS không ghép được đơn.
+ * Tìm các đơn ĐANG CHỜ có đúng số tiền đã nhận trong vài ngày gần đây.
+ */
+async function findPendingOrdersByAmount() {
+  const amountInput = document.getElementById('manualAmountInput');
+  const amount = parseMoneyInput(amountInput ? amountInput.value : '');
+  const box = document.getElementById('pendingCandidates');
+  if (!box) return;
+  if (!amount) {
+    showManualResult('Nhập số tiền khách đã chuyển để tìm đơn (VD: 20000).', 'warning');
+    if (amountInput) amountInput.focus();
+    return;
+  }
+
+  box.classList.remove('hidden');
+  box.innerHTML = '<p class="text-[11px] text-slate-500">Đang tìm đơn chờ thanh toán...</p>';
+
+  try {
+    const res = await adminFetch(`/api/admin/orders/pending?amount=${amount}&days=14`);
+    if (res.status === 401) { askAdminLogin('Phiên đăng nhập đã hết hạn — vui lòng nhập lại mật khẩu quản trị.'); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      box.innerHTML = `<p class="text-[11px] text-rose-700 font-semibold">${escapeHtml(data.message || 'Không tìm được đơn.')}</p>`;
+      return;
+    }
+    const orders = (data.data && data.data.orders) || [];
+    if (orders.length === 0) {
+      box.innerHTML = `<p class="text-[11px] text-amber-800 font-semibold">Không có đơn chờ nào đúng ${formatMoney(amount)} trong 14 ngày.
+        Nếu khách chưa từng đặt trên web, cứ bấm “Ghi nhận đã thanh toán” — hệ thống sẽ tạo đơn mới để lưu vào sổ.</p>`;
+      return;
+    }
+    box.innerHTML = `
+      <p class="text-[11px] font-bold text-slate-700">${orders.length} đơn chờ khớp số tiền — bấm để chọn:</p>
+      ${orders.map(o => `
+        <button type="button" data-pick-pending="${o.orderCode}"
+          class="w-full text-left px-2.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 transition">
+          <span class="block text-[11px] font-black text-slate-800">#${o.orderCode} · ${escapeHtml(o.customerName || 'Không tên')}</span>
+          <span class="block text-[11px] text-slate-500">${escapeHtml(o.customerClass || '—')} · ${formatMoney(o.amount)} · đặt ${formatDateVN(localDateKey(o.createdAt))}</span>
+        </button>`).join('')}`;
+  } catch (err) {
+    box.innerHTML = `<p class="text-[11px] text-rose-700 font-semibold">Lỗi kết nối: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+/** Chọn 1 đơn ứng viên → điền mã đơn + tên vào form ghi nhận thủ công */
+function pickPendingOrder(orderCode) {
+  const codeInput = document.getElementById('manualOrderCodeInput');
+  const amountInput = document.getElementById('manualAmountInput');
+  if (codeInput) codeInput.value = String(orderCode);
+  const box = document.getElementById('pendingCandidates');
+  if (box) {
+    box.querySelectorAll('[data-pick-pending]').forEach(btn => {
+      const active = btn.dataset.pickPending === String(orderCode);
+      btn.classList.toggle('border-emerald-500', active);
+      btn.classList.toggle('bg-emerald-50', active);
+    });
+  }
+  if (amountInput && !parseMoneyInput(amountInput.value)) amountInput.focus();
+  showManualResult(`Đã chọn đơn #${orderCode}. Kiểm tra số tiền & tên người chuyển rồi bấm “Ghi nhận đã thanh toán”.`, 'info');
+}
+
+/**
+ * GHI NHẬN CHUYỂN KHOẢN THỦ CÔNG (khách sửa nội dung CK / chuyển tay / không có QR).
+ * Có mã đơn → đánh dấu đơn đó đã thanh toán; không có mã đơn → tạo đơn PAID để không mất tiền.
+ */
+async function recordManualPayment() {
+  const amountInput = document.getElementById('manualAmountInput');
+  const codeInput = document.getElementById('manualOrderCodeInput');
+  const nameInput = document.getElementById('manualCustomerNameInput');
+  const noteInput = document.getElementById('manualNoteInput');
+
+  const amount = parseMoneyInput(amountInput ? amountInput.value : '');
+  const orderCode = (codeInput && codeInput.value ? codeInput.value : '').trim();
+  const customerName = (nameInput && nameInput.value ? nameInput.value : '').trim();
+  const note = (noteInput && noteInput.value ? noteInput.value : '').trim();
+
+  if (!amount) {
+    showManualResult('Nhập số tiền khách đã chuyển trước đây.', 'warning');
+    if (amountInput) amountInput.focus();
+    return;
+  }
+  if (!orderCode && !customerName) {
+    showManualResult('Nhập mã đơn, hoặc ít nhất tên người chuyển khoản để lưu vết.', 'warning');
+    if (codeInput) codeInput.focus();
+    return;
+  }
+
+  const target = orderCode ? `đơn #${orderCode}` : `một đơn MỚI (khách chưa có mã đơn)`;
+  const confirmed = typeof window.confirm === 'function'
+    ? window.confirm(`Ghi nhận ${formatMoney(amount)} cho ${target} là ĐÃ THANH TOÁN?\n\nChỉ bấm sau khi đã đối chiếu sao kê ngân hàng.`)
+    : true;
+  if (!confirmed) return;
+
+  showManualResult('Đang ghi nhận...', 'info');
+  try {
+    const res = await adminFetch('/api/admin/orders/manual-paid', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount, orderCode, customerName, note })
+    });
+    if (res.status === 401) { askAdminLogin('Phiên đăng nhập đã hết hạn — vui lòng nhập lại mật khẩu quản trị.'); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      showManualResult(data.message || `Không ghi nhận được (mã lỗi ${res.status}).`, 'error');
+      return;
+    }
+    showManualResult(data.message || 'Đã ghi nhận thanh toán thủ công.', 'success');
+    ['manualAmountInput', 'manualOrderCodeInput', 'manualCustomerNameInput', 'manualNoteInput'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    const box = document.getElementById('pendingCandidates');
+    if (box) { box.innerHTML = ''; box.classList.add('hidden'); }
+    await refreshAdminData();
+    lucide.createIcons();
+  } catch (err) {
+    showManualResult('Lỗi kết nối: ' + err.message, 'error');
+  }
+}
+
+/** Hiển thị kết quả ghi nhận thủ công */
+function showManualResult(message, tone = 'info') {
+  const el = document.getElementById('manualPaidResult');
+  if (!el) return;
+  const tones = {
+    success: 'text-emerald-700',
+    error: 'text-rose-700',
+    warning: 'text-amber-800',
+    info: 'text-slate-600'
+  };
+  el.className = `text-[11px] font-semibold leading-relaxed ${tones[tone] || tones.info}`;
   el.innerText = message;
   el.classList.remove('hidden');
 }

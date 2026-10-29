@@ -495,6 +495,47 @@
                   </button>
                 </div>
                 <p id="reconcileResult" class="hidden text-[11px] font-semibold mt-2 leading-relaxed"></p>
+
+                <!-- KHÁCH SỬA MẤT NỘI DUNG CK → PayOS không ghép được đơn → phải ghi nhận tay -->
+                <details id="manualPaidBox" class="mt-2 rounded-xl bg-white/80 border border-amber-200">
+                  <summary class="cursor-pointer select-none px-2.5 py-2 text-[11px] font-bold text-amber-900 flex items-center gap-1.5">
+                    <i data-lucide="pencil-line" class="w-3.5 h-3.5"></i>
+                    <span>Khách sửa mất nội dung CK (không có mã XB...) → ghi nhận thủ công</span>
+                  </summary>
+                  <div class="px-2.5 pb-2.5 pt-0.5 space-y-2">
+                    <p class="text-[11px] text-amber-800 leading-relaxed">
+                      PayOS chỉ tự ghép đơn khi nội dung CK có mã <strong>XB...</strong>. Nếu khách đổi nội dung
+                      (VD <em>“TRAN QUOC chuyen tien”</em>) thì tiền vẫn về tài khoản nhưng web <strong>không tự biết</strong>.
+                      Nhập số tiền đã nhận → tìm đơn khớp → ghi nhận.
+                    </p>
+                    <div class="grid grid-cols-2 gap-2">
+                      <input type="text" id="manualAmountInput" inputmode="numeric" autocomplete="off" placeholder="Số tiền đã nhận (đ)"
+                        class="px-2.5 py-2 text-xs font-mono bg-white border border-amber-300 rounded-xl focus:border-amber-500 focus:outline-none" />
+                      <input type="text" id="manualOrderCodeInput" inputmode="numeric" autocomplete="off" placeholder="Mã đơn (nếu có)"
+                        class="px-2.5 py-2 text-xs font-mono bg-white border border-amber-300 rounded-xl focus:border-amber-500 focus:outline-none" />
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input type="text" id="manualCustomerNameInput" autocomplete="off" placeholder="Tên người chuyển khoản"
+                        class="px-2.5 py-2 text-xs bg-white border border-amber-300 rounded-xl focus:border-amber-500 focus:outline-none" />
+                      <input type="text" id="manualNoteInput" autocomplete="off" placeholder="Ghi chú (giờ CK, ngân hàng, mã GD...)"
+                        class="px-2.5 py-2 text-xs bg-white border border-amber-300 rounded-xl focus:border-amber-500 focus:outline-none" />
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                      <button type="button" data-find-pending-orders
+                        class="flex-1 px-3 py-2 bg-white hover:bg-amber-50 text-amber-800 border border-amber-300 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1.5">
+                        <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                        <span>Tìm đơn khớp số tiền</span>
+                      </button>
+                      <button type="button" data-manual-paid
+                        class="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1.5 shadow-sm">
+                        <i data-lucide="check-check" class="w-3.5 h-3.5"></i>
+                        <span>Ghi nhận đã thanh toán</span>
+                      </button>
+                    </div>
+                    <div id="pendingCandidates" class="hidden space-y-1"></div>
+                    <p id="manualPaidResult" class="hidden text-[11px] font-semibold leading-relaxed"></p>
+                  </div>
+                </details>
               </div>
             </div>
           </div>

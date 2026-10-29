@@ -2,6 +2,25 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
+## 🧾 Điểm mới (v1.4.10) — Khách chuyển khoản SAI nội dung: ghi nhận thủ công
+
+> Tình huống thật gặp phải: khách chuyển **20.000 đ** vào đúng tài khoản PayOS (`VQRQANEGD2256` – MB Bank)
+> nhưng **nội dung CK là “TRAN QUOC chuyen tien”**, không phải `XB<orderCode>`.
+> Tiền vẫn vào tài khoản, nhưng PayOS **không ghép được** với đơn nào nên **không có webhook** → web không có gì để ghi nhận.
+> (`/api/health` vẫn báo `database: neon`, `payosConfigured: true` — hạ tầng không có lỗi.)
+
+| Bổ sung | Mô tả |
+|---|---|
+| 🧮 **Tìm đơn khớp số tiền** | `GET /api/admin/orders/pending?amount=20000&days=14` — liệt kê đơn **chưa thanh toán** đúng số tiền đó (kèm tên · lớp · ngày đặt) để đối chiếu sao kê |
+| ✍️ **Ghi nhận chuyển khoản thủ công** | `POST /api/admin/orders/manual-paid` — có mã đơn → đánh dấu đã thanh toán + ghi chú lưu vết; **không có mã đơn** → tạo bản ghi `PAID` để tiền vẫn vào sổ sách |
+| 🧾 **Lưu vết đầy đủ** | Mỗi lần ghi nhận tay đều ghi vào `note` của đơn (*“Ghi nhận thủ công bởi quản trị viên lúc … — 20.000 đ, mã GD, người chuyển, ghi chú”*) và thêm 1 dòng sao kê `MANUAL` |
+| 🛡️ **Chống ghi trùng** | Đơn đã `PAID` → trả **409**, không cộng doanh thu lần 2 |
+| ⚠️ **Cảnh báo ngay trên màn hình QR** | Khối vàng: *“Giữ nguyên nội dung chuyển khoản (dạng XB…)”* + hướng dẫn gửi ảnh chụp giao dịch nếu đã sửa nội dung |
+| 🖥️ **UI trong tab Quyết toán** | Mở *“Khách sửa mất nội dung CK (không có mã XB...) → ghi nhận thủ công”*: nhập số tiền → **Tìm đơn khớp số tiền** → chọn đơn → **Ghi nhận đã thanh toán** (có hộp xác nhận) |
+
+- Nhập tiền kiểu Việt Nam đều được: `20.000`, `20,000`, `20 000`, `20000đ` → `20000`.
+- **`npm test`: 18/18 pass** — thêm test API (tìm đơn theo số tiền, ghi nhận tay, chống trùng, 400/401) và test giao diện (điền form → chọn đơn → POST).
+
 ## 🚨 Sửa lỗi quan trọng (v1.4.9) — Khách đã thanh toán nhưng web không ghi nhận
 
 > Triệu chứng: khách quét QR, tiền đã vào tài khoản, nhưng đơn vẫn `PENDING` / không xuất hiện trong Bảng Quản Lý.
@@ -515,7 +534,15 @@ Khách của XBook chủ yếu đặt sách **bằng điện thoại**, nên to�
 
 ## 🆘 16. Xử Lý Sự Cố: “Khách đã chuyển tiền mà web chưa có đơn”
 
-### 16.1. Các bước xử lý nhanh (làm trong 1 phút)
+### 16.0. Trước tiên: sao kê có mã `XB...` không?
+
+| Trường hợp | Cách xử lý |
+|---|---|
+| Nội dung CK **có** `XB123456789` | Dùng khối **Đối soát PayOS** (mục 16.1) — hỏi lại PayOS và ghi nhận tự động |
+| Nội dung CK **bị sửa** (VD *“TRAN QUOC chuyen tien”*), hoặc khách chuyển tay không quét QR | PayOS **không thể** ghép đơn → dùng khối **“Khách sửa mất nội dung CK → ghi nhận thủ công”** (mục 16.6) |
+| Không rõ khách là ai | Xem sao kê MB/ngân hàng → số tiền + giờ chuyển → tìm đơn chờ đúng số tiền (mục 16.6) |
+
+### 16.1. Đối soát tự động với PayOS (nội dung CK đúng)
 
 1. Mở **`/admin` → tab Quyết toán → khối “Khách báo đã chuyển tiền mà web chưa thấy đơn?”**.
 2. Nhập **mã đơn trong nội dung chuyển khoản** (dạng `XB123456789`) rồi bấm **Đối soát**.
@@ -553,3 +580,26 @@ Mỗi request tới `/api/payos-webhook` được ghi vào `webhook_logs`: `orde
 | Webhook hợp lệ nhưng đơn không có trong DB | Tạo bản ghi `PAID` từ số tiền + nội dung CK của PayOS |
 | Webhook gửi trùng nhiều lần | Idempotent: trả “Đã xử lý trước đó”, không nhân đôi doanh thu |
 | Chữ ký sai / số tiền lệch | Từ chối (400), **không** đụng vào đơn, ghi log để tra soát |
+
+### 16.6. Khách chuyển khoản SAI nội dung (PayOS không thể tự ghép)
+
+**Vì sao không tự ghi nhận?** PayOS nhận tiền qua *virtual account* dùng chung và ghép giao dịch với đơn **bằng nội dung chuyển khoản** (`description` = `XB<orderCode>`). Nếu khách sửa nội dung, PayOS coi đó là giao dịch **không xác định**: tiền vẫn vào tài khoản ngân hàng của bạn, nhưng không có webhook nào mang mã đơn → web không có gì để cập nhật. API PayOS cũng **không** có endpoint liệt kê giao dịch không xác định, nên phải ghi nhận tay.
+
+**Quy trình 4 bước (khoảng 30 giây):**
+
+1. Mở **`/admin` → tab Quyết toán** → mở mục **“Khách sửa mất nội dung CK (không có mã XB...) → ghi nhận thủ công”**.
+2. Nhập **số tiền đã nhận** (theo sao kê, VD `20000`) → bấm **Tìm đơn khớp số tiền**.
+   - Có đơn chờ đúng số tiền → bấm vào dòng đó để chọn (hệ thống điền mã đơn).
+   - Không có đơn nào → bỏ trống mã đơn, chỉ cần nhập **tên người chuyển**.
+3. Nhập **tên người chuyển** + **ghi chú** (giờ chuyển, ngân hàng, mã GD) để sau này đối chiếu.
+4. Bấm **Ghi nhận đã thanh toán** → xác nhận.
+
+**Kết quả:** đơn chuyển sang *Đã thanh toán*, vào đúng báo cáo doanh thu/quyết toán; đơn được ghi chú
+*“Ghi nhận thủ công bởi quản trị viên lúc … — 20.000 đ, mã GD …, người chuyển …”* và có 1 dòng sao kê `MANUAL`.
+Đơn đã thanh toán trước đó sẽ bị từ chối (**409**) để tránh cộng tiền hai lần.
+
+**Giảm thiểu về sau:**
+
+- Màn hình QR đã có khối cảnh báo vàng: *giữ nguyên nội dung `XB...`*; nếu app ngân hàng tự đổi, khách sửa lại hoặc gửi ảnh chụp giao dịch.
+- Nên nhắc khách **bấm “Mở app ngân hàng”** trong màn hình QR (PayOS điền sẵn tiền + nội dung) thay vì tự gõ tay.
+- Với đơn chuyển tay/không qua web, dùng luôn công cụ này để vẫn có dữ liệu phát sách.
