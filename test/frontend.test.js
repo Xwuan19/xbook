@@ -799,3 +799,56 @@ test('mobile storefront: bottom-sheet checkout, scroll lock, toast and thumb-siz
   assert.ok(alerts.length > 0, 'có phản hồi khi chép nội dung');
   dom.window.close();
 });
+
+test('admin can reconcile a paid order with PayOS from the settlement tab', async () => {
+  const calls = [];
+  const reply = (payload) => ({ status: 200, ok: true, headers: { get: () => null }, json: async () => payload });
+  const stats = {
+    totalOrders: 0, paidOrdersCount: 0, totalBooksPaid: 0, totalRevenue: 0, bookSummary: [],
+    settings: { isRegistrationOpen: true, departments: ['IT'], classes: [] }, allOrders: []
+  };
+  const dom = loadPage('public/admin.html', ADMIN_SCRIPTS, {
+    fetch: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (String(url).includes('/api/admin/orders/reconcile')) {
+        return reply({ success: true, changed: true, recovered: false, message: 'Đã cập nhật đơn #123 sang "Đã thanh toán".' });
+      }
+      if (String(url).includes('/api/admin/statistics')) return reply({ success: true, data: stats });
+      return reply({ success: true, books: [], settings: stats.settings });
+    }
+  });
+  const { window } = dom;
+  window.initAdminDelegatedEvents();
+
+  // Khối đối soát nằm trong tab Quyết toán (cạnh bảng quyết toán theo ngày)
+  const settlementTab = window.document.getElementById('adminTabSettlement');
+  const reconcileBox = window.document.getElementById('payosReconcileBox');
+  assert.ok(reconcileBox, 'có khối Đối soát PayOS');
+  assert.ok(settlementTab.contains(reconcileBox), 'khối đối soát nằm trong tab Quyết toán');
+
+  const input = window.document.getElementById('reconcileOrderCodeInput');
+  const button = window.document.querySelector('[data-reconcile-order]');
+
+  // Bấm khi chưa nhập mã → nhắc nhở, không gọi API
+  button.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls.some((c) => String(c.url).includes('/reconcile')), false, 'không gọi API khi chưa nhập mã');
+  assert.match(window.document.getElementById('reconcileResult').innerText, /nhập mã đơn/i);
+
+  // Nhập nội dung chuyển khoản XB... → gửi đúng mã đơn lên server và hiện kết quả
+  input.value = 'XB123456789';
+  const before = calls.length;
+  button.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const reconcileCall = calls.slice(before).find((c) => String(c.url).includes('/api/admin/orders/reconcile'));
+  assert.ok(reconcileCall, 'có gọi API đối soát');
+  assert.equal(reconcileCall.options.method, 'POST');
+  assert.deepEqual(JSON.parse(reconcileCall.options.body), { orderCode: 'XB123456789' });
+  assert.match(window.document.getElementById('reconcileResult').innerText, /Đã cập nhật đơn #123/);
+  assert.equal(window.document.getElementById('reconcileResult').classList.contains('hidden'), false);
+  // Đối soát thành công → tải lại số liệu để bảng cập nhật ngay
+  assert.ok(calls.slice(before).some((c) => String(c.url).includes('/api/admin/statistics')), 'tải lại số liệu sau khi đối soát');
+  assert.equal(input.value, '', 'xóa ô nhập sau khi đối soát xong');
+});

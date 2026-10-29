@@ -49,21 +49,44 @@
     const statusDisplay = document.querySelector('.text-emerald-600.font-bold');
     const urlParams = new URLSearchParams(window.location.search);
     const orderCode = urlParams.get('orderCode');
-    
-    if (orderCode) {
-      document.getElementById('orderCodeDisplay').innerText = '#' + orderCode;
+
+    // PayOS có thể gọi returnUrl trước khi webhook về → hỏi lại vài lần trong ~30 giây
+    // để khách thấy đúng trạng thái "Đã thanh toán" thay vì "Chưa thanh toán".
+    let pollTimer = null;
+    let attempts = 0;
+
+    function paint(res) {
+      if (!res || !res.success || !res.data) return false;
+      const paid = res.data.status === 'PAID';
+      statusDisplay.innerText = paid ? 'Đã thanh toán' : 'Đang chờ xác nhận thanh toán';
+      statusDisplay.className = paid
+        ? 'text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded'
+        : 'text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded';
+      document.getElementById('courseTitleDisplay').innerText = res.data.bookTitle || res.data.courseTitle || '';
+      document.getElementById('deliveryDisplay').innerText = res.data.deliveryAt
+        ? 'Nhận sách: ' + new Date(res.data.deliveryAt).toLocaleDateString('vi-VN')
+        : 'Theo thông báo của lớp';
+      return paid;
+    }
+
+    function checkStatus() {
+      attempts += 1;
       fetch(`/api/orders/${orderCode}`)
         .then(res => res.json())
         .then(res => {
-          if (res.success && res.data) {
-            statusDisplay.innerText = res.data.status === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán';
-            document.getElementById('courseTitleDisplay').innerText = res.data.bookTitle || res.data.courseTitle || '';
-            document.getElementById('deliveryDisplay').innerText = res.data.deliveryAt
-              ? 'Nhận sách: ' + new Date(res.data.deliveryAt).toLocaleDateString('vi-VN')
-              : 'Theo thông báo của lớp';
+          const paid = paint(res);
+          if (paid || attempts >= 10) {
+            if (!paid) statusDisplay.innerText = 'Chưa xác nhận được thanh toán';
+            if (pollTimer) clearInterval(pollTimer);
           }
         })
         .catch(console.error);
+    }
+
+    if (orderCode) {
+      document.getElementById('orderCodeDisplay').innerText = '#' + orderCode;
+      checkStatus();
+      pollTimer = setInterval(checkStatus, 3000);
     }
   </script>
 </body>

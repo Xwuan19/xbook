@@ -2,7 +2,25 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## ✨ Điểm mới (v1.4.8) — Đồng bộ logo mới cho trang Admin & cache buster
+## 🚨 Sửa lỗi quan trọng (v1.4.9) — Khách đã thanh toán nhưng web không ghi nhận
+
+> Triệu chứng: khách quét QR, tiền đã vào tài khoản, nhưng đơn vẫn `PENDING` / không xuất hiện trong Bảng Quản Lý.
+
+| Lỗi tìm được | Nguyên nhân | Đã sửa |
+|---|---|---|
+| **Webhook PayOS không ghi nhận thanh toán** | `payos.webhooks.verify()` của `@payos/node` v2 là hàm **async**, code cũ gọi đồng bộ nên nhận về 1 `Promise` → `orderCode`/`amount` đều `undefined` → log `"Không tìm thấy đơn #undefined"`, đơn nằm `PENDING` mãi mãi | `verifyPayOSWebhook()` chuyển thành `async` và **`await`** ở nơi gọi |
+| **Đơn hàng có thể không được lưu** | Code cũ tạo link QR **trước**, lưu DB **sau**; nếu DB lỗi thì lỗi bị nuốt (`console.error` → ghi file, trên Vercel ổ đĩa read-only) → khách nhận QR cho một đơn không tồn tại | **Lưu đơn `PENDING` trước** khi gọi PayOS; DB lỗi → trả **500**, chưa phát mã QR. Ghi `data.json` kiểu nguyên tử (tmp + rename) và **không nuốt lỗi** |
+| **Đơn đã trả tiền vẫn bị bỏ mất** | Webhook/polling gặp mã đơn không có trong DB → trả `"Đơn không tồn tại"` rồi thôi | **Tự tạo bản ghi `PAID`** từ dữ liệu PayOS (không mất tiền), kèm sao kê + nhật ký webhook |
+| **Không có cách cứu đơn đã trót mất** | — | Tab **Quyết toán → khối “Đối soát PayOS”**: nhập `XB...` → server hỏi lại PayOS và ghi nhận đơn ngay |
+| **Admin thấy bảng trống mà không biết vì sao** | Lỗi tải số liệu chỉ `console.error` | Hiện **toast lỗi** rõ ràng; thêm `GET /api/health` báo đang lưu ở đâu, DB đọc/ghi được không, PayOS đã cấu hình chưa |
+
+- **`paidAt` hiểu đúng múi giờ Việt Nam**: `transactionDateTime` dạng `2026-10-29 10:15:00` (UTC+7) được đổi sang ISO chuẩn → lọc “ngày thanh toán” không bị lệch 7 tiếng.
+- **Mã đơn không trùng**: `generateOrderCode()` kiểm tra DB trước khi dùng (PayOS yêu cầu mã đơn duy nhất).
+- **Polling nhẹ hơn**: trang chủ chỉ hỏi PayOS tối đa 1 lần/5 giây cho mỗi đơn.
+- **`success.html` hỏi lại ~30 giây** để khách thấy “Đã thanh toán” thay vì “Chưa thanh toán”.
+- **`npm test`: 17/17 pass** — thêm `test/payment.test.js` (webhook + chữ ký + chống trùng + cứu đơn + đối soát) và test giao diện cho nút “Đối soát PayOS”.
+
+## ✨ Điểm cũ (v1.4.8) — Đồng bộ logo mới cho trang Admin & cache buster
 
 | Tính năng | Mô tả |
 |---|---|
@@ -188,6 +206,7 @@ xbook/
 │   ├── api.test.js           # API sách / khoa-lớp / đơn hàng / ngày giao
 │   ├── domain.test.js        # Logic thuần trong public/domain.js
 │   ├── frontend.test.js      # Giao diện 2 trang (trang chủ & /admin.html) chạy trong jsdom
+│   ├── payment.test.js       # Luồng thanh toán: webhook chữ ký, chống trùng, cứu đơn, đối soát PayOS
 │   └── routes.test.js        # Route /admin → 302 /admin.html + trang chủ không còn DOM quản trị
 └── README.md                 # Hướng dẫn chi tiết
 ```
@@ -491,3 +510,46 @@ Khách của XBook chủ yếu đặt sách **bằng điện thoại**, nên to�
 - `env(safe-area-inset-bottom)` → thanh giỏ hàng không bị thanh home iPhone đè lên.
 - Bộ lọc khoa/lớp **dính dưới header** → đổi lớp không cần cuộn về đầu trang.
 - Toast + rung nhẹ khi thêm/bớt sách; báo lỗi **cuộn tới và focus** đúng ô cần sửa.
+
+---
+
+## 🆘 16. Xử Lý Sự Cố: “Khách đã chuyển tiền mà web chưa có đơn”
+
+### 16.1. Các bước xử lý nhanh (làm trong 1 phút)
+
+1. Mở **`/admin` → tab Quyết toán → khối “Khách báo đã chuyển tiền mà web chưa thấy đơn?”**.
+2. Nhập **mã đơn trong nội dung chuyển khoản** (dạng `XB123456789`) rồi bấm **Đối soát**.
+3. Server hỏi thẳng PayOS:
+   - PayOS báo **đã thanh toán** → đơn được đánh dấu `PAID` (hoặc **tạo mới** nếu chưa từng lưu) và bảng quản lý tự cập nhật.
+   - PayOS báo **chưa thanh toán** → web báo lại đúng trạng thái, không sửa dữ liệu.
+4. Kiểm tra sức khỏe hệ thống: mở `GET /api/health` — cần thấy `"database": "neon"` và `"payosConfigured": true` trên bản production.
+
+### 16.2. Nếu `/api/health` báo `persistentStorage: false`
+
+Đang chạy bằng file `data.json` — trên Vercel ổ đĩa **read-only** nên đơn hàng sẽ không lưu được. Cần khai báo biến môi trường:
+
+```env
+DATABASE_URL=postgresql://user:pass@ep-xxx-pooler.neon.tech/neondb?sslmode=require
+```
+
+Sau đó **Redeploy**. Log khởi động sẽ in `[Database] Đã kích hoạt Neon Cloud PostgreSQL Storage!`. (Từ v1.4.9, nếu DB không ghi được thì API trả lỗi 500 và **không phát mã QR**, nên không thể xảy ra cảnh khách trả tiền cho đơn mất tích.)
+
+### 16.3. Cấu hình webhook đúng
+
+- PayOS Dashboard → kênh thanh toán → **Webhook URL**: `https://<domain>/api/payos-webhook` (đã có 2 alias `/api/orders/webhook`, `/api/webhook`).
+- Bấm **Xác nhận Webhook**; PayOS sẽ gửi 1 request thử (`description` chứa “Mã xác nhận”) — server trả `200` là hợp lệ.
+- Sai `PAYOS_CHECKSUM_KEY` → webhook bị **400** và ghi vào `webhook_logs` (bảng Neon / mảng `webhook_logs` trong `data.json`).
+
+### 16.4. Mọi webhook đều được lưu vết
+
+Mỗi request tới `/api/payos-webhook` được ghi vào `webhook_logs`: `order_code`, `is_verified`, `signature`, `payload` (raw), `error`. Khi cần tra soát, xem bảng này trước — biết ngay PayOS có gọi tới hay không, chữ ký đúng hay sai, đơn nào lệch tiền.
+
+### 16.5. Vì sao dữ liệu không thể “âm thầm mất” nữa
+
+| Tình huống | Hành vi mới |
+|---|---|
+| DB lỗi khi khách đặt đơn | API trả **500**, khách thấy “không tạo được đơn”, **không có mã QR** nào được phát |
+| Webhook tới khi DB lỗi | Trả **500** → PayOS **tự gửi lại**; không xác nhận sai |
+| Webhook hợp lệ nhưng đơn không có trong DB | Tạo bản ghi `PAID` từ số tiền + nội dung CK của PayOS |
+| Webhook gửi trùng nhiều lần | Idempotent: trả “Đã xử lý trước đó”, không nhân đôi doanh thu |
+| Chữ ký sai / số tiền lệch | Từ chối (400), **không** đụng vào đơn, ghi log để tra soát |

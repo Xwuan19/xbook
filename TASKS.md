@@ -3,8 +3,21 @@
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này (v1.4.8)
-1. **Đồng bộ logo mới cho trang Admin**: gắn query cache buster `logo.png?v=18` để vượt qua bộ nhớ đệm trình duyệt.
+## Mục tiêu đợt này (v1.4.9)
+1. **Sửa lỗi khách đã thanh toán nhưng web không ghi nhận đơn** (nguyên nhân: `payos.webhooks.verify()` là async nhưng không được `await`).
+2. **Không để mất dữ liệu đặt hàng**: lưu đơn trước khi phát QR, DB lỗi thì báo lỗi thay vì nuốt.
+3. **Có công cụ cứu đơn đã trót mất**: “Đối soát PayOS” trong tab Quyết toán + `GET /api/health` để chẩn đoán.
+
+## Giai đoạn 20 (v1.4.9) — Sửa lỗi thanh toán không được ghi nhận
+- [x] T73. `server.js`: `verifyPayOSWebhook()` → async + `await` trong webhook (lỗi gốc `#undefined`); mọi nhánh ghi `webhook_logs`; lỗi DB trả 500 để PayOS retry.
+- [x] T74. `server.js`: `recordPaidOrder()` dùng chung webhook/polling/đối soát — đơn không có trong DB thì **tạo bản ghi PAID**; `parsePayOSDateTime()` đúng múi giờ VN; `generateOrderCode()` chống trùng.
+- [x] T75. `server.js`: đặt đơn **lưu PENDING trước** khi gọi PayOS + `savePaymentLink()` gắn QR sau; `POST /api/admin/orders/reconcile`; `GET /api/health`.
+- [x] T76. `database.js`: ghi file nguyên tử + **ném lỗi** thay vì nuốt; Neon lỗi không fallback âm thầm sang `data.json`; thêm `savePaymentLink()`.
+- [x] T77. Frontend: khối **Đối soát PayOS** + toast lỗi trong `/admin`; `success.html` hỏi lại trạng thái ~30 giây.
+- [x] T78. Kiểm thử: `test/payment.test.js` (PayOS giả, chữ ký, idempotent, cứu đơn, đối soát) + test UI → **17/17 pass**; bump v1.4.9, SW cache v19; cập nhật README mục 16 / handover / TASKS.
+
+## Mục tiêu đợt trước (v1.4.8)
+1. Đồng bộ logo mới cho trang Admin: gắn query cache buster `logo.png?v=18`.
 
 ## Giai đoạn 19 (v1.4.8) — Đồng bộ logo mới cho trang Admin & cache buster
 - [x] T71. `public/admin.html` & `public/index.html`: đổi src ảnh logo thành `/logo.png?v=18`.

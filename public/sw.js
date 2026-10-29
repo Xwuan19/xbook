@@ -10,11 +10,11 @@
  *    để đơn hàng / trạng thái đăng ký luôn chính xác.
  *
  * ⚠️ Mỗi lần deploy có thay đổi file tĩnh (core.js / app.js / admin.js / *.html / logo / icon...):
- *    tăng CACHE_NAME bên dưới (xbook-static-v11 → v12) để máy người dùng xoá cache cũ.
+ *    tăng CACHE_NAME bên dưới (xbook-static-v18 → v19) để máy người dùng xoá cache cũ.
  * ============================================================================
  */
 
-const CACHE_NAME = 'xbook-static-v18';
+const CACHE_NAME = 'xbook-static-v19';
 const CORE_ASSETS = [
   '/',
   '/index.html',

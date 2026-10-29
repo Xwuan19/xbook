@@ -366,13 +366,55 @@ class Database {
     return data;
   }
 
+  /**
+   * Ghi file nguyên tử (ghi file tạm rồi rename) để data.json không bao giờ bị hỏng dở dang.
+   * ⚠️ KHÔNG nuốt lỗi: trên Vercel thư mục gốc là read-only, ghi file sẽ thất bại.
+   * Nếu nuốt lỗi thì đơn hàng "tạo thành công" nhưng không lưu ở đâu cả
+   * → khách đã chuyển tiền mà web không có dữ liệu. Thà báo lỗi để không phát mã QR.
+   */
   writeFile(data) {
+    const tmpFile = `${DB_FILE}.${process.pid}.tmp`;
     try {
-      fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+      fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf-8');
+      fs.renameSync(tmpFile, DB_FILE);
       return true;
     } catch (e) {
+      try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch (cleanupErr) { /* bỏ qua */ }
       console.error("Lỗi khi ghi Database:", e);
-      return false;
+      throw Object.assign(
+        new Error(`Không ghi được dữ liệu vào ${DB_FILE} (${e.message}). Trên Vercel cần cấu hình DATABASE_URL (Neon PostgreSQL) vì ổ đĩa là read-only.`),
+        { code: 'XBOOK_DB_WRITE_FAILED', cause: e }
+      );
+    }
+  }
+
+  /** Lỗi CSDL đám mây: ghi log rồi ném ra để API báo lỗi thay vì âm thầm dùng file cũ. */
+  neonFailure(operation, err) {
+    console.error(`Lỗi Neon ${operation}:`, err.message);
+    return Object.assign(
+      new Error(`Lỗi cơ sở dữ liệu đám mây khi ${operation}: ${err.message}`),
+      { code: 'XBOOK_DB_ERROR', cause: err }
+    );
+  }
+
+  /**
+   * Kiểm tra nhanh CSDL có thật sự đọc/ghi được không (dùng cho /api/health).
+   * Không dùng getSettings() vì hàm đó có fallback sang data.json → sẽ báo "khỏe" sai sự thật.
+   */
+  async ping() {
+    if (!this.isNeon) {
+      this.readFile();
+      return { database: 'file-local', ok: true, error: '' };
+    }
+    if (!this.sql) return { database: 'neon', ok: false, error: 'Chưa có kết nối Neon.' };
+    try {
+      await this.ready;
+      // Kiểm tra cả các cột mà luồng thanh toán cần ghi (migration có thể chưa chạy xong)
+      await this.sql.query('SELECT order_code, delivery_at, customer_department FROM orders LIMIT 1');
+      return { database: 'neon', ok: true, error: '' };
+    } catch (err) {
+      console.error('Lỗi Neon ping:', err.message);
+      return { database: 'neon', ok: false, error: err.message };
     }
   }
 
@@ -413,7 +455,7 @@ class Database {
         );
         return merged;
       } catch (err) {
-        console.error("Lỗi Neon updateSettings:", err.message);
+        throw this.neonFailure('updateSettings', err);
       }
     }
     const db = this.readFile();
@@ -544,7 +586,7 @@ class Database {
           accountNumber: orderData.accountNumber || ''
         };
       } catch (err) {
-        console.error("Lỗi Neon createOrder:", err.message);
+        throw this.neonFailure('createOrder', err);
       }
     }
 
@@ -588,6 +630,35 @@ class Database {
     return await this.createOrder(orderData);
   }
 
+  /**
+   * Gắn link thanh toán + mã QR PayOS vào đơn đã lưu (đơn vẫn PENDING chờ tiền về).
+   * Tách riêng khỏi createOrder để không ghi đè trạng thái / số tiền của đơn.
+   */
+  async savePaymentLink(orderCode, { checkoutUrl = '', qrCode = '' } = {}) {
+    const code = Number(orderCode);
+
+    if (this.isNeon) {
+      try {
+        const rows = await this.sql.query(
+          'UPDATE orders SET checkout_url = $1, qr_code = $2, updated_at = $3 WHERE order_code = $4 RETURNING *',
+          [checkoutUrl, qrCode, new Date().toISOString(), code]
+        );
+        return rows && rows.length > 0 ? mapOrderFromDb(rows[0]) : null;
+      } catch (err) {
+        throw this.neonFailure('savePaymentLink', err);
+      }
+    }
+
+    const db = this.readFile();
+    const order = db.orders.find(o => o.orderCode === code);
+    if (!order) return null;
+    order.checkoutUrl = checkoutUrl;
+    order.qrCode = qrCode;
+    order.updatedAt = new Date().toISOString();
+    this.writeFile(db);
+    return order;
+  }
+
   async getOrderByCode(orderCode) {
     const code = Number(orderCode);
     if (this.isNeon) {
@@ -598,7 +669,7 @@ class Database {
         }
         return null;
       } catch (err) {
-        console.error("Lỗi Neon getOrderByCode:", err.message);
+        throw this.neonFailure('getOrderByCode', err);
       }
     }
     const db = this.readFile();
@@ -635,7 +706,7 @@ class Database {
         }
         return null;
       } catch (err) {
-        console.error("Lỗi Neon updateOrderStatus:", err.message);
+        throw this.neonFailure('updateOrderStatus', err);
       }
     }
 
@@ -673,7 +744,7 @@ class Database {
         }
         return null;
       } catch (err) {
-        console.error("Lỗi Neon toggleDeliveredStatus:", err.message);
+        throw this.neonFailure('toggleDeliveredStatus', err);
       }
     }
 
@@ -698,8 +769,7 @@ class Database {
         `;
         return rows && rows.length > 0;
       } catch (err) {
-        console.error("Lỗi Neon deleteOrder:", err.message);
-        return false;
+        throw this.neonFailure('deleteOrder', err);
       }
     }
 
@@ -726,7 +796,7 @@ class Database {
         const orderRows = await this.sql`SELECT * FROM orders ORDER BY created_at DESC`;
         orders = orderRows.map(mapOrderFromDb);
       } catch (err) {
-        console.error("Lỗi Neon getStatistics, fallback to file:", err.message);
+        throw this.neonFailure('getStatistics', err);
       }
     }
 
@@ -813,7 +883,7 @@ class Database {
         );
         return book;
       } catch (err) {
-        console.error("Lỗi Neon createBook:", err.message);
+        throw this.neonFailure('createBook', err);
         throw new Error("Không thể thêm sách: " + err.message);
       }
     }
@@ -855,7 +925,7 @@ class Database {
         if (rows && rows.length > 0) return mapBookFromDb(rows[0]);
         return null;
       } catch (err) {
-        console.error("Lỗi Neon updateBook:", err.message);
+        throw this.neonFailure('updateBook', err);
         throw new Error("Không thể cập nhật sách: " + err.message);
       }
     }
@@ -883,7 +953,7 @@ class Database {
         await this.sql.query('DELETE FROM books WHERE id = $1', [bookId]);
         return true;
       } catch (err) {
-        console.error("Lỗi Neon deleteBook:", err.message);
+        throw this.neonFailure('deleteBook', err);
         throw new Error("Không thể xóa giáo trình: " + err.message);
       }
     }
@@ -926,7 +996,7 @@ class Database {
           createdAt: now
         };
       } catch (err) {
-        console.error("Lỗi Neon saveTransaction:", err.message);
+        throw this.neonFailure('saveTransaction', err);
       }
     }
 
@@ -967,7 +1037,9 @@ class Database {
         );
         return { id, orderCode, isVerified, signature, payload: logData.payload, error, createdAt: now };
       } catch (err) {
+        // Nhật ký webhook chỉ để tra soát → không làm hỏng luồng thanh toán
         console.error("Lỗi Neon saveWebhookLog:", err.message);
+        return null;
       }
     }
 
