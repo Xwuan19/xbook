@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { deliveryAt, classes, classKey, filterBooks, migrateSettings } = require('../public/domain');
+const { deliveryAt, classes, classKey, filterBooks, migrateSettings, planInitialBookSeed } = require('../public/domain');
 test('delivery never earlier than 24 hours including stale settings and month rollover', () => {
   for (const date of ['', '2020-01-01', '2026-11-01']) {
     assert.equal(deliveryAt('2026-10-31T16:30:00Z', date), '2026-11-01T16:30:00.000Z');
@@ -57,4 +57,29 @@ test('book scope: books live in a shared catalog and get assigned to faculties o
   assert.deepEqual(perClass.map(c => c.bookIds.includes('triet')), [true, false, false]);
   // Bỏ tích hết → sách trở lại danh mục chung
   assert.deepEqual(assignBookToClasses(settings.classes, 'triet', {}).map(c => c.bookIds.length), [0, 0, 0]);
+});
+
+test('sample books are seeded only once for a brand-new database and never after deletion', () => {
+  const initialBooks = [{ id: 'sach-04' }, { id: 'sach-05' }];
+
+  // Database mới tinh: có sách mẫu
+  assert.deepEqual(planInitialBookSeed({ isBrandNewDatabase: true, initialBooks }), ['sach-04', 'sach-05']);
+
+  // Database đã dùng từ trước (admin đã xóa sách) → KHÔNG bao giờ seed lại,
+  // kể cả khi danh mục đang trống. Đây chính là lỗi sách "sống dậy" sau mỗi cold start.
+  assert.deepEqual(planInitialBookSeed({ isBrandNewDatabase: false, catalogCount: 0, initialBooks }), []);
+
+  // Đã đánh dấu seed rồi thì dù là DB mới cũng không seed nữa
+  assert.deepEqual(planInitialBookSeed({ isBrandNewDatabase: true, alreadySeeded: true, initialBooks }), []);
+
+  // Còn sách trong danh mục thì không seed thêm
+  assert.deepEqual(planInitialBookSeed({ isBrandNewDatabase: true, catalogCount: 3, initialBooks }), []);
+
+  // Sách đã từng bị xóa (tombstone) không bao giờ quay lại
+  assert.deepEqual(planInitialBookSeed({
+    isBrandNewDatabase: true, deletedBookIds: ['sach-04'], initialBooks
+  }), ['sach-05']);
+  assert.deepEqual(planInitialBookSeed({
+    isBrandNewDatabase: true, deletedBookIds: ['sach-04', 'sach-05'], initialBooks
+  }), []);
 });

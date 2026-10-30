@@ -110,7 +110,10 @@ function mapSettingsFromDb(row) {
     classes: domain.classes(parseJsonArray(row.classes, []), parseJsonArray(row.departments, INITIAL_DEPARTMENTS)),
     catalogVersion: Number(row.catalog_version) || 1,
     deliveryDate: row.delivery_date || "",
-    deliveryNote: row.delivery_note || DEFAULT_DELIVERY_NOTE
+    deliveryNote: row.delivery_note || DEFAULT_DELIVERY_NOTE,
+    // Sách mẫu chỉ seed 1 lần; danh sách id đã xóa thì không bao giờ seed lại
+    booksSeeded: Number(row.books_seeded) === 1,
+    deletedBooks: parseJsonArray(row.deleted_books, []).map(String)
   };
 }
 
@@ -172,6 +175,82 @@ class Database {
     }
   }
 
+  /**
+   * SEED SÁCH MẪU ĐÚNG 1 LẦN (Neon).
+   * Quyết định nằm ở domain.planInitialBookSeed để test được logic thuần:
+   *  - Database mới tinh  → tạo sách mẫu, rồi đánh dấu `books_seeded = 1`
+   *  - Database đã dùng   → KHÔNG tạo gì, chỉ đánh dấu để các cold start sau không seed lại
+   *  - Sách đã từng bị xóa (tombstone trong `deleted_books`) → không bao giờ tạo lại
+   */
+  async seedInitialBooksIfNeeded({ isBrandNewDatabase = false } = {}) {
+    if (!this.isNeon || !this.sql) return { seeded: [], reason: 'not-neon' };
+
+    const settingsRows = await this.sql.query("SELECT * FROM settings WHERE id = 'default' LIMIT 1");
+    const settingsRow = (settingsRows && settingsRows[0]) || null;
+    const settings = settingsRow ? mapSettingsFromDb(settingsRow) : null;
+
+    const countRows = await this.sql.query('SELECT COUNT(*) as count FROM books');
+    const catalogCount = Number((countRows && countRows[0] && countRows[0].count) || 0);
+
+    const idsToSeed = domain.planInitialBookSeed({
+      isBrandNewDatabase,
+      alreadySeeded: Boolean(settings && settings.booksSeeded),
+      catalogCount,
+      deletedBookIds: (settings && settings.deletedBooks) || [],
+      initialBooks: INITIAL_BOOKS
+    });
+
+    for (const id of idsToSeed) {
+      const book = INITIAL_BOOKS.find(b => b.id === id);
+      if (!book) continue;
+      await this.sql.query(
+        `INSERT INTO books (id, title, price, author, pages, year, description, cover, department, classes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (id) DO NOTHING`,
+        [book.id, book.title, book.price, book.author, book.pages, book.year || '', book.description, book.cover, '', '[]']
+      );
+    }
+
+    // Đánh dấu đã seed (kể cả khi không tạo gì) → lần khởi động sau không bao giờ thêm sách mẫu nữa
+    if (settingsRow && !settings.booksSeeded) {
+      await this.sql.query("UPDATE settings SET books_seeded = 1 WHERE id = 'default'");
+    }
+    if (idsToSeed.length > 0) {
+      console.log(` [Database] Đã tạo ${idsToSeed.length} sách mẫu cho database mới: ${idsToSeed.join(', ')}`);
+    }
+    return { seeded: idsToSeed, reason: idsToSeed.length > 0 ? 'seeded' : 'skipped' };
+  }
+
+  /**
+   * GHI NHỚ SÁCH ĐÃ XÓA (tombstone) để dù có seed lại hoặc khôi phục DB thì sách đó cũng không quay về.
+   * Đây là lớp bảo vệ thứ 2 sau cờ `books_seeded`.
+   */
+  async recordDeletedBook(bookId) {
+    const id = String(bookId);
+    const settings = await this.getSettings();
+    const deleted = [...new Set([...(settings.deletedBooks || []).map(String), id])];
+
+    if (this.isNeon) {
+      if (!this.sql) return deleted;
+      try {
+        await this.sql.query(
+          "UPDATE settings SET deleted_books = $1, books_seeded = 1 WHERE id = 'default'",
+          [JSON.stringify(deleted)]
+        );
+      } catch (err) {
+        // Không chặn việc xóa sách nếu bảng settings lỗi
+        console.error('Lỗi Neon recordDeletedBook:', err.message);
+      }
+      return deleted;
+    }
+
+    const db = this.readFile();
+    db.settings.deletedBooks = deleted;
+    db.settings.booksSeeded = true;
+    this.writeFile(db);
+    return deleted;
+  }
+
   async initNeonTables() {
     if (!this.isNeon || !this.sql) return;
     try {
@@ -182,7 +261,9 @@ class Database {
         departments TEXT DEFAULT '[]',
         classes TEXT DEFAULT '[]',
         delivery_date TEXT DEFAULT '',
-        delivery_note TEXT DEFAULT ''
+        delivery_note TEXT DEFAULT '',
+        books_seeded INT DEFAULT 0,
+        deleted_books TEXT DEFAULT '[]'
       )`);
 
       await this.sql.query(`CREATE TABLE IF NOT EXISTS books (
@@ -233,7 +314,10 @@ class Database {
         `ALTER TABLE orders ADD COLUMN IF NOT EXISTS items_json TEXT`,
         `ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_at TIMESTAMPTZ`,
         `ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_department TEXT DEFAULT ''`,
-        `ALTER TABLE settings ADD COLUMN IF NOT EXISTS catalog_version INT DEFAULT 1`
+        `ALTER TABLE settings ADD COLUMN IF NOT EXISTS catalog_version INT DEFAULT 1`,
+        // Đánh dấu đã seed sách mẫu + danh sách sách đã bị xóa (không bao giờ seed lại)
+        `ALTER TABLE settings ADD COLUMN IF NOT EXISTS books_seeded INT DEFAULT 0`,
+        `ALTER TABLE settings ADD COLUMN IF NOT EXISTS deleted_books TEXT DEFAULT '[]'`
       ];
       for (const migration of migrations) {
         try {
@@ -267,23 +351,19 @@ class Database {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )`);
 
-      for (const b of INITIAL_BOOKS) {
-        // Chỉ seed sách MỚI (ON CONFLICT DO NOTHING) để không ghi đè sách đã chỉnh sửa qua trang quản trị
+      // ⚠️ SÁCH MẪU CHỈ ĐƯỢC SEED 1 LẦN DUY NHẤT KHI DATABASE HOÀN TOÀN MỚI.
+      // Trước đây khối này chạy ở MỌI lần khởi động (mỗi cold start trên Vercel) với
+      // `ON CONFLICT DO NOTHING` → sách admin đã xóa lại xuất hiện sau vài giờ / vài ngày.
+      const beforeSettings = await this.sql.query("SELECT * FROM settings WHERE id = 'default' LIMIT 1");
+      const isBrandNewDatabase = !(beforeSettings && beforeSettings[0]);
+      if (isBrandNewDatabase) {
         await this.sql.query(
-          `INSERT INTO books (id, title, price, author, pages, year, description, cover, department, classes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-           ON CONFLICT (id) DO NOTHING`,
-          [b.id, b.title, b.price, b.author, b.pages, b.year || '', b.description, b.cover, '', '[]']
+          `INSERT INTO settings (id, is_registration_open, close_message, departments, classes, delivery_date, delivery_note, books_seeded, deleted_books)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          ['default', true, 'Đã chốt danh sách mua sách đợt này để báo in. Tạm ngưng nhận đơn mới!', JSON.stringify(INITIAL_DEPARTMENTS), '[]', '', DEFAULT_DELIVERY_NOTE, 0, '[]']
         );
       }
-
-      const settingsCount = await this.sql.query('SELECT COUNT(*) as count FROM settings WHERE id = $1', ['default']);
-      if (Number(settingsCount[0]?.count || 0) === 0) {
-        await this.sql.query(
-          'INSERT INTO settings (id, is_registration_open, close_message, departments, classes, delivery_date, delivery_note) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-          ['default', true, 'Đã chốt danh sách mua sách đợt này để báo in. Tạm ngưng nhận đơn mới!', JSON.stringify(INITIAL_DEPARTMENTS), '[]', '', DEFAULT_DELIVERY_NOTE]
-        );
-      }
+      await this.seedInitialBooksIfNeeded({ isBrandNewDatabase });
       const [settingsRows, legacyBooks] = await Promise.all([
         this.sql.query("SELECT * FROM settings WHERE id = 'default'"),
         this.sql.query('SELECT id, department, classes FROM books')
@@ -307,7 +387,10 @@ class Database {
           departments: [...INITIAL_DEPARTMENTS],
           classes: [],
           deliveryDate: "",
-          deliveryNote: DEFAULT_DELIVERY_NOTE
+          deliveryNote: DEFAULT_DELIVERY_NOTE,
+          // File DB mới được tạo cùng bộ sách mẫu ngay bên dưới → đánh dấu đã seed
+          booksSeeded: true,
+          deletedBooks: []
         },
         books: INITIAL_BOOKS,
         orders: [],
@@ -349,7 +432,9 @@ class Database {
       classes: data.settings.classes || [],
       catalogVersion: Number(data.settings.catalogVersion) || 1,
       deliveryDate: String(data.settings.deliveryDate || ''),
-      deliveryNote: String(data.settings.deliveryNote || DEFAULT_DELIVERY_NOTE)
+      deliveryNote: String(data.settings.deliveryNote || DEFAULT_DELIVERY_NOTE),
+      booksSeeded: data.settings.booksSeeded === true,
+      deletedBooks: Array.isArray(data.settings.deletedBooks) ? data.settings.deletedBooks.map(String) : []
     };
 
     data.settings = domain.migrateSettings(data.settings, data.books || []);
@@ -472,7 +557,9 @@ class Database {
         const rows = await this.sql`SELECT * FROM books ORDER BY id ASC`;
         return rows.map(mapBookFromDb);
       } catch (err) {
-        console.error("Lỗi Neon getAllBooks:", err.message);
+        // KHÔNG fallback sang data.json: file này là bản demo đóng gói lúc deploy,
+        // sẽ làm sách đã xóa "hiện về" mỗi khi Neon lỗi tạm thời.
+        throw this.neonFailure('getAllBooks', err);
       }
     }
     const db = this.readFile();
@@ -834,7 +921,7 @@ class Database {
     if (!settings) {
       const db = this.readFile();
       settings = db.settings || { isRegistrationOpen: true, closeMessage: "" };
-      books = db.books || INITIAL_BOOKS;
+      books = Array.isArray(db.books) ? db.books : [];
       orders = db.orders || [];
     }
 
@@ -979,6 +1066,8 @@ class Database {
   async deleteBook(bookId) {
     const settings = await this.getSettings();
     await this.updateSettings({ classes: settings.classes.map(c => ({ ...c, bookIds: c.bookIds.filter(id => id !== bookId) })) });
+    // Ghi nhớ đã xóa để không bao giờ tự seed lại sách mẫu này
+    await this.recordDeletedBook(bookId);
     if (this.isNeon) {
       try {
         await this.sql.query('DELETE FROM books WHERE id = $1', [bookId]);

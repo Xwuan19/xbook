@@ -3,7 +3,17 @@
 > Danh sách task làm việc được chia nhỏ để **tránh vượt limit**, dễ theo dõi và **thống nhất dự án**.
 > Quy tắc: làm lần lượt từng task → xong task nào đánh dấu `[x]` task đó → commit theo từng giai đoạn.
 
-## Mục tiêu đợt này (v1.4.10)
+## Mục tiêu đợt này (v1.4.11)
+1. **Sửa lỗi sách đã xóa tự xuất hiện lại** sau vài giờ/vài ngày (nguyên nhân: seed sách mẫu chạy ở mọi lần khởi động).
+2. Sách đã xóa phải **không bao giờ** quay lại, kể cả khi DB bị khôi phục hoặc Neon lỗi tạm thời.
+
+## Giai đoạn 22 (v1.4.11) — Sách đã xóa không được "sống dậy"
+- [x] T84. `public/domain.js`: `planInitialBookSeed()` — chỉ seed khi database mới, chưa seed, danh mục trống, bỏ qua id trong tombstone.
+- [x] T85. `database.js`: cột `settings.books_seeded` + `settings.deleted_books` (kèm migration), `seedInitialBooksIfNeeded()` thay vòng lặp seed vô điều kiện trong `initNeonTables()`, `recordDeletedBook()` gọi từ `deleteBook()`.
+- [x] T86. `database.js`: `getAllBooks()` không fallback `data.json` khi Neon lỗi; `getStatistics()` bỏ `|| INITIAL_BOOKS`.
+- [x] T87. Kiểm thử: `test/seed.test.js` (Neon giả lập, cold start lặp lại, tombstone, file DB restart) + test `planInitialBookSeed` → **23/23 pass**; bump v1.4.11, SW cache v21; cập nhật README/handover/TASKS.
+
+## Mục tiêu đợt trước (v1.4.10)
 1. **Ghi nhận chuyển khoản thủ công**: khách sửa mất nội dung CK (`XB...`) thì PayOS không ghép được đơn → admin tìm đơn theo số tiền và ghi nhận tay, có lưu vết.
 2. **Cảnh báo khách ngay trên màn hình QR**: giữ nguyên nội dung CK, tránh phát sinh về sau.
 

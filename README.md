@@ -2,7 +2,24 @@
 
 Hệ thống mẫu hoàn chỉnh tích hợp cổng thanh toán **PayOS (payos.vn)** sử dụng **Dynamic QR (Mã QR Biến Động)** tự động 100%, không mất phí duy trì, tối ưu giao diện chuẩn Responsive cho cả **Mobile (Điện thoại)** và **Desktop (Máy tính)**.
 
-## 🧾 Điểm mới (v1.4.10) — Khách chuyển khoản SAI nội dung: ghi nhận thủ công
+## 🐞 Sửa lỗi (v1.4.11) — Sách đã xóa trong “Quản lý sách” tự xuất hiện lại
+
+> Triệu chứng: xóa *“Cấu trúc dữ liệu và giải thuật”* nhưng **vài giờ / 1–2 ngày sau nó lại có trong danh mục**.
+
+**Nguyên nhân:** `initNeonTables()` chạy `INSERT ... ON CONFLICT (id) DO NOTHING` cho sách mẫu ở **mọi lần khởi động server**. Trên Vercel, mỗi cold start (hoặc mỗi lần deploy / mỗi instance mới) là một lần khởi động → sách đã xóa không còn dòng nào để “conflict” nên bị **tạo lại**. Vì vậy nó biến mất ngay sau khi xóa, rồi vài giờ sau quay lại.
+
+| Sửa | Chi tiết |
+|---|---|
+| ✅ **Seed đúng 1 lần** | Cột mới `settings.books_seeded`: chỉ tạo sách mẫu khi **database hoàn toàn mới** (chưa có row settings), sau đó đánh dấu `1` → mọi cold start sau **không bao giờ** thêm sách mẫu |
+| 🪦 **Tombstone sách đã xóa** | Cột `settings.deleted_books` (mảng id): `DELETE /api/admin/books/:id` ghi id vào đây; bước seed **bỏ qua** mọi id trong danh sách → dù DB có bị coi là “mới” thì sách vẫn không quay lại |
+| 🧠 **Logic thuần, test được** | `domain.planInitialBookSeed()` quyết định seed hay không (5 trường hợp đã có test) |
+| 🚫 **Không fallback dữ liệu demo** | `getAllBooks()` khi Neon lỗi **không** còn đọc `data.json` đóng gói trong bản deploy (file này chứa sách mẫu → sẽ làm sách đã xóa “hiện về” khi DB chập chờn) |
+
+- **`npm test`: 23/23 pass** — thêm `test/seed.test.js` (Neon giả lập: cold start nhiều lần vẫn không tạo lại sách; tombstone chặn seed; file DB sống sót qua restart) + test `planInitialBookSeed`.
+- Xóa sách xong **restart server** vẫn không thấy lại: đã kiểm tra thực tế trên server local.
+- Bump `1.4.11`, SW cache `xbook-static-v21`.
+
+## 🧾 Điểm cũ (v1.4.10) — Khách chuyển khoản SAI nội dung: ghi nhận thủ công
 
 > Tình huống thật gặp phải: khách chuyển **20.000 đ** vào đúng tài khoản PayOS (`VQRQANEGD2256` – MB Bank)
 > nhưng **nội dung CK là “TRAN QUOC chuyen tien”**, không phải `XB<orderCode>`.
@@ -226,6 +243,7 @@ xbook/
 │   ├── domain.test.js        # Logic thuần trong public/domain.js
 │   ├── frontend.test.js      # Giao diện 2 trang (trang chủ & /admin.html) chạy trong jsdom
 │   ├── payment.test.js       # Luồng thanh toán: webhook chữ ký, chống trùng, cứu đơn, đối soát PayOS
+│   ├── seed.test.js          # Sách mẫu chỉ seed 1 lần, không "sống dậy" sau khi xóa (Neon giả lập)
 │   └── routes.test.js        # Route /admin → 302 /admin.html + trang chủ không còn DOM quản trị
 └── README.md                 # Hướng dẫn chi tiết
 ```
