@@ -1,6 +1,6 @@
 # XBook - Tài Liệu Bàn Giao & Lịch Sử Cập Nhật (Handover)
 
-## Phiên bản hiện tại: v1.4.10 (Ghi nhận chuyển khoản thủ công khi khách sửa mất nội dung CK)
+## Phiên bản hiện tại: v1.4.11 (Sửa lỗi sách đã xóa tự xuất hiện lại)
 - **Repository**: [https://github.com/Xwuan19/xbook](https://github.com/Xwuan19/xbook)
 - **Live Production URL**: [https://xbook1.vercel.app](https://xbook1.vercel.app)
 - **PayOS Webhook URL**: `https://xbook1.vercel.app/api/payos-webhook`
@@ -8,6 +8,51 @@
 - **Mục tiêu**: Hệ thống đăng ký mua sách và thanh toán tự động qua VietQR PayOS dành cho sinh viên, hỗ trợ quản lý chốt sổ số lượng sách và danh sách phát sách trên lớp.
 
 ---
+
+## 0q. Điểm mới v1.4.11 (SỬA LỖI: sách đã xóa tự xuất hiện lại)
+
+### Hiện trường
+Admin xóa *“Cấu trúc dữ liệu và giải thuật”* (`sach-04`) trong tab **Quản lý sách**, sách biến mất ngay —
+nhưng **sau vài giờ hoặc 1–2 ngày lại thấy trong danh mục**. Không liên quan tới máy/trình duyệt của admin.
+
+### Nguyên nhân gốc
+`database.js → initNeonTables()` chạy ở **mỗi lần khởi động server**:
+```js
+for (const b of INITIAL_BOOKS) {
+  await this.sql.query(`INSERT INTO books (...) VALUES (...)
+                        ON CONFLICT (id) DO NOTHING`);   // ❌ chạy lại mỗi cold start
+}
+```
+`ON CONFLICT DO NOTHING` chỉ tránh ghi đè khi dòng **còn tồn tại**. Admin đã xóa → không còn dòng → sách được
+**tạo lại**. Vercel serverless luôn tạo instance mới (cold start, deploy, autoscale) nên sách “sống dậy” sau
+vài giờ / vài ngày — đúng như mô tả.
+
+### Cách sửa (3 lớp)
+1. **Seed đúng 1 lần** — thêm cột `settings.books_seeded INT DEFAULT 0`:
+   chỉ tạo sách mẫu khi **database hoàn toàn mới** (trước khi tạo row settings), sau đó `UPDATE ... books_seeded = 1`.
+   Mọi cold start sau: `planInitialBookSeed()` trả về `[]` → không tạo gì.
+2. **Tombstone** — thêm cột `settings.deleted_books TEXT DEFAULT '[]'`; `DELETE /api/admin/books/:id`
+   gọi `db.recordDeletedBook(id)` (ghi id + đặt `books_seeded = 1`). Bước seed **bỏ qua** id trong tombstone,
+   nên kể cả khi DB bị coi là “mới” (khôi phục backup, xóa nhầm settings) sách vẫn không quay lại.
+3. **Không dùng dữ liệu demo khi Neon lỗi** — `getAllBooks()` trước đây fallback sang `data.json`
+   (bản đóng gói lúc deploy, có chứa `sach-04`) → khi Neon chập chờn sách đã xóa lại “hiện về”.
+   Nay ném `neonFailure('getAllBooks')`; `getStatistics()` cũng bỏ `|| INITIAL_BOOKS`.
+
+### Chi tiết kỹ thuật
+- `public/domain.js`: **mới** `planInitialBookSeed({ isBrandNewDatabase, alreadySeeded, catalogCount, deletedBookIds, initialBooks })` → mảng id cần tạo (logic thuần, test được).
+- `database.js`:
+  - `settings` CREATE TABLE thêm `books_seeded`, `deleted_books` + 2 migration `ALTER TABLE ... IF NOT EXISTS`.
+  - `mapSettingsFromDb()` / `readFile()` giữ 2 field mới (`booksSeeded`, `deletedBooks`).
+  - **mới** `seedInitialBooksIfNeeded({ isBrandNewDatabase })`, **mới** `recordDeletedBook(bookId)`.
+  - `initNeonTables()`: bỏ vòng lặp seed vô điều kiện; đọc settings **trước** khi tạo row để biết DB mới hay cũ.
+  - `deleteBook()` gọi `recordDeletedBook()` trước khi xóa.
+- **Kiểm thử**: `test/seed.test.js` (Neon giả lập: 5 cold start liên tiếp không tạo lại sách; tombstone chặn seed; DB file sống sót qua restart) + test `planInitialBookSeed` trong `test/domain.test.js` → **23/23 pass**.
+- **PWA**: bump `xbook-static-v21`, version `1.4.11`.
+
+### Lưu ý khi triển khai
+- Bản này tự đặt `books_seeded = 1` cho database đang chạy ở lần khởi động đầu tiên ⇒ **không seed lại** gì cả.
+- Nếu sách đang bị “hồi sinh” trong DB, xóa lại **một lần** sau khi deploy bản này; từ đó nó không quay lại nữa.
+- Có thể kiểm tra nhanh: `SELECT books_seeded, deleted_books FROM settings;` trong Neon.
 
 ## 0p. Điểm mới v1.4.10 (khách chuyển khoản SAI nội dung → ghi nhận thủ công)
 

@@ -64,7 +64,31 @@
       return { ...c, bookIds: [...ids] };
     });
   }
-  const api = { deliveryAt, classKey, classes, migrateSettings, filterBooks, bookScope, assignBookToClasses };
+  /**
+   * QUYẾT ĐỊNH CÓ SEED SÁCH MẪU HAY KHÔNG (chỉ trả về danh sách id cần tạo).
+   * Lỗi trước đây: `INSERT ... ON CONFLICT DO NOTHING` chạy ở MỌI lần khởi động server,
+   * nên sách admin đã xóa lại "sống dậy" sau mỗi cold start (Vercel) / restart.
+   * Nguyên tắc mới: chỉ seed khi database HOÀN TOÀN MỚI, chưa từng seed, danh mục còn trống,
+   * và bỏ qua mọi id đã từng bị xóa (tombstone).
+   */
+  function planInitialBookSeed(options = {}) {
+    const {
+      isBrandNewDatabase = false,
+      alreadySeeded = false,
+      catalogCount = 0,
+      deletedBookIds = [],
+      initialBooks = []
+    } = options;
+    if (alreadySeeded) return [];
+    if (!isBrandNewDatabase) return [];
+    if (Number(catalogCount) > 0) return [];
+    const blocked = new Set((deletedBookIds || []).map(String));
+    return (initialBooks || [])
+      .filter(book => book && book.id && !blocked.has(String(book.id)))
+      .map(book => String(book.id));
+  }
+
+  const api = { deliveryAt, classKey, classes, migrateSettings, filterBooks, bookScope, assignBookToClasses, planInitialBookSeed };
   if (typeof module !== 'undefined') module.exports = api;
   else root.XBookDomain = api;
 })(typeof window !== 'undefined' ? window : globalThis);
